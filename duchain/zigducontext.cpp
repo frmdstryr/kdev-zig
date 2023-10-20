@@ -15,14 +15,14 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "rustducontext.h"
+#include "zigducontext.h"
 
 #include <language/duchain/topducontextdata.h>
 
-namespace Rust
+namespace Zig
 {
 
-REGISTER_DUCHAIN_ITEM_WITH_DATA(RustTopDUContext, TopDUContextData);
-REGISTER_DUCHAIN_ITEM_WITH_DATA(RustNormalDUContext, DUContextData);
+REGISTER_DUCHAIN_ITEM_WITH_DATA(ZigTopDUContext, TopDUContextData);
+REGISTER_DUCHAIN_ITEM_WITH_DATA(ZigNormalDUContext, DUContextData);
 
 }

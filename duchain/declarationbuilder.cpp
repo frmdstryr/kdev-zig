@@ -23,16 +23,16 @@
 
 #include "types/declarationtypes.h"
 #include "nodetraits.h"
-#include "rustdebug.h"
+#include "zigdebug.h"
 
-namespace Rust
+namespace Zig
 {
 
 using namespace KDevelop;
 
-RSVisitResult DeclarationBuilder::visitNode(RustNode *node, RustNode *parent)
+ZVisitResult DeclarationBuilder::visitNode(ZigNode *node, ZigNode *parent)
 {
-    RSNodeKind kind = node_get_kind(node->data());
+    ZNodeKind kind = ast_node_kind(node->data());
 
     switch (kind) {
     case Module:
@@ -58,23 +58,23 @@ RSVisitResult DeclarationBuilder::visitNode(RustNode *node, RustNode *parent)
     }
 }
 
-template<RSNodeKind Kind>
-RSVisitResult DeclarationBuilder::buildDeclaration(RustNode *node, RustNode *parent)
+template<ZNodeKind Kind>
+ZVisitResult DeclarationBuilder::buildDeclaration(ZigNode *node, ZigNode *parent)
 {
     Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
 
-    RustPath name(node);
+    ZigPath name(node);
 
     createDeclaration<Kind>(node, &name, hasContext);
-    RSVisitResult ret = buildContext<Kind>(node, parent);
+    ZVisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
     closeDeclaration();
     return ret;
 }
 
-template <RSNodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(RustNode *node, RustPath *name, bool hasContext)
+template <ZNodeKind Kind>
+Declaration *DeclarationBuilder::createDeclaration(ZigNode *node, ZigPath *name, bool hasContext)
 {
     auto range = editorFindSpellingRange(node, name->value);
 
@@ -95,47 +95,47 @@ Declaration *DeclarationBuilder::createDeclaration(RustNode *node, RustPath *nam
     return decl;
 }
 
-template <RSNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
-typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(RustNode *node)
+template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
+typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode *node)
 {
     Q_UNUSED(node);
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
-template <RSNodeKind Kind, EnableIf<Kind == FunctionDecl>>
-FunctionType::Ptr DeclarationBuilder::createType(RustNode *node)
+template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl>>
+FunctionType::Ptr DeclarationBuilder::createType(ZigNode *node)
 {
     Q_UNUSED(node);
     return FunctionType::Ptr(new FunctionType);
 }
 
-template <RSNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
-AbstractType::Ptr DeclarationBuilder::createType(RustNode *node)
+template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
+AbstractType::Ptr DeclarationBuilder::createType(ZigNode *node)
 {
     Q_UNUSED(node);
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
 
-template <RSNodeKind Kind>
+template <ZNodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, typename IdType<Kind>::Type *type)
 {
     setType<Kind>(decl, static_cast<IdentifiedType *>(type));
     setType<Kind>(decl, static_cast<AbstractType *>(type));
 }
 
-template <RSNodeKind Kind>
+template <ZNodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, IdentifiedType *type)
 {
     type->setDeclaration(decl);
 }
 
-template <RSNodeKind Kind>
+template <ZNodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 {
     decl->setAbstractType(AbstractType::Ptr(type));
 }
 
-template<RSNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
+template<ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
 void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
 {
     if (Kind == StructDecl || Kind == ImplDecl) {
@@ -145,26 +145,26 @@ void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
     }
 }
 
-template<RSNodeKind Kind, EnableIf<Kind == Module>>
+template<ZNodeKind Kind, EnableIf<Kind == Module>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     decl->setKind(Declaration::Namespace);
 }
 
-template<RSNodeKind Kind, EnableIf<Kind == VarDecl>>
+template<ZNodeKind Kind, EnableIf<Kind == VarDecl>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     decl->setKind(Declaration::Instance);
 }
 
-template<RSNodeKind Kind, EnableIf<Kind == TypeAliasDecl>>
+template<ZNodeKind Kind, EnableIf<Kind == TypeAliasDecl>>
 void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
 {
     decl->setIsTypeAlias(true);
     decl->setKind(Declaration::Type);
 }
 
-template<RSNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
+template<ZNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     Q_UNUSED(decl);

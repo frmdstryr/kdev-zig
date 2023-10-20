@@ -15,8 +15,8 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef KDEVRUSTLANGUAGESUPPORT_H
-#define KDEVRUSTLANGUAGESUPPORT_H
+#ifndef KDEVZIGLANGUAGESUPPORT_H
+#define KDEVZIGLANGUAGESUPPORT_H
 
 #include <interfaces/iplugin.h>
 #include <interfaces/idocument.h>
@@ -26,10 +26,10 @@
 
 #include <QVariant>
 
-#include "rusthighlighting.h"
-#include "duchain/astredux.h"
+#include "zighighlighting.h"
+#include "duchain/kdevzigastparser.h"
 
-namespace Rust
+namespace Zig
 {
 
 class LanguageSupport
@@ -56,4 +56,4 @@ private:
 
 }
 
-#endif // KDEVRUSTLANGUAGESUPPORT_H
+#endif // KDEVZIGLANGUAGESUPPORT_H

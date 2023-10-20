@@ -22,9 +22,9 @@
 #include <language/duchain/duchainlock.h>
 #include <language/codecompletion/normaldeclarationcompletionitem.h>
 
-#include "rustdebug.h"
+#include "zigdebug.h"
 
-namespace Rust
+namespace Zig
 {
 
 using namespace KDevelop;

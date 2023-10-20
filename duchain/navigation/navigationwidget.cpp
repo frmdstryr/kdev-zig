@@ -17,7 +17,7 @@
 
 #include "navigationwidget.h"
 
-namespace Rust {
+namespace Zig {
 
 //NavigationWidget::NavigationWidget(KDevelop::DeclarationPointer declaration, KDevelop::TopDUContextPointer topContext,
 //                                   KDevelop::AbstractNavigationWidget::DisplayHints hints)

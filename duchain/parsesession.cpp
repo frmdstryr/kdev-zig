@@ -1,4 +1,5 @@
 /*
+ * Copyright 2023  Jairus Martin <frmdstryr@protonmail.com>
  * Copyright 2017  Emma Gospodinova <emma.gospodinova@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -17,27 +18,27 @@
 
 #include "parsesession.h"
 
-namespace Rust
+namespace Zig
 {
 
 ParseSessionData::ParseSessionData(const KDevelop::IndexedString &document,
                                    const QByteArray &contents)
     : m_document(document),
       m_contents(contents),
-      m_crate(nullptr)
+      m_ast(nullptr)
 {
 }
 
 ParseSessionData::~ParseSessionData()
 {
-    if (m_crate != nullptr) {
-        destroy_crate(m_crate);
+    if (m_ast != nullptr) {
+        destroy_ast(m_ast);
     }
 }
 
 void ParseSessionData::parse()
 {
-    m_crate = parse_crate(m_document.c_str(), m_contents);
+    m_ast = parse_ast(m_document.c_str(), m_contents);
 }
 
 ParseSession::ParseSession(const ParseSessionData::Ptr &data)
@@ -69,19 +70,19 @@ KDevelop::IndexedString ParseSession::document() const
     return d->m_document;
 }
 
-RSCrate *ParseSession::crate() const
+ZAst *ParseSession::ast() const
 {
-    return d->m_crate;
+    return d->m_ast;
 }
 
-void ParseSession::setContextOnNode(RustNode *node, KDevelop::DUContext *context)
+void ParseSession::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
 {
-    d->m_nodeContextMap.insert(node_get_id(node->data()), context);
+    d->m_nodeContextMap.insert(ast_node_index(node->data()), context);
 }
 
-KDevelop::DUContext *ParseSession::contextFromNode(RustNode *node)
+KDevelop::DUContext *ParseSession::contextFromNode(ZigNode *node)
 {
-    return d->m_nodeContextMap.value(node_get_id(node->data()));
+    return d->m_nodeContextMap.value(ast_node_index(node->data()));
 }
 
 }

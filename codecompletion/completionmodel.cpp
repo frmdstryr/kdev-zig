@@ -19,7 +19,7 @@
 
 #include "completionworker.h"
 
-namespace Rust
+namespace Zig
 {
 
 CompletionModel::CompletionModel(QObject *parent)

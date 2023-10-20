@@ -20,7 +20,7 @@
 
 #include <language/codecompletion/codecompletionworker.h>
 
-namespace Rust
+namespace Zig
 {
 
 class CompletionModel;

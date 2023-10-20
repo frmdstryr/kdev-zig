@@ -20,12 +20,12 @@
 
 #include <language/codecompletion/codecompletionmodel.h>
 
-#include "kdevrustcompletion_export.h"
+#include "kdevzigcompletion_export.h"
 
-namespace Rust
+namespace Zig
 {
 
-class KDEVRUSTCOMPLETION_EXPORT CompletionModel : public KDevelop::CodeCompletionModel
+class KDEVZIGCOMPLETION_EXPORT CompletionModel : public KDevelop::CodeCompletionModel
 {
     Q_OBJECT
 public:

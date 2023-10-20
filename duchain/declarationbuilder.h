@@ -27,69 +27,68 @@
 #include "types/declarationtypes.h"
 #include "contextbuilder.h"
 #include "nodetraits.h"
-#include "rustnode.h"
-#include "astredux.h"
+#include "zignode.h"
 
-#include "kdevrustduchain_export.h"
+#include "kdevzigduchain_export.h"
 
-namespace Rust
+namespace Zig
 {
 
-using TypeBuilderBase = KDevelop::AbstractTypeBuilder<RustNode, RustPath, ContextBuilder>;
-using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<RustNode, RustPath, TypeBuilderBase>;
+using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZigNode, ZigPath, ContextBuilder>;
+using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZigNode, ZigPath, TypeBuilderBase>;
 
 namespace detail { enum class enabler {}; }
 constexpr detail::enabler dummy = {};
 template <bool Condition>
 using EnableIf = typename std::enable_if<Condition, detail::enabler>::type;
 
-class KDEVRUSTDUCHAIN_EXPORT DeclarationBuilder : public DeclarationBuilderBase
+class KDEVZIGDUCHAIN_EXPORT DeclarationBuilder : public DeclarationBuilderBase
 {
 public:
     DeclarationBuilder() = default;
     ~DeclarationBuilder() override = default;
 
 protected:
-    RSVisitResult visitNode(RustNode *node, RustNode *parent) override;
+    ZVisitResult visitNode(ZigNode *node, ZigNode *parent) override;
 
 private:
-    template <RSNodeKind Kind>
-    RSVisitResult buildDeclaration(RustNode *node, RustNode *parent);
+    template <ZNodeKind Kind>
+    ZVisitResult buildDeclaration(ZigNode *node, ZigNode *parent);
 
-    template <RSNodeKind Kind>
-    KDevelop::Declaration *createDeclaration(RustNode *node, RustPath *name, bool hasContext);
+    template <ZNodeKind Kind>
+    KDevelop::Declaration *createDeclaration(ZigNode *node, ZigPath *name, bool hasContext);
 
-    template <RSNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
-    typename IdType<Kind>::Type::Ptr createType(RustNode *node);
+    template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
+    typename IdType<Kind>::Type::Ptr createType(ZigNode *node);
 
-    template <RSNodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
-    KDevelop::FunctionType::Ptr createType(RustNode *node);
+    template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
+    KDevelop::FunctionType::Ptr createType(ZigNode *node);
 
-    template <RSNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
-    KDevelop::AbstractType::Ptr createType(RustNode *node);
+    template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
+    KDevelop::AbstractType::Ptr createType(ZigNode *node);
 
-    template <RSNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
+    template <ZNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<RSNodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
+    template<ZNodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<RSNodeKind Kind, EnableIf<Kind == Module> = dummy>
+    template<ZNodeKind Kind, EnableIf<Kind == Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<RSNodeKind Kind, EnableIf<Kind == TypeAliasDecl> = dummy>
+    template<ZNodeKind Kind, EnableIf<Kind == TypeAliasDecl> = dummy>
     void setDeclData(KDevelop::AliasDeclaration *decl);
 
-    template <RSNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
+    template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
     void setDeclData(KDevelop::ClassDeclaration *decl);
 
-    template <RSNodeKind Kind>
+    template <ZNodeKind Kind>
     void setType(KDevelop::Declaration *decl, typename IdType<Kind>::Type *type);
 
-    template <RSNodeKind Kind>
+    template <ZNodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::IdentifiedType *type);
 
-    template <RSNodeKind Kind>
+    template <ZNodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::AbstractType *type);
 };
 

@@ -15,12 +15,12 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "rusthighlighting.h"
+#include "zighighlighting.h"
 #include <language/duchain/declaration.h>
 
 using namespace KDevelop;
 
-namespace Rust
+namespace Zig
 {
 
 class HighlightingInstance : public CodeHighlightingInstance

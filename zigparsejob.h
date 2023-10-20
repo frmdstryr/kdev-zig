@@ -15,8 +15,8 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RUSTPARSEJOB_H
-#define RUSTPARSEJOB_H
+#ifndef ZIGPARSEJOB_H
+#define ZIGPARSEJOB_H
 
 #include <serialization/indexedstring.h>
 #include <language/backgroundparser/parsejob.h>
@@ -26,7 +26,7 @@
 
 #include "duchain/parsesession.h"
 
-namespace Rust
+namespace Zig
 {
 
 class LanguageSupport;
@@ -45,10 +45,10 @@ protected:
     void run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread) override;
 
 private:
-    LanguageSupport *rust() const;
+    LanguageSupport *zig() const;
     ParseSessionData::Ptr findParseSessionData(const KDevelop::IndexedString &url);
 };
 
 }
 
-#endif // RUSTPARSEJOB_H
+#endif // ZIGPARSEJOB_H

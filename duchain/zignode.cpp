@@ -15,33 +15,35 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef COMPLETIONCONTEXT_H
-#define COMPLETIONCONTEXT_H
-
-#include <QString>
-
-#include <language/codecompletion/codecompletioncontext.h>
-
-#include <kdevzigcompletion_export.h>
+#include "zignode.h"
 
 namespace Zig
 {
 
-class KDEVZIGCOMPLETION_EXPORT CompletionContext : public KDevelop::CodeCompletionContext
+
+template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
+ZigAllocatedObject<ZigObjectType, ZigDestructor>::ZigAllocatedObject(ZigObjectType *object)
+    : object(object)
 {
-public:
-    CompletionContext(KDevelop::DUContextPointer context,
-                      const QString &contextText,
-                      const QString &followingText,
-                      const KDevelop::CursorInRevision &position,
-                      int depth);
-
-    QList<KDevelop::CompletionTreeItemPointer> completionItems(bool &abort, bool fullCompletion) override;
-
-private:
-    QString m_followingText;
-};
-
 }
 
-#endif // COMPLETIONCONTEXT_H
+template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
+ZigAllocatedObject<ZigObjectType, ZigDestructor>::~ZigAllocatedObject()
+{
+    ZigDestructor(object);
+    object = nullptr;
+}
+
+template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
+ZigObjectType *ZigAllocatedObject<ZigObjectType, ZigDestructor>::data()
+{
+    return object;
+}
+
+template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
+ZigObjectType *ZigAllocatedObject<ZigObjectType, ZigDestructor>::operator *()
+{
+    return object;
+}
+
+}

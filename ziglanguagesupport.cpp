@@ -15,9 +15,9 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "rustlanguagesupport.h"
+#include "ziglanguagesupport.h"
 
-#include <rustdebug.h>
+#include <zigdebug.h>
 
 #include <interfaces/icore.h>
 #include <interfaces/idocument.h>
@@ -32,18 +32,18 @@
 #include <QReadWriteLock>
 #include <QStandardPaths>
 
-#include "rustparsejob.h"
+#include "zigparsejob.h"
 #include "codecompletion/completionmodel.h"
 
-K_PLUGIN_FACTORY_WITH_JSON(KDevRustSupportFactory, "kdevrustsupport.json", registerPlugin<Rust::LanguageSupport>(); )
+K_PLUGIN_FACTORY_WITH_JSON(KDevZigSupportFactory, "kdevzigsupport.json", registerPlugin<Zig::LanguageSupport>(); )
 
 using namespace KDevelop;
 
-namespace Rust
+namespace Zig
 {
 
 LanguageSupport::LanguageSupport(QObject *parent, const QVariantList &args)
-    : KDevelop::IPlugin(QStringLiteral("kdevrustsupport"), parent),
+    : KDevelop::IPlugin(QStringLiteral("kdevzigsupport"), parent),
       KDevelop::ILanguageSupport(),
       m_highlighting(new Highlighting(this))
 {
@@ -62,7 +62,7 @@ LanguageSupport::~LanguageSupport()
 
 QString LanguageSupport::name() const
 {
-    return "Rust";
+    return "Zig";
 }
 
 KDevelop::ParseJob *LanguageSupport::createParseJob(const KDevelop::IndexedString &url)
@@ -77,24 +77,24 @@ ICodeHighlighting *LanguageSupport::codeHighlighting() const
 
 SourceFormatterItemList LanguageSupport::sourceFormatterItems() const
 {
-    SourceFormatterStyle rustFormatter("rustfmt");
-    rustFormatter.setCaption("rustfmt");
-    rustFormatter.setDescription(i18n("Format source with rustfmt."));
-    rustFormatter.setMimeTypes(SourceFormatterStyle::MimeList {
-        SourceFormatterStyle::MimeHighlightPair { "text/rust", "Rust" },
-        SourceFormatterStyle::MimeHighlightPair { "text/x-rust", "Rust" }
+    SourceFormatterStyle zigFormatter("zig fmt");
+    zigFormatter.setCaption("zig fmt");
+    zigFormatter.setDescription(i18n("Format source with zig fmt."));
+    zigFormatter.setMimeTypes(SourceFormatterStyle::MimeList {
+        SourceFormatterStyle::MimeHighlightPair { "text/zig", "Zig" },
+        SourceFormatterStyle::MimeHighlightPair { "text/x-zig", "Zig" }
     });
 
-    QString rustfmtPath = QStandardPaths::findExecutable("rustfmt");
-    if (rustfmtPath.isEmpty()) {
-        qCDebug(KDEV_RUST) << "Could not find the rustfmt executable";
-        rustfmtPath = "/usr/bin/rustfmt";
+    QString zigPath = QStandardPaths::findExecutable("zig");
+    if (zigPath.isEmpty()) {
+        qCDebug(KDEV_ZIG) << "Could not find the zig executable";
+        zigPath = "/usr/bin/zig";
     }
-    rustFormatter.setContent(rustfmtPath + " --skip-children $TMPFILE");
+    zigFormatter.setContent(zigPath + " fmt $TMPFILE");
 
-    return SourceFormatterItemList { SourceFormatterStyleItem { "customscript", rustFormatter } };
+    return SourceFormatterItemList { SourceFormatterStyleItem { "customscript", zigFormatter } };
 }
 
 }
 
-#include "rustlanguagesupport.moc"
+#include "ziglanguagesupport.moc"

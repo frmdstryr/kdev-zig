@@ -15,7 +15,7 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "rustparsejob.h"
+#include "zigparsejob.h"
 
 #include <serialization/indexedstring.h>
 #include <interfaces/icore.h>
@@ -31,16 +31,16 @@
 #include <QReadLocker>
 
 #include "duchain/parsesession.h"
-#include "duchain/astredux.h"
+#include "duchain/kdevzigastparser.h"
 #include "duchain/declarationbuilder.h"
 #include "duchain/usebuilder.h"
 
-#include "rustlanguagesupport.h"
-#include "rustdebug.h"
+#include "ziglanguagesupport.h"
+#include "zigdebug.h"
 
 using namespace KDevelop;
 
-namespace Rust
+namespace Zig
 {
 
 ParseJob::ParseJob(const IndexedString &url, ILanguageSupport *languageSupport)
@@ -49,7 +49,7 @@ ParseJob::ParseJob(const IndexedString &url, ILanguageSupport *languageSupport)
 
 }
 
-LanguageSupport *ParseJob::rust() const
+LanguageSupport *ParseJob::zig() const
 {
     return static_cast<LanguageSupport *>(languageSupport());
 }
@@ -72,7 +72,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         return abortJob();
     }
 
-    qCDebug(KDEV_RUST) << "Parse job starting for: " << document().toUrl();
+    qCDebug(KDEV_ZIG) << "Parse job starting for: " << document().toUrl();
 
     QReadLocker parseLock(languageSupport()->parseLock());
 
@@ -87,14 +87,14 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
     if (!(minimumFeatures() & TopDUContext::ForceUpdate || minimumFeatures() & Rescheduled)) {
         DUChainReadLocker lock;
-        static const IndexedString langString(rust()->name());
+        static const IndexedString langString(zig()->name());
         for (const ParsingEnvironmentFilePointer &file : DUChain::self()->allEnvironmentFiles(document())) {
             if (file->language() != langString) {
                 continue;
             }
 
             if (!file->needsUpdate() && file->featuresSatisfied(minimumFeatures()) && file->topContext()) {
-                qCDebug(KDEV_RUST) << "Already up to date, skipping:" << document().str();
+                qCDebug(KDEV_ZIG) << "Already up to date, skipping:" << document().str();
                 setDuChain(file->topContext());
                 if (ICore::self()->languageController()->backgroundParser()->trackerForUrl(document())) {
                     lock.unlock();
@@ -133,7 +133,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     }
 
     session.parse();
-    RustOwnedNode crateNode = RustOwnedNode(node_from_crate(session.crate()));
+    ZigOwnedNode ast = ZigOwnedNode(ast_node_from_ast(session.ast(), 0));
 
     if (abortRequested()) {
         return;
@@ -141,12 +141,12 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
     ReferencedTopDUContext context;
 
-    if (crateNode.data() != nullptr) {
-        RustNode node(crateNode);
-        qCDebug(KDEV_RUST) << "Parsing succeeded for: " << document().toUrl();
+    if (ast.data() != nullptr) {
+        ZigNode root(ast);
+        qCDebug(KDEV_ZIG) << "Parsing succeeded for: " << document().toUrl();
         DeclarationBuilder builder;
         builder.setParseSession(&session);
-        context = builder.build(document(), &node, toUpdate);
+        context = builder.build(document(), &root, toUpdate);
 
         setDuChain(context);
 
@@ -156,9 +156,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
         UseBuilder uses(document());
         uses.setParseSession(&session);
-        uses.buildUses(&node);
+        uses.buildUses(&root);
     } else {
-        qCDebug(KDEV_RUST) << "Parsing failed for: " << document().toUrl();
+        qCDebug(KDEV_ZIG) << "Parsing failed for: " << document().toUrl();
 
         DUChainWriteLocker lock;
         context = toUpdate.data();
@@ -169,7 +169,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
             context->clearProblems();
         } else {
             ParsingEnvironmentFile *file = new ParsingEnvironmentFile(document());
-            file->setLanguage(IndexedString("Rust"));
+            file->setLanguage(IndexedString("Zig"));
 
             context = new TopDUContext(document(), RangeInRevision(0, 0, INT_MAX, INT_MAX), file);
             DUChain::self()->addDocumentChain(context);
@@ -182,27 +182,22 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         return;
     }
 
-    RustDiagnosticIterator diagnostics(crate_get_diagnostics(session.crate()));
-    RSDiagnostic *d = nullptr;
-    while ((d = diagnostics_next(diagnostics.data())) != nullptr) {
-        RustDiagnostic diagnostic(d);
-        RSDiagnosticLevel level = diagnostic_get_level(diagnostic.data());
-        RustString message = diagnostic_get_message(diagnostic.data());
-        RSRange range = diagnostic_get_primary_range(diagnostic.data());
+    for (uint32_t i=0; i < ast_error_count(session.ast()); i++) {
+        ZigError error = ZigError(ast_error_at(session.ast(), i));
+        if(error.data() != nullptr) {
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document(), KTextEditor::Range(
+                error.data()->range.start.line - 1,
+                error.data()->range.start.column,
+                error.data()->range.end.line - 1,
+                error.data()->range.end.column)));
+            p->setSource(IProblem::Parser);
+            p->setSeverity(static_cast<IProblem::Severity>(error.data()->severity));
+            p->setDescription(QString::fromUtf8(error.data()->message));
 
-        IProblem::Severity severity = (level == Fatal || level == Error) ? IProblem::Error
-                                    : (level == Info || level == Note)   ? IProblem::Hint
-                                                                         : IProblem::Warning;
-
-        ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document(), KTextEditor::Range(range.start.line - 1, range.start.column,
-                                                                         range.end.line - 1, range.end.column)));
-        p->setSource(IProblem::Parser);
-        p->setSeverity(severity);
-        p->setDescription(QString::fromUtf8(message.data()));
-
-        DUChainWriteLocker lock(DUChain::lock());
-        context->addProblem(p);
+            DUChainWriteLocker lock(DUChain::lock());
+            context->addProblem(p);
+        }
     }
 
     if (minimumFeatures() & TopDUContext::AST) {
@@ -221,7 +216,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
     highlightDUChain();
     DUChain::self()->emitUpdateReady(document(), duChain());
-    qCDebug(KDEV_RUST) << "Parse job finished for: " << document().toUrl();
+    qCDebug(KDEV_ZIG) << "Parse job finished for: " << document().toUrl();
 }
 
 }

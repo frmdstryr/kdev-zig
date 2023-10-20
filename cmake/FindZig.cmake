@@ -27,11 +27,21 @@
 
 include(FindPackageHandleStandardArgs)
 
-find_library(ASTRedux_LIBRARY NAMES ast_redux)
+find_program(ZIG_EXECUTABLE zig
+    HINTS $ENV{HOME}/.local/bin
+          $ENV{HOME}/projects/zig/build/bin
+)
 
-find_package_handle_standard_args(ASTRedux DEFAULT_MSG ASTRedux_LIBRARY)
+find_package_handle_standard_args(Zig DEFAULT_MSG ZIG_EXECUTABLE)
 
-# Set package properties if FeatureSummary was included
-if (COMMAND set_package_properties)
-    set_package_properties(ASTRedux PROPERTIES DESCRIPTION "ast-redux - a Rust library")
-endif()
+mark_as_advanced(ZIG_EXECUTABLE)
+
+execute_process(COMMAND ${ZIG_EXECUTABLE} version
+    OUTPUT_VARIABLE ZIG_VERSION_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+string(REGEX MATCH "([A-Za-z0-9_-]*)\n" ZIG_TARGET_TRIPLE "${ZIG_VERSION_OUTPUT}")
+string(REGEX MATCH "([A-Za-z0-9_-]*)\n" ZIG_RELEASE "${ZIG_VERSION_OUTPUT}")
+
+mark_as_advanced(ZIG_TARGET_TRIPLE)
+mark_as_advanced(ZIG_RELEASE)

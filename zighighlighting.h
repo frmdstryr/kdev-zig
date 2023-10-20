@@ -15,12 +15,12 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RUSTHIGHLIGHTING_H
-#define RUSTHIGHLIGHTING_H
+#ifndef ZIGHIGHLIGHTING_H
+#define ZIGHIGHLIGHTING_H
 
 #include <language/highlighting/codehighlighting.h>
 
-namespace Rust
+namespace Zig
 {
 
 class Highlighting : public KDevelop::CodeHighlighting
@@ -33,4 +33,4 @@ public:
 
 }
 
-#endif // RUSTHIGHLIGHTING_H
+#endif // ZIGHIGHLIGHTING_H

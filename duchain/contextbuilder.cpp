@@ -21,22 +21,22 @@
 #include <interfaces/icore.h>
 #include <interfaces/idocumentcontroller.h>
 
-#include "rustducontext.h"
+#include "zigducontext.h"
 #include "nodetraits.h"
 
-namespace Rust
+namespace Zig
 {
 
-RSVisitResult visitCallback(RSNode *node, RSNode *parent, void *data);
+ZVisitResult visitCallback(ZNode *node, ZNode *parent, void *data);
 
 void ContextBuilder::setParseSession(ParseSession *session)
 {
     this->session = session;
 }
 
-RangeInRevision ContextBuilder::editorFindSpellingRange(RustNode *node, const QString &identifier)
+RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode *node, const QString &identifier)
 {
-    RSRange range = node_get_spelling_range(node->data());
+    ZAstRange range = ast_node_spelling_range(node->data());
     KTextEditor::Range incorrectRange = KTextEditor::Range(range.start.line - 1, range.start.column, INT_MAX, INT_MAX);
     IDocument *document = ICore::self()->documentController()
             ->documentForUrl(topContext()->url().toUrl());
@@ -51,13 +51,13 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(RustNode *node, const QS
     return RangeInRevision::castFromSimpleRange(ranges.first());
 }
 
-RSVisitResult ContextBuilder::visitNode(RustNode *node, RustNode *parent)
+ZVisitResult ContextBuilder::visitNode(ZigNode *node, ZigNode *parent)
 {
-    RSNodeKind kind = node_get_kind(node->data());
+    ZNodeKind kind = ast_node_kind(node->data());
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
-    BUILD_CONTEXT_FOR(Crate);
+    //BUILD_CONTEXT_FOR(Crate);
     BUILD_CONTEXT_FOR(Module);
     BUILD_CONTEXT_FOR(StructDecl);
     BUILD_CONTEXT_FOR(EnumDecl);
@@ -80,13 +80,13 @@ RSVisitResult ContextBuilder::visitNode(RustNode *node, RustNode *parent)
     return Recurse;
 }
 
-template <RSNodeKind Kind>
-RSVisitResult ContextBuilder::buildContext(RustNode *node, RustNode *parent)
+template <ZNodeKind Kind>
+ZVisitResult ContextBuilder::buildContext(ZigNode *node, ZigNode *parent)
 {
     Q_UNUSED(parent);
 
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
-    RustPath name(node);
+    ZigPath name(node);
 
     if (hasContext) {
         openContext(node, NodeTraits::contextType(Kind), &name);
@@ -97,59 +97,59 @@ RSVisitResult ContextBuilder::buildContext(RustNode *node, RustNode *parent)
     return Recurse;
 }
 
-void ContextBuilder::visitChildren(RustNode *node)
+void ContextBuilder::visitChildren(ZigNode *node)
 {
-    visit_children(node->data(), visitCallback, this);
+    ast_visit_children(node->data(), visitCallback, this);
 }
 
-void ContextBuilder::startVisiting(RustNode *node)
+void ContextBuilder::startVisiting(ZigNode *node)
 {
     visitChildren(node);
 }
 
-void ContextBuilder::setContextOnNode(RustNode *node, KDevelop::DUContext *context)
+void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
 {
     session->setContextOnNode(node, context);
 }
 
-KDevelop::DUContext *ContextBuilder::contextFromNode(RustNode *node)
+KDevelop::DUContext *ContextBuilder::contextFromNode(ZigNode *node)
 {
     return session->contextFromNode(node);
 }
 
-KDevelop::RangeInRevision ContextBuilder::editorFindRange(RustNode *fromNode, RustNode *toNode)
+KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, ZigNode *toNode)
 {
-    RSRange fromRange = node_get_extent(fromNode->data());
-    RSRange toRange = node_get_extent(toNode->data());
+    ZAstRange fromRange = ast_node_extent(fromNode->data());
+    ZAstRange toRange = ast_node_extent(toNode->data());
 
     return RangeInRevision(fromRange.start.line - 1, fromRange.start.column, toRange.end.line - 1, toRange.end.column);
 }
 
-KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(RustPath *node)
+KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(ZigPath *node)
 {
     return QualifiedIdentifier(node->value);
 }
 
 KDevelop::DUContext *ContextBuilder::newContext(const KDevelop::RangeInRevision &range)
 {
-    return new RustNormalDUContext(range, currentContext());
+    return new ZigNormalDUContext(range, currentContext());
 }
 
 KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRevision &range, KDevelop::ParsingEnvironmentFile *file)
 {
     if (!file) {
         file = new ParsingEnvironmentFile(document());
-        file->setLanguage(IndexedString("Rust"));
+        file->setLanguage(IndexedString("Zig"));
     }
 
-    return new RustTopDUContext(document(), range, file);
+    return new ZigTopDUContext(document(), range, file);
 }
 
-RSVisitResult visitCallback(RSNode *node, RSNode *parent, void *data)
+ZVisitResult visitCallback(ZNode *node, ZNode *parent, void *data)
 {
     ContextBuilder *builder = static_cast<ContextBuilder *>(data);
-    RustNode currentNode(node);
-    RustNode parentNode(parent);
+    ZigNode currentNode(node);
+    ZigNode parentNode(parent);
     return builder->visitNode(&currentNode, &parentNode);
 }
 

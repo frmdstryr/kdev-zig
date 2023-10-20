@@ -35,7 +35,7 @@ QTEST_MAIN(DUChainTest)
 
 ReferencedTopDUContext parseCode(QString code)
 {
-    using namespace Rust;
+    using namespace Zig;
 
     IndexedString document("temp");
     ParseSessionData *sessionData = new ParseSessionData(document, code.toUtf8());
@@ -43,23 +43,22 @@ ReferencedTopDUContext parseCode(QString code)
     session.setData(ParseSessionData::Ptr(sessionData));
     session.parse();
 
-    RustOwnedNode crateNode = RustOwnedNode(node_from_crate(session.crate()));
-    RustNode node = RustNode(crateNode);
+    ZigNode root(ast_node_from_ast(session.ast(), 0));
     DeclarationBuilder declarationBuilder;
     UseBuilder useBuilder(document);
 
     declarationBuilder.setParseSession(&session);
     useBuilder.setParseSession(&session);
 
-    ReferencedTopDUContext context = declarationBuilder.build(document, &node);
-    useBuilder.buildUses(&node);
+    ReferencedTopDUContext context = declarationBuilder.build(document, &root);
+    useBuilder.buildUses(&root);
 
     return context;
 }
 
 QString inMain(QString code)
 {
-    return QString("fn main() { %1 }").arg(code);
+    return QString("fn main() !void { %1 }").arg(code);
 }
 
 DUContext *getMainContext(ReferencedTopDUContext topContext)
@@ -92,7 +91,7 @@ void DUChainTest::initTestCase()
 
 void DUChainTest::sanityCheck()
 {
-    QString code("fn main() {}");
+    QString code("fn main() !void {}");
     ReferencedTopDUContext context = parseCode(code);
     QVERIFY(context.data());
 

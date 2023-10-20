@@ -15,31 +15,31 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef RUSTDUCONTEXT_H
-#define RUSTDUCONTEXT_H
+#ifndef ZIGDUCONTEXT_H
+#define ZIGDUCONTEXT_H
 
 #include <language/duchain/duchainregister.h>
 #include <language/duchain/ducontext.h>
 #include <language/duchain/topducontext.h>
 
-#include "kdevrustduchain_export.h"
+#include "kdevzigduchain_export.h"
 
-namespace Rust
+namespace Zig
 {
 
 using namespace KDevelop;
 
 template<class BaseContext, int IdentityT>
-class KDEVRUSTDUCHAIN_EXPORT RustDUContext : public BaseContext
+class KDEVZIGDUCHAIN_EXPORT ZigDUContext : public BaseContext
 {
 public:
     template<class Data>
-    explicit RustDUContext(Data& data) : BaseContext(data) {
+    explicit ZigDUContext(Data& data) : BaseContext(data) {
     }
 
     ///Parameters will be reached to the base-class
     template<typename... Params>
-    explicit RustDUContext(Params... params) : BaseContext(params...) {
+    explicit ZigDUContext(Params... params) : BaseContext(params...) {
         static_cast<KDevelop::DUChainBase*>(this)->d_func_dynamic()->setClassId(this);
     }
 
@@ -48,9 +48,9 @@ public:
     };
 };
 
-using RustTopDUContext = RustDUContext<KDevelop::TopDUContext, 150>;
-using RustNormalDUContext = RustDUContext<KDevelop::DUContext, 151>;
+using ZigTopDUContext = ZigDUContext<KDevelop::TopDUContext, 152>;
+using ZigNormalDUContext = ZigDUContext<KDevelop::DUContext, 153>;
 
 }
 
-#endif // RUSTDUCONTEXT_H
+#endif // ZIGDUCONTEXT_H

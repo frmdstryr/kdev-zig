@@ -20,26 +20,26 @@
 
 #include <language/duchain/ducontext.h>
 
-#include "astredux.h"
+#include "kdevzigastparser.h"
 
-namespace Rust
+namespace Zig
 {
 
 namespace NodeTraits
 {
 
-constexpr bool hasContext(RSNodeKind kind)
+constexpr bool hasContext(ZNodeKind kind)
 {
-    return kind == Crate || kind == Module || kind == StructDecl || kind == EnumDecl
+    return kind == Module || kind == StructDecl || kind == EnumDecl
             || kind == TraitDecl || kind == ImplDecl || kind == FunctionDecl
             || kind == Block || kind == Arm;
 }
 
-constexpr KDevelop::DUContext::ContextType contextType(RSNodeKind kind)
+constexpr KDevelop::DUContext::ContextType contextType(ZNodeKind kind)
 {
     using namespace KDevelop;
-    return kind == Crate        ? DUContext::Global
-        :  kind == Module       ? DUContext::Namespace
+    return
+        kind == Module       ? DUContext::Namespace
         :  kind == StructDecl   ? DUContext::Class
         :  kind == EnumDecl     ? DUContext::Enum
         :  kind == TraitDecl    ? DUContext::Class
@@ -50,13 +50,13 @@ constexpr KDevelop::DUContext::ContextType contextType(RSNodeKind kind)
         : static_cast<DUContext::ContextType>(-1);
 }
 
-constexpr bool isKDevDeclaration(RSNodeKind kind)
+constexpr bool isKDevDeclaration(ZNodeKind kind)
 {
     return kind == EnumDecl || kind == EnumVariantDecl
             || kind == ParmDecl || kind == VarDecl || kind == Module;
 }
 
-constexpr bool isTypeDeclaration(RSNodeKind kind)
+constexpr bool isTypeDeclaration(ZNodeKind kind)
 {
     return  kind == EnumDecl || kind == EnumVariantDecl
             || kind == StructDecl || kind == ImplDecl || kind == TraitDecl;

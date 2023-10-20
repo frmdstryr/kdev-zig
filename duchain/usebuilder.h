@@ -22,26 +22,26 @@
 #include <serialization/indexedstring.h>
 
 #include "contextbuilder.h"
-#include "rustnode.h"
+#include "zignode.h"
 
-#include "kdevrustduchain_export.h"
+#include "kdevzigduchain_export.h"
 
-namespace Rust
+namespace Zig
 {
 
-using UseBuilderBase = KDevelop::AbstractUseBuilder<RustNode, RustPath, ContextBuilder>;
+using UseBuilderBase = KDevelop::AbstractUseBuilder<ZigNode, ZigPath, ContextBuilder>;
 
-class KDEVRUSTDUCHAIN_EXPORT UseBuilder : public UseBuilderBase
+class KDEVZIGDUCHAIN_EXPORT UseBuilder : public UseBuilderBase
 {
 public:
     UseBuilder(const KDevelop::IndexedString &document);
     ~UseBuilder() override = default;
 
-    RSVisitResult visitNode(RustNode *node, RustNode *parent) override;
+    ZVisitResult visitNode(ZigNode *node, ZigNode *parent) override;
 
 private:
-    void visitPath(RustNode *node, RustNode *parent);
-    void visitPathSegment(RustNode *node, RustNode *parent);
+    void visitPath(ZigNode *node, ZigNode *parent);
+    void visitPathSegment(ZigNode *node, ZigNode *parent);
 
     KDevelop::QualifiedIdentifier fullPath;
     KDevelop::QualifiedIdentifier currentPath;

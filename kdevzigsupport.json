@@ -1,0 +1,52 @@
+{
+    "KPlugin": {
+        "Category": "Language Support",
+        "Description": "Zig Language Support",
+        "Description[ca@valencia]": "Implementació del llenguatge Zig",
+        "Description[ca]": "Implementació del llenguatge Zig",
+        "Description[cs]": "Podpora jazyka Zig",
+        "Description[de]": "Sprachunterstützung für Zig ",
+        "Description[es]": "Implementación del lenguaje Zig",
+        "Description[fi]": "Zig-kielen tuki",
+        "Description[fr]": "Prise en charge du langage Zig",
+        "Description[gl]": "Compatibilidade coa linguaxe Zig.",
+        "Description[it]": "Supporto al linguaggio Zig",
+        "Description[nl]": "Ondersteuning van de Zig-taal",
+        "Description[pt]": "Suporte à Linguagem Zig",
+        "Description[sk]": "Podpora jazyka Zig",
+        "Description[sv]": "Zig-språkstöd",
+        "Description[uk]": "Підтримка мови Zig",
+        "Description[x-test]": "xxZig Language Supportxx",
+        "Id": "kdevrustsupport",
+        "Name": "Zig Support",
+        "Name[ca@valencia]": "Implementació del Zig",
+        "Name[ca]": "Implementació del Zig",
+        "Name[cs]": "Podpora pro Zig",
+        "Name[de]": "Zig-Unterstützung",
+        "Name[es]": "Implementación de Zig",
+        "Name[fi]": "Zig-tuki",
+        "Name[fr]": "Prise en charge de Zig",
+        "Name[gl]": "Compatibilidade con Zig",
+        "Name[it]": "Supporto per Zig",
+        "Name[nl]": "Ondersteuning van Zig",
+        "Name[pt]": "Suporte para Zig",
+        "Name[ru]": "Поддержка Zig",
+        "Name[sk]": "Podpora Zig",
+        "Name[sv]": "Zig-stöd",
+        "Name[uk]": "Підтримка Zig",
+        "Name[x-test]": "xxZig Supportxx",
+        "ServiceTypes": [
+            "KDevelop/Plugin"
+        ]
+    },
+    "X-KDevelop-Interfaces": [
+        "ILanguageSupport"
+    ],
+    "X-KDevelop-Languages": [
+        "Zig"
+    ],
+    "X-KDevelop-Mode": "NoGUI",
+    "X-KDevelop-SupportedMimeTypes": [
+        "text/rust"
+    ]
+}

@@ -20,17 +20,17 @@
 
 #include <language/duchain/builders/abstractcontextbuilder.h>
 
-#include "rustnode.h"
 #include "parsesession.h"
+#include "zignode.h"
 
-#include "kdevrustduchain_export.h"
+#include "kdevzigduchain_export.h"
 
-namespace Rust
+namespace Zig
 {
 
-using ContextBuilderBase = KDevelop::AbstractContextBuilder<RustNode, RustPath>;
+using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, ZigPath>;
 
-class KDEVRUSTDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
+class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
 {
 public:
     ContextBuilder() = default;
@@ -39,27 +39,27 @@ public:
     void setParseSession(ParseSession *session);
 
 protected:
-    KDevelop::RangeInRevision editorFindSpellingRange(RustNode *node, const QString &identifier);
+    KDevelop::RangeInRevision editorFindSpellingRange(ZigNode *node, const QString &identifier);
 
-    template <RSNodeKind>
-    RSVisitResult buildContext(RustNode *node, RustNode *parent);
+    template <ZNodeKind>
+    ZVisitResult buildContext(ZigNode *node, ZigNode *parent);
 
-    template<RSNodeKind Kind>
-    KDevelop::DUContext *createContext(RSNode *node, const KDevelop::QualifiedIdentifier& scopeId);
+    template<ZNodeKind Kind>
+    KDevelop::DUContext *createContext(ZNode *node, const KDevelop::QualifiedIdentifier& scopeId);
 
-    virtual RSVisitResult visitNode(RustNode *node, RustNode *parent);
-    void visitChildren(RustNode *node);
+    virtual ZVisitResult visitNode(ZigNode *node, ZigNode *parent);
+    void visitChildren(ZigNode *node);
 
-    void startVisiting(RustNode *node) override;
-    void setContextOnNode(RustNode *node, KDevelop::DUContext *context) override;
-    KDevelop::DUContext *contextFromNode(RustNode *node) override;
-    KDevelop::RangeInRevision editorFindRange(RustNode *fromNode, RustNode *toNode) override;
-    KDevelop::QualifiedIdentifier identifierForNode(RustPath *node) override;
+    void startVisiting(ZigNode *node) override;
+    void setContextOnNode(ZigNode *node, KDevelop::DUContext *context) override;
+    KDevelop::DUContext *contextFromNode(ZigNode *node) override;
+    KDevelop::RangeInRevision editorFindRange(ZigNode *fromNode, ZigNode *toNode) override;
+    KDevelop::QualifiedIdentifier identifierForNode(ZigPath *node) override;
     KDevelop::DUContext *newContext(const KDevelop::RangeInRevision &range) override;
     KDevelop::TopDUContext *newTopContext(const KDevelop::RangeInRevision &range, KDevelop::ParsingEnvironmentFile *file) override;
 
 private:
-    friend RSVisitResult visitCallback(RSNode *node, RSNode *parent, void *data);
+    friend ZVisitResult visitCallback(ZNode *node, ZNode *parent, void *data);
 
     ParseSession *session;
 };

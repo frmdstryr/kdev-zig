@@ -1,23 +1,23 @@
-set(kdevrustcompletion_SRC
+set(kdevzigcompletion_SRC
     completionmodel.cpp
     completionworker.cpp
     completioncontext.cpp
 )
 
-ecm_qt_declare_logging_category(kdevrustcompletion_SRC
-    HEADER rustdebug.h
-    IDENTIFIER KDEV_RUST
-    CATEGORY_NAME "kdevelop.languages.rust.completion"
+ecm_qt_declare_logging_category(kdevzigcompletion_SRC
+    HEADER zigdebug.h
+    IDENTIFIER KDEV_ZIG
+    CATEGORY_NAME "kdevelop.languages.zig.completion"
 )
 
-add_library(kdevrustcompletion SHARED ${kdevrustcompletion_SRC})
+add_library(kdevzigcompletion SHARED ${kdevzigcompletion_SRC})
 
-generate_export_header(kdevrustcompletion BASE_NAME kdevrustcompletion EXPORT_MACRO_NAME KDEVRUSTCOMPLETION_EXPORT)
-target_link_libraries(kdevrustcompletion LINK_PRIVATE
+generate_export_header(kdevzigcompletion BASE_NAME kdevzigcompletion EXPORT_MACRO_NAME KDEVZIGCOMPLETION_EXPORT)
+target_link_libraries(kdevzigcompletion LINK_PRIVATE
     KDev::Interfaces
     KDev::Language
 )
 
-install(TARGETS kdevrustcompletion DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
+install(TARGETS kdevzigcompletion DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 #add_subdirectory(tests)

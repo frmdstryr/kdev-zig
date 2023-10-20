@@ -22,9 +22,9 @@
 #include <language/duchain/problem.h>
 #include <language/editor/documentrange.h>
 
-#include "rustdebug.h"
+#include "zigdebug.h"
 
-namespace Rust
+namespace Zig
 {
 
 using namespace KDevelop;
@@ -34,10 +34,10 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 {
 }
 
-RSVisitResult UseBuilder::visitNode(RustNode *node, RustNode *parent)
+ZVisitResult UseBuilder::visitNode(ZigNode *node, ZigNode *parent)
 {
-    RSNodeKind kind = node_get_kind(node->data());
-    RSNodeKind parentKind = node_get_kind(parent->data());
+    ZNodeKind kind = ast_node_kind(node->data());
+    ZNodeKind parentKind = ast_node_kind(parent->data());
 
     if (kind == Path) {
         visitPath(node, parent);
@@ -48,16 +48,16 @@ RSVisitResult UseBuilder::visitNode(RustNode *node, RustNode *parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
-void UseBuilder::visitPath(RustNode *node, RustNode *parent)
+void UseBuilder::visitPath(ZigNode *node, ZigNode *parent)
 {
-    RustPath path(node);
+    ZigPath path(node);
     fullPath = identifierForNode(&path);
     currentPath.clear();
 }
 
-void UseBuilder::visitPathSegment(RustNode *node, RustNode *parent)
+void UseBuilder::visitPathSegment(ZigNode *node, ZigNode *parent)
 {
-    RustPath segment(node);
+    ZigPath segment(node);
     IndexedIdentifier pathSegment = IndexedIdentifier(Identifier(segment.value));
 
     currentPath.push(pathSegment);
@@ -97,7 +97,7 @@ void UseBuilder::visitPathSegment(RustNode *node, RustNode *parent)
             }
 
             if (declaration->range() != useRange) {
-                UseBuilderBase::newUse(node, useRange, DeclarationPointer(declaration));
+                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
                 break;
             }
         }

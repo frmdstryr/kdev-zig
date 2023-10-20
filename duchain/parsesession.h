@@ -24,15 +24,14 @@
 #include <language/duchain/ducontext.h>
 #include <language/interfaces/iastcontainer.h>
 
-#include "astredux.h"
-#include "rustnode.h"
+#include "zignode.h"
 
-#include "kdevrustduchain_export.h"
+#include "kdevzigduchain_export.h"
 
-namespace Rust
+namespace Zig
 {
 
-class KDEVRUSTDUCHAIN_EXPORT ParseSessionData : public KDevelop::IAstContainer
+class KDEVZIGDUCHAIN_EXPORT ParseSessionData : public KDevelop::IAstContainer
 {
 public:
     typedef QExplicitlySharedDataPointer<ParseSessionData> Ptr;
@@ -49,11 +48,11 @@ private:
 
     KDevelop::IndexedString m_document;
     QByteArray m_contents;
-    RSCrate *m_crate;
-    QMap<unsigned int, KDevelop::DUContext *> m_nodeContextMap;
+    ZAst *m_ast;
+    QMap<uint32_t, KDevelop::DUContext *> m_nodeContextMap;
 };
 
-class KDEVRUSTDUCHAIN_EXPORT ParseSession
+class KDEVZIGDUCHAIN_EXPORT ParseSession
 {
 public:
     explicit ParseSession(const ParseSessionData::Ptr &data);
@@ -65,10 +64,10 @@ public:
     void setData(const ParseSessionData::Ptr data);
 
     KDevelop::IndexedString document() const;
-    RSCrate *crate() const;
+    ZAst *ast() const;
 
-    void setContextOnNode(RustNode *node, KDevelop::DUContext *context);
-    KDevelop::DUContext *contextFromNode(RustNode *node);
+    void setContextOnNode(ZigNode *node, KDevelop::DUContext *context);
+    KDevelop::DUContext *contextFromNode(ZigNode *node);
 
 private:
     Q_DISABLE_COPY(ParseSession)

@@ -1,56 +1,41 @@
-set(kdevrustduchain_SRC
+set(kdevzigduchain_SRC
     contextbuilder.cpp
     declarationbuilder.cpp
     usebuilder.cpp
-    rustnode.cpp
-    rustducontext.cpp
+    zignode.cpp
+    zigducontext.cpp
     parsesession.cpp
-    astredux.h
+    kdevzigastparser.h
     nodetraits.h
 )
 
-find_package(Rust MODULE REQUIRED)
-find_package(ASTRedux MODULE)
+find_package(Zig MODULE REQUIRED)
 
-link_directories(${RUST_LIBRARY_DIR})
-
-ecm_qt_declare_logging_category(kdevrustduchain_SRC
-    HEADER rustdebug.h
-    IDENTIFIER KDEV_RUST
-    CATEGORY_NAME "kdevelop.languages.rust.duchain"
+ecm_qt_declare_logging_category(kdevzigduchain_SRC
+    HEADER zigdebug.h
+    IDENTIFIER KDEV_ZIG
+    CATEGORY_NAME "kdevelop.languages.zig.duchain"
 )
 
-add_library(kdevrustduchain SHARED ${kdevrustduchain_SRC})
+add_library(kdevzigduchain SHARED ${kdevzigduchain_SRC})
 
-if(NOT ${ASTRedux_FOUND})
-    message(STATUS "Enabling build of external project: ast-redux")
-    include(ExternalProject)
-    ExternalProject_Add(ASTRedux
-        GIT_REPOSITORY "git://anongit.kde.org/scratch/egospodinova/ast-redux"
-        GIT_TAG "master"
-        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/3rdparty"
-        SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/src/ast-redux"
-        INSTALL_DIR "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/src/ast-redux/target/release"
-        BUILD_IN_SOURCE 1
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND cargo build --release
-        BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/src/ast-redux/target/release/libast_redux.so"
-        INSTALL_COMMAND "")
+# Zig parser
+add_custom_target(
+    kdevzigastparser
+    COMMAND ${ZIG_EXECUTABLE} build-lib "${CMAKE_CURRENT_SOURCE_DIR}/kdevzigastparser.zig" -dynamic
+    BYPRODUCTS libkdevzigastparser.so
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libkdevzigastparser.so DESTINATION ${KDE_INSTALL_LIBDIR})
+add_dependencies(kdevzigduchain kdevzigastparser)
 
-    ExternalProject_Get_Property(ASTRedux BUILD_BYPRODUCTS)
-    set(ASTRedux_LIBRARY ${BUILD_BYPRODUCTS})
-    add_dependencies(kdevrustduchain ASTRedux)
-endif()
-
-generate_export_header(kdevrustduchain BASE_NAME kdevrustduchain EXPORT_MACRO_NAME KDEVRUSTDUCHAIN_EXPORT)
-target_link_libraries(kdevrustduchain LINK_PRIVATE
+generate_export_header(kdevzigduchain BASE_NAME kdevzigduchain EXPORT_MACRO_NAME KDEVZIGDUCHAIN_EXPORT)
+target_link_libraries(kdevzigduchain LINK_PRIVATE
     KDev::Interfaces
     KDev::Language
-
     LINK_PUBLIC
-    ${ASTRedux_LIBRARY}
+    ${CMAKE_CURRENT_BINARY_DIR}/libkdevzigastparser.so
 )
 
-install(TARGETS kdevrustduchain DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
+install(TARGETS kdevzigduchain DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 add_subdirectory(tests)

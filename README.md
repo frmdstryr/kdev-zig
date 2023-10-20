@@ -1,12 +1,14 @@
-# Rust Language Support plugin
+# Zig Language Support plugin
 
-This package is a WIP to provide language support for Rust.
+This package is a WIP to provide language support for Zig.
+
+It was forked from kdev-rust.
 
 ## Compiling
 
-### Build kdev-rust
+First, build and install kdevelop from source so the test libraries are availble.
 
-***A nightly Rust compiler is required for compilation***
+### Build kdev-zig
 
 ```
 mkdir build
@@ -17,29 +19,9 @@ make
 
 ## Running
 
-```
-export LD_LIBRARY_PATH=`rustc --print sysroot`/lib
-```
-
 Then run KDevelop.
 
 ## Dependencies
 
-### Manually building the ast-redux Rust library
-
-kdev-rust automatically downloads and builds ast-redux. If you would like to
-build it yourself for debugging purposes or otherwise, do the following:
-
-```
-git clone ssh://git@git.kde.org/scratch/egospodinova/ast-redux
-cd ast-redux
-cargo build
-```
-
-This should create a folder called *target/debug*.
-
-```
-export CMAKE_PREFIX_PATH=/path/to/ast-redux/target/debug:$CMAKE_PREFIX_PATH
-```
-
-Now you can proceed to build kdev-rust as described above.
+You must have zig 0.11.0+ installed somewhere where FindZig.cmake
+will find it (eg ".local/bin").
