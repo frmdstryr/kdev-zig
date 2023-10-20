@@ -20,6 +20,30 @@
 namespace Zig
 {
 
+ZigPath::ZigPath(ZNode &node)
+{
+    ZigString name = ZigString(ast_node_new_spelling_name(node));
+
+    if (*name == nullptr) {
+        value = QString();
+    } else {
+        value = QString::fromUtf8(*name);
+    }
+}
+
+// ZigNode::ZigNode(ZNode *node)
+//     : ZigAllocatedObject(node)
+// {
+// }
+//
+// ZigNode::ZigNode(ZigOwnedNode &node)
+//     : ZigAllocatedObject(node.data())
+// {
+// }
+//
+// ZigNode::~ZigNode()
+// {
+// }
 
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
 ZigAllocatedObject<ZigObjectType, ZigDestructor>::ZigAllocatedObject(ZigObjectType *object)

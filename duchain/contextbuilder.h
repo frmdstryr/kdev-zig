@@ -28,7 +28,7 @@
 namespace Zig
 {
 
-using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, ZigPath>;
+using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZNode, ZigPath>;
 
 class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
 {
@@ -37,23 +37,22 @@ public:
     ~ContextBuilder() override = default;
 
     void setParseSession(ParseSession *session);
-
+    virtual ZVisitResult visitNode(ZNode &node, ZNode &parent);
 protected:
-    KDevelop::RangeInRevision editorFindSpellingRange(ZigNode *node, const QString &identifier);
+    KDevelop::RangeInRevision editorFindSpellingRange(ZNode &node, const QString &identifier);
 
     template <ZNodeKind>
-    ZVisitResult buildContext(ZigNode *node, ZigNode *parent);
+    ZVisitResult buildContext(ZNode &node, ZNode &parent);
 
     template<ZNodeKind Kind>
     KDevelop::DUContext *createContext(ZNode *node, const KDevelop::QualifiedIdentifier& scopeId);
 
-    virtual ZVisitResult visitNode(ZigNode *node, ZigNode *parent);
-    void visitChildren(ZigNode *node);
+    void visitChildren(ZNode &node);
 
-    void startVisiting(ZigNode *node) override;
-    void setContextOnNode(ZigNode *node, KDevelop::DUContext *context) override;
-    KDevelop::DUContext *contextFromNode(ZigNode *node) override;
-    KDevelop::RangeInRevision editorFindRange(ZigNode *fromNode, ZigNode *toNode) override;
+    void startVisiting(ZNode *node) override;
+    void setContextOnNode(ZNode *node, KDevelop::DUContext *context) override;
+    KDevelop::DUContext *contextFromNode(ZNode *node) override;
+    KDevelop::RangeInRevision editorFindRange(ZNode *fromNode, ZNode *toNode) override;
     KDevelop::QualifiedIdentifier identifierForNode(ZigPath *node) override;
     KDevelop::DUContext *newContext(const KDevelop::RangeInRevision &range) override;
     KDevelop::TopDUContext *newTopContext(const KDevelop::RangeInRevision &range, KDevelop::ParsingEnvironmentFile *file) override;

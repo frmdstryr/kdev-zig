@@ -29,7 +29,7 @@
 namespace Zig
 {
 
-using UseBuilderBase = KDevelop::AbstractUseBuilder<ZigNode, ZigPath, ContextBuilder>;
+using UseBuilderBase = KDevelop::AbstractUseBuilder<ZNode, ZigPath, ContextBuilder>;
 
 class KDEVZIGDUCHAIN_EXPORT UseBuilder : public UseBuilderBase
 {
@@ -37,11 +37,11 @@ public:
     UseBuilder(const KDevelop::IndexedString &document);
     ~UseBuilder() override = default;
 
-    ZVisitResult visitNode(ZigNode *node, ZigNode *parent) override;
+    ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
 private:
-    void visitPath(ZigNode *node, ZigNode *parent);
-    void visitPathSegment(ZigNode *node, ZigNode *parent);
+    void visitPath(ZNode &node, ZNode &parent);
+    void visitPathSegment(ZNode &node, ZNode &parent);
 
     KDevelop::QualifiedIdentifier fullPath;
     KDevelop::QualifiedIdentifier currentPath;

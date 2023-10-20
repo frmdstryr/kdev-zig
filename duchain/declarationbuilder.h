@@ -34,8 +34,8 @@
 namespace Zig
 {
 
-using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZigNode, ZigPath, ContextBuilder>;
-using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZigNode, ZigPath, TypeBuilderBase>;
+using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZNode, ZigPath, ContextBuilder>;
+using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZNode, ZigPath, TypeBuilderBase>;
 
 namespace detail { enum class enabler {}; }
 constexpr detail::enabler dummy = {};
@@ -49,23 +49,23 @@ public:
     ~DeclarationBuilder() override = default;
 
 protected:
-    ZVisitResult visitNode(ZigNode *node, ZigNode *parent) override;
+    ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
 private:
     template <ZNodeKind Kind>
-    ZVisitResult buildDeclaration(ZigNode *node, ZigNode *parent);
+    ZVisitResult buildDeclaration(ZNode &node, ZNode &parent);
 
     template <ZNodeKind Kind>
-    KDevelop::Declaration *createDeclaration(ZigNode *node, ZigPath *name, bool hasContext);
+    KDevelop::Declaration *createDeclaration(ZNode &node, ZigPath *name, bool hasContext);
 
     template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
-    typename IdType<Kind>::Type::Ptr createType(ZigNode *node);
+    typename IdType<Kind>::Type::Ptr createType(ZNode &node);
 
     template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
-    KDevelop::FunctionType::Ptr createType(ZigNode *node);
+    KDevelop::FunctionType::Ptr createType(ZNode &node);
 
     template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
-    KDevelop::AbstractType::Ptr createType(ZigNode *node);
+    KDevelop::AbstractType::Ptr createType(ZNode &node);
 
     template <ZNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);

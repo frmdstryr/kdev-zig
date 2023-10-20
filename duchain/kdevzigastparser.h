@@ -488,6 +488,7 @@ struct AstNode {
 
 enum ZNodeKind
 {
+    Unknown,
     Module,
     StructDecl,
     UnionDecl,

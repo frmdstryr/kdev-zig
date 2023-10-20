@@ -27,16 +27,16 @@
 namespace Zig
 {
 
-ZVisitResult visitCallback(ZNode *node, ZNode *parent, void *data);
+ZVisitResult visitCallback(ZNode node, ZNode parent, void *data);
 
 void ContextBuilder::setParseSession(ParseSession *session)
 {
     this->session = session;
 }
 
-RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode *node, const QString &identifier)
+RangeInRevision ContextBuilder::editorFindSpellingRange(ZNode &node, const QString &identifier)
 {
-    ZAstRange range = ast_node_spelling_range(node->data());
+    ZAstRange range = ast_node_spelling_range(node);
     KTextEditor::Range incorrectRange = KTextEditor::Range(range.start.line - 1, range.start.column, INT_MAX, INT_MAX);
     IDocument *document = ICore::self()->documentController()
             ->documentForUrl(topContext()->url().toUrl());
@@ -51,9 +51,9 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode *node, const QSt
     return RangeInRevision::castFromSimpleRange(ranges.first());
 }
 
-ZVisitResult ContextBuilder::visitNode(ZigNode *node, ZigNode *parent)
+ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node->data());
+    ZNodeKind kind = ast_node_kind(node);
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
@@ -81,7 +81,7 @@ ZVisitResult ContextBuilder::visitNode(ZigNode *node, ZigNode *parent)
 }
 
 template <ZNodeKind Kind>
-ZVisitResult ContextBuilder::buildContext(ZigNode *node, ZigNode *parent)
+ZVisitResult ContextBuilder::buildContext(ZNode &node, ZNode &parent)
 {
     Q_UNUSED(parent);
 
@@ -89,7 +89,7 @@ ZVisitResult ContextBuilder::buildContext(ZigNode *node, ZigNode *parent)
     ZigPath name(node);
 
     if (hasContext) {
-        openContext(node, NodeTraits::contextType(Kind), &name);
+        openContext(&node, NodeTraits::contextType(Kind), &name);
         visitChildren(node);
         closeContext();
         return Continue;
@@ -97,30 +97,30 @@ ZVisitResult ContextBuilder::buildContext(ZigNode *node, ZigNode *parent)
     return Recurse;
 }
 
-void ContextBuilder::visitChildren(ZigNode *node)
+void ContextBuilder::visitChildren(ZNode &node)
 {
-    ast_visit_children(node->data(), visitCallback, this);
+    ast_visit_children(node, visitCallback, this);
 }
 
-void ContextBuilder::startVisiting(ZigNode *node)
+void ContextBuilder::startVisiting(ZNode *node)
 {
-    visitChildren(node);
+    visitChildren(*node);
 }
 
-void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
+void ContextBuilder::setContextOnNode(ZNode *node, KDevelop::DUContext *context)
 {
-    session->setContextOnNode(node, context);
+    session->setContextOnNode(*node, context);
 }
 
-KDevelop::DUContext *ContextBuilder::contextFromNode(ZigNode *node)
+KDevelop::DUContext *ContextBuilder::contextFromNode(ZNode *node)
 {
-    return session->contextFromNode(node);
+    return session->contextFromNode(*node);
 }
 
-KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, ZigNode *toNode)
+KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZNode *fromNode, ZNode *toNode)
 {
-    ZAstRange fromRange = ast_node_extent(fromNode->data());
-    ZAstRange toRange = ast_node_extent(toNode->data());
+    ZAstRange fromRange = ast_node_extent(*fromNode);
+    ZAstRange toRange = ast_node_extent(*toNode);
 
     return RangeInRevision(fromRange.start.line - 1, fromRange.start.column, toRange.end.line - 1, toRange.end.column);
 }
@@ -145,12 +145,10 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
     return new ZigTopDUContext(document(), range, file);
 }
 
-ZVisitResult visitCallback(ZNode *node, ZNode *parent, void *data)
+ZVisitResult visitCallback(ZNode node, ZNode parent, void *data)
 {
     ContextBuilder *builder = static_cast<ContextBuilder *>(data);
-    ZigNode currentNode(node);
-    ZigNode parentNode(parent);
-    return builder->visitNode(&currentNode, &parentNode);
+    return builder->visitNode(node, parent);
 }
 
 }

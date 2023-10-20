@@ -34,10 +34,10 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 {
 }
 
-ZVisitResult UseBuilder::visitNode(ZigNode *node, ZigNode *parent)
+ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node->data());
-    ZNodeKind parentKind = ast_node_kind(parent->data());
+    ZNodeKind kind = ast_node_kind(node);
+    ZNodeKind parentKind = ast_node_kind(parent);
 
     if (kind == Path) {
         visitPath(node, parent);
@@ -48,14 +48,14 @@ ZVisitResult UseBuilder::visitNode(ZigNode *node, ZigNode *parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
-void UseBuilder::visitPath(ZigNode *node, ZigNode *parent)
+void UseBuilder::visitPath(ZNode &node, ZNode &parent)
 {
     ZigPath path(node);
     fullPath = identifierForNode(&path);
     currentPath.clear();
 }
 
-void UseBuilder::visitPathSegment(ZigNode *node, ZigNode *parent)
+void UseBuilder::visitPathSegment(ZNode &node, ZNode &parent)
 {
     ZigPath segment(node);
     IndexedIdentifier pathSegment = IndexedIdentifier(Identifier(segment.value));
@@ -68,7 +68,7 @@ void UseBuilder::visitPathSegment(ZigNode *node, ZigNode *parent)
         flags = DUContext::NoFiltering;
     }
 
-    RangeInRevision useRange = editorFindRange(node, node);
+    RangeInRevision useRange = editorFindRange(&node, &node);
     DUContext *context = topContext()->findContextAt(useRange.start);
     QList<Declaration *> declarations = context->findDeclarations(currentPath,
                                                                   CursorInRevision::invalid(),

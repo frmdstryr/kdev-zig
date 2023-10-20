@@ -29,6 +29,7 @@ const VisitResult = enum(c_int) {
 };
 
 const NodeKind = enum(c_int) {
+    Unknown,
     StructDecl,
     UnionDecl,
     EnumDecl,
@@ -262,8 +263,12 @@ export fn ast_node_extent(node: ZNode) ZAstRange {
 
 
 export fn ast_node_kind(node: ZNode) NodeKind {
-    _ = node;
-    return .Module;
+    if (node.ast) |ast| {
+        if (node.index >= ast.nodes.len) {
+            return .Unknown;
+        }
+    }
+    return .Unknown;
 }
 
 // Caller must free with destroy_string
@@ -319,12 +324,24 @@ export fn ast_visit_children(node: ZNode, callback: CallbackFn , data: ?*anyopaq
         std.log.warn("ast_visit_children node.ast is null", .{});
         return;
     }
-    const ast = node.ast;
-    if (node.index >= ast.nodes) {
+    const ast = node.ast.?;
+    if (node.index >= ast.nodes.len) {
         std.log.warn("ast_visit_children node.index is out of range", .{});
         return;
     }
 
+    _ = callback;
+    _ = data;
 
-
+    var d = ast.nodes.items(.data)[node.index];
+    const start = d.lhs;
+    const end = d.rhs;
+    _ = start;
+    _ = end;
+//     while (true) {
+//         var parent = ZNode{.ast=ast, .index=i};
+//         var current = ZNode{.ast=ast, .index=data.rhs};
+//         callback(
+//
+//     }
 }

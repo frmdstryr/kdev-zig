@@ -133,16 +133,15 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     }
 
     session.parse();
-    ZigOwnedNode ast = ZigOwnedNode(ast_node_from_ast(session.ast(), 0));
+    const auto num_errors = ast_error_count(session.ast());
 
     if (abortRequested()) {
         return;
     }
 
-    ReferencedTopDUContext context;
-
-    if (ast.data() != nullptr) {
-        ZigNode root(ast);
+        ReferencedTopDUContext context;
+    if (num_errors == 0) {
+        ZNode root = {session.ast(), 0};
         qCDebug(KDEV_ZIG) << "Parsing succeeded for: " << document().toUrl();
         DeclarationBuilder builder;
         builder.setParseSession(&session);
@@ -182,7 +181,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         return;
     }
 
-    for (uint32_t i=0; i < ast_error_count(session.ast()); i++) {
+    for (uint32_t i=0; i < num_errors; i++) {
         ZigError error = ZigError(ast_error_at(session.ast(), i));
         if(error.data() != nullptr) {
             ProblemPointer p = ProblemPointer(new Problem());

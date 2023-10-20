@@ -2,3 +2,7 @@ build
 *.kdev4
 *~
 *.user
+*.kate-swp
+*.a
+*.so
+*.a.o

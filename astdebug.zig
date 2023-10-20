@@ -79,16 +79,19 @@ pub fn dumpAstRoots(stream: anytype, ast: Ast) WriteError!void {
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    var ast = try std.zig.parse(
+    var ast = try std.zig.Ast.parse(
         allocator,
         \\ pub fn foo() u8 {
         \\    return 1;
         \\ }
+        , .zig
     );
     defer ast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     //try dumpAst(stdout, ast);
+    //const r = try ast.render(allocator);
+    //try stdout.writeAll(r);
     try dumpAstFlat(stdout, ast);
     //try dumpAstRoots(stdout, ast);
 }

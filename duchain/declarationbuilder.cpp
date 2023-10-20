@@ -30,9 +30,9 @@ namespace Zig
 
 using namespace KDevelop;
 
-ZVisitResult DeclarationBuilder::visitNode(ZigNode *node, ZigNode *parent)
+ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node->data());
+    ZNodeKind kind = ast_node_kind(node);
 
     switch (kind) {
     case Module:
@@ -59,7 +59,7 @@ ZVisitResult DeclarationBuilder::visitNode(ZigNode *node, ZigNode *parent)
 }
 
 template<ZNodeKind Kind>
-ZVisitResult DeclarationBuilder::buildDeclaration(ZigNode *node, ZigNode *parent)
+ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 {
     Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
@@ -74,7 +74,7 @@ ZVisitResult DeclarationBuilder::buildDeclaration(ZigNode *node, ZigNode *parent
 }
 
 template <ZNodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(ZigNode *node, ZigPath *name, bool hasContext)
+Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, bool hasContext)
 {
     auto range = editorFindSpellingRange(node, name->value);
 
@@ -96,21 +96,21 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode *node, ZigPath *name,
 }
 
 template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
-typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode *node)
+typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZNode &node)
 {
     Q_UNUSED(node);
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
 template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl>>
-FunctionType::Ptr DeclarationBuilder::createType(ZigNode *node)
+FunctionType::Ptr DeclarationBuilder::createType(ZNode &node)
 {
     Q_UNUSED(node);
     return FunctionType::Ptr(new FunctionType);
 }
 
 template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
-AbstractType::Ptr DeclarationBuilder::createType(ZigNode *node)
+AbstractType::Ptr DeclarationBuilder::createType(ZNode &node)
 {
     Q_UNUSED(node);
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));

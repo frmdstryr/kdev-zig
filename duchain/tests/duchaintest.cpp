@@ -43,7 +43,7 @@ ReferencedTopDUContext parseCode(QString code)
     session.setData(ParseSessionData::Ptr(sessionData));
     session.parse();
 
-    ZigNode root(ast_node_from_ast(session.ast(), 0));
+    ZNode root = {session.ast(), 0};
     DeclarationBuilder declarationBuilder;
     UseBuilder useBuilder(document);
 
