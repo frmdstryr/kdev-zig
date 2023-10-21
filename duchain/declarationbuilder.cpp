@@ -33,27 +33,36 @@ using namespace KDevelop;
 ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
 {
     ZNodeKind kind = ast_node_kind(node);
-
     switch (kind) {
     case Module:
+        qDebug() << "Visit node index=" << node.index << " kind=Module";
         return buildDeclaration<Module>(node, parent);
-    case StructDecl:
-        return buildDeclaration<StructDecl>(node, parent);
+    case ContainerDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=StructDecl";
+        return buildDeclaration<ContainerDecl>(node, parent);
     case EnumDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=EnumDecl";
         return buildDeclaration<EnumDecl>(node, parent);
+    case TemplateDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=TemplateDecl";
+        return buildDeclaration<TemplateDecl>(node, parent);
     case FunctionDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=FunctionDecl";
         return buildDeclaration<FunctionDecl>(node, parent);
-    case TraitDecl:
-        return buildDeclaration<TraitDecl>(node, parent);
-    case TypeAliasDecl:
-        return buildDeclaration<TypeAliasDecl>(node, parent);
-    case EnumVariantDecl:
-        return buildDeclaration<EnumVariantDecl>(node, parent);
+    case AliasDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=TypeAlisaDecl";
+        return buildDeclaration<AliasDecl>(node, parent);
     case FieldDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=FieldDecl";
         return buildDeclaration<FieldDecl>(node, parent);
     case VarDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=VarDecl";
         return buildDeclaration<VarDecl>(node, parent);
+    case ErrorDecl:
+        qDebug() << "Visit node index=" << node.index << " kind=ErrorDecl";
+        return buildDeclaration<ErrorDecl>(node, parent);
     default:
+        qDebug() << "Visit node index=" << node.index << " kind=" << kind;
         return ContextBuilder::visitNode(node, parent);
     }
 }
@@ -76,10 +85,12 @@ ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 template <ZNodeKind Kind>
 Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, bool hasContext)
 {
+    qDebug() << "Create decl name=" << name->value;
     auto range = editorFindSpellingRange(node, name->value);
-
-    typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(Identifier(name->value), range,
-                                                                                         hasContext ? DeclarationIsDefinition : NoFlags);
+    typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
+        Identifier(name->value), range,
+        hasContext ? DeclarationIsDefinition : NoFlags
+    );
 
     if (NodeTraits::isTypeDeclaration(Kind)) {
         decl->setKind(Declaration::Type);
@@ -138,10 +149,8 @@ void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 template<ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
 void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
 {
-    if (Kind == StructDecl || Kind == ImplDecl) {
+    if (Kind == ContainerDecl) {
         decl->setClassType(ClassDeclarationData::Struct);
-    } else if (Kind == TraitDecl) {
-        decl->setClassType(ClassDeclarationData::Trait);
     }
 }
 
@@ -157,7 +166,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     decl->setKind(Declaration::Instance);
 }
 
-template<ZNodeKind Kind, EnableIf<Kind == TypeAliasDecl>>
+template<ZNodeKind Kind, EnableIf<Kind == AliasDecl>>
 void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
 {
     decl->setIsTypeAlias(true);

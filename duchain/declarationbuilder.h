@@ -51,6 +51,7 @@ public:
 protected:
     ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
+
 private:
     template <ZNodeKind Kind>
     ZVisitResult buildDeclaration(ZNode &node, ZNode &parent);
@@ -76,7 +77,7 @@ private:
     template<ZNodeKind Kind, EnableIf<Kind == Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<ZNodeKind Kind, EnableIf<Kind == TypeAliasDecl> = dummy>
+    template<ZNodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
     void setDeclData(KDevelop::AliasDeclaration *decl);
 
     template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>

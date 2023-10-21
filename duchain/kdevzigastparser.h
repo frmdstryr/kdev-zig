@@ -486,26 +486,28 @@ struct AstNode {
     NodeData data;
 };
 
+// Must be kept in sync with NodeKind enum in kdevzigastparser.zig
 enum ZNodeKind
 {
-    Unknown,
-    Module,
-    StructDecl,
-    UnionDecl,
+    Unknown = 0,
+    Module, // Root
+    ContainerDecl, // struct, union
     EnumDecl,
-    TraitDecl,
-    ImplDecl,
-    TypeAliasDecl,
-    FieldDecl,
-    EnumVariantDecl,
+    TemplateDecl, // fn that returns type
+    FieldDecl, // container_field
     FunctionDecl,
     ParmDecl,
     VarDecl,
-    Path,
-    PathSegment,
-    Block,
-    Arm,
-    Unexposed
+    BlockDecl,
+    ErrorDecl,
+    AliasDecl, // Import
+    // Uses
+    Call,
+    ContainerInit,
+    VarAccess,
+    FieldAccess,
+    ArrayAccess,
+    PtrAccess // Deref
 };
 
 enum ZVisitResult
@@ -559,7 +561,7 @@ ZAstRange ast_node_extent(ZNode node);
 
 void destroy_string(const char *str);
 
-void ast_visit_children(ZNode node, CallbackFn callback, void *data);
+void ast_visit(ZNode node, CallbackFn callback, void *data);
 
 }
 

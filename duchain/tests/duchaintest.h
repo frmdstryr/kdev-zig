@@ -26,10 +26,11 @@ class DUChainTest : public QObject
 
 private Q_SLOTS:
     void initTestCase();
-    void sanityCheck();
+    void sanityCheckFn();
+    void sanityCheckVar();
     void cleanupTestCase();
-    void testPatternBindings();
-    void testPatternBindings_data();
+    void testVarBindings();
+    void testVarBindings_data();
 };
 
 #endif // DUCHAINTEST_H

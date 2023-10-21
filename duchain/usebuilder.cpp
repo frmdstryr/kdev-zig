@@ -39,69 +39,115 @@ ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
     ZNodeKind kind = ast_node_kind(node);
     ZNodeKind parentKind = ast_node_kind(parent);
 
-    if (kind == Path) {
-        visitPath(node, parent);
-    } else if (parentKind == Path && kind == PathSegment) {
-        visitPathSegment(node, parent);
+    switch (kind){
+        case Call:
+            visitCall(node, parent);
+            break;
+        case ContainerInit:
+            visitContainerInit(node, parent);
+            break;
+        case VarAccess:
+            visitVarAccess(node, parent);
+            break;
+        case FieldAccess:
+            visitFieldAccess(node, parent);
+            break;
+        case ArrayAccess:
+            visitArrayAccess(node, parent);
+            break;
+        case PtrAccess:
+            visitPtrAccess(node, parent);
+            break;
+        default:
+            break;
     }
-
     return ContextBuilder::visitNode(node, parent);
 }
 
-void UseBuilder::visitPath(ZNode &node, ZNode &parent)
+void UseBuilder::visitCall(ZNode &node, ZNode &parent)
 {
-    ZigPath path(node);
-    fullPath = identifierForNode(&path);
-    currentPath.clear();
+    // TODO
 }
 
-void UseBuilder::visitPathSegment(ZNode &node, ZNode &parent)
+void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
 {
-    ZigPath segment(node);
-    IndexedIdentifier pathSegment = IndexedIdentifier(Identifier(segment.value));
-
-    currentPath.push(pathSegment);
-
-    DUContext::SearchFlags flags = DUContext::NoSearchFlags;
-
-    if (fullPath.isQualified()) {
-        flags = DUContext::NoFiltering;
-    }
-
-    RangeInRevision useRange = editorFindRange(&node, &node);
-    DUContext *context = topContext()->findContextAt(useRange.start);
-    QList<Declaration *> declarations = context->findDeclarations(currentPath,
-                                                                  CursorInRevision::invalid(),
-                                                                  AbstractType::Ptr(),
-                                                                  nullptr,
-                                                                  flags);
-
-    if (declarations.isEmpty() || !declarations.first()) {
-        ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-        p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined %1", fullPath.toString()));
-
-        DUChainWriteLocker lock(DUChain::lock());
-        topContext()->addProblem(p);
-    } else {
-        for (Declaration *declaration : declarations) {
-            if (fullPath.isQualified() && currentPath != fullPath) {
-                // We are dealing with a container-like path, ignore functions and variables
-                if (!declaration->internalContext()
-                        || declaration->internalContext()->type() == DUContext::Other
-                        || declaration->internalContext()->type() == DUContext::Function) {
-                    continue;
-                }
-            }
-
-            if (declaration->range() != useRange) {
-                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-                break;
-            }
-        }
-    }
+    // TODO
 }
+
+void UseBuilder::visitVarAccess(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+void UseBuilder::visitFieldAccess(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+void UseBuilder::visitArrayAccess(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+void UseBuilder::visitPtrAccess(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+// void UseBuilder::visitPath(ZNode &node, ZNode &parent)
+// {
+//     ZigPath path(node);
+//     fullPath = identifierForNode(&path);
+//     currentPath.clear();
+// }
+//
+// void UseBuilder::visitPathSegment(ZNode &node, ZNode &parent)
+// {
+//     ZigPath segment(node);
+//     IndexedIdentifier pathSegment = IndexedIdentifier(Identifier(segment.value));
+//
+//     currentPath.push(pathSegment);
+//
+//     DUContext::SearchFlags flags = DUContext::NoSearchFlags;
+//
+//     if (fullPath.isQualified()) {
+//         flags = DUContext::NoFiltering;
+//     }
+//
+//     RangeInRevision useRange = editorFindRange(&node, &node);
+//     DUContext *context = topContext()->findContextAt(useRange.start);
+//     QList<Declaration *> declarations = context->findDeclarations(currentPath,
+//                                                                   CursorInRevision::invalid(),
+//                                                                   AbstractType::Ptr(),
+//                                                                   nullptr,
+//                                                                   flags);
+//
+//     if (declarations.isEmpty() || !declarations.first()) {
+//         ProblemPointer p = ProblemPointer(new Problem());
+//         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+//         p->setSource(IProblem::SemanticAnalysis);
+//         p->setSeverity(IProblem::Hint);
+//         p->setDescription(i18n("Undefined %1", fullPath.toString()));
+//
+//         DUChainWriteLocker lock(DUChain::lock());
+//         topContext()->addProblem(p);
+//     } else {
+//         for (Declaration *declaration : declarations) {
+//             if (fullPath.isQualified() && currentPath != fullPath) {
+//                 // We are dealing with a container-like path, ignore functions and variables
+//                 if (!declaration->internalContext()
+//                         || declaration->internalContext()->type() == DUContext::Other
+//                         || declaration->internalContext()->type() == DUContext::Function) {
+//                     continue;
+//                 }
+//             }
+//
+//             if (declaration->range() != useRange) {
+//                 UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
+//                 break;
+//             }
+//         }
+//     }
+// }
 
 }

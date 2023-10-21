@@ -37,18 +37,26 @@ void ContextBuilder::setParseSession(ParseSession *session)
 RangeInRevision ContextBuilder::editorFindSpellingRange(ZNode &node, const QString &identifier)
 {
     ZAstRange range = ast_node_spelling_range(node);
-    KTextEditor::Range incorrectRange = KTextEditor::Range(range.start.line - 1, range.start.column, INT_MAX, INT_MAX);
-    IDocument *document = ICore::self()->documentController()
-            ->documentForUrl(topContext()->url().toUrl());
-
-    QVector<KTextEditor::Range> ranges;
-    if (document) {
-        ranges = document->textDocument()->searchText(incorrectRange, identifier);
-    } else {
-        ranges = { KTextEditor::Range::invalid() };
-    }
-
-    return RangeInRevision::castFromSimpleRange(ranges.first());
+    KTextEditor::Range spellingRange = identifier.isEmpty() ?
+        KTextEditor::Range::invalid() : KTextEditor::Range(
+            range.start.line,
+            range.start.column,
+            range.end.line,
+            range.end.column
+        );
+    return RangeInRevision::castFromSimpleRange(spellingRange);
+    // KTextEditor::Range incorrectRange = KTextEditor::Range(range.start.line - 1, range.start.column, INT_MAX, INT_MAX);
+    // IDocument *document = ICore::self()->documentController()
+    //         ->documentForUrl(topContext()->url().toUrl());
+    //
+    // QVector<KTextEditor::Range> ranges;
+    // if (document) {
+    //     ranges = document->textDocument()->searchText(incorrectRange, identifier);
+    // } else {
+    //     ranges = { KTextEditor::Range::invalid() };
+    // }
+    //
+    //return RangeInRevision::castFromSimpleRange(ranges.first());
 }
 
 ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
@@ -57,23 +65,27 @@ ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
-    //BUILD_CONTEXT_FOR(Crate);
     BUILD_CONTEXT_FOR(Module);
-    BUILD_CONTEXT_FOR(StructDecl);
+    BUILD_CONTEXT_FOR(ContainerDecl);
     BUILD_CONTEXT_FOR(EnumDecl);
-    BUILD_CONTEXT_FOR(TraitDecl);
-    BUILD_CONTEXT_FOR(ImplDecl);
-    BUILD_CONTEXT_FOR(TypeAliasDecl);
+    BUILD_CONTEXT_FOR(TemplateDecl);
     BUILD_CONTEXT_FOR(FieldDecl);
-    BUILD_CONTEXT_FOR(EnumVariantDecl);
     BUILD_CONTEXT_FOR(FunctionDecl);
     BUILD_CONTEXT_FOR(ParmDecl);
     BUILD_CONTEXT_FOR(VarDecl);
-    BUILD_CONTEXT_FOR(Path);
-    BUILD_CONTEXT_FOR(PathSegment);
-    BUILD_CONTEXT_FOR(Block);
-    BUILD_CONTEXT_FOR(Arm);
-    BUILD_CONTEXT_FOR(Unexposed);
+    BUILD_CONTEXT_FOR(BlockDecl);
+    BUILD_CONTEXT_FOR(ErrorDecl);
+    BUILD_CONTEXT_FOR(AliasDecl);
+
+    BUILD_CONTEXT_FOR(Call);
+    BUILD_CONTEXT_FOR(ContainerInit);
+    BUILD_CONTEXT_FOR(VarAccess);
+    BUILD_CONTEXT_FOR(FieldAccess);
+    BUILD_CONTEXT_FOR(ArrayAccess);
+    BUILD_CONTEXT_FOR(PtrAccess);
+
+    BUILD_CONTEXT_FOR(Unknown);
+
     }
 #undef BUILD_CONTEXT_FOR
 
@@ -99,7 +111,7 @@ ZVisitResult ContextBuilder::buildContext(ZNode &node, ZNode &parent)
 
 void ContextBuilder::visitChildren(ZNode &node)
 {
-    ast_visit_children(node, visitCallback, this);
+    ast_visit(node, visitCallback, this);
 }
 
 void ContextBuilder::startVisiting(ZNode *node)
@@ -148,7 +160,11 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
 ZVisitResult visitCallback(ZNode node, ZNode parent, void *data)
 {
     ContextBuilder *builder = static_cast<ContextBuilder *>(data);
-    return builder->visitNode(node, parent);
+    if (builder) {
+        return builder->visitNode(node, parent);
+    }
+    return ZVisitResult::Break;
+
 }
 
 }

@@ -28,25 +28,36 @@ const VisitResult = enum(c_int) {
     Recurse = 2,
 };
 
+// TODO: Just use import C ?
 const NodeKind = enum(c_int) {
-    Unknown,
-    StructDecl,
-    UnionDecl,
+    Unknown = 0,
+    Module, // Root
+    ContainerDecl, // struct, union
     EnumDecl,
-    TraitDecl,
-    ImplDecl,
-    TypeAliasDecl,
-    FieldDecl,
-    EnumVariantDecl,
+    TemplateDecl, // fn that returns type
+    FieldDecl, // container_field
     FunctionDecl,
     ParmDecl,
     VarDecl,
-    Path,
-    PathSegment,
-    Block,
-    Arm,
-    Unexposed
+    BlockDecl,
+    ErrorDecl,
+    AliasDecl, // Import
+    // Uses
+    Call,
+    ContainerInit,
+    VarAccess,
+    FieldAccess,
+    ArrayAccess,
+    PtrAccess // Deref
 };
+
+// std.mem.len does not check for null
+fn strlen(value: [*c]const u8) usize {
+    if (value == null) {
+        return 0;
+    }
+    return std.mem.len(value);
+}
 
 const ZError = extern struct {
     const Self = @This();
@@ -55,9 +66,9 @@ const ZError = extern struct {
     message: [*c]const u8,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        const msg_len = std.mem.len(self.message);
+        const msg_len = strlen(self.message);
         if (msg_len > 0) {
-            allocator.free(self.message[0..msg_len]);
+            allocator.free(self.message[0..msg_len+1]);
         }
         allocator.destroy(self);
     }
@@ -93,9 +104,31 @@ fn printAstError(ast: *Ast, filename: []const u8, source: []const u8) !void {
     }
 }
 
+pub fn dumpAstFlat(ast: *Ast, stream: anytype) !void {
+    var i: usize = 0;
+    var indent: usize = 0;
+    while (i < ast.nodes.len) : (i += 1) {
+        const tag = ast.nodes.items(.tag)[i];
+        const data = ast.nodes.items(.data)[i];
+        const main_token = ast.nodes.items(.main_token)[i];
+        try stream.writeByteNTimes(' ', indent);
+        try stream.print("{s}", .{@tagName(tag)});
+        try stream.writeAll("{\n");
+        {
+            indent += 2;
+            try stream.writeByteNTimes(' ', indent);
+            try stream.print("i={}, data=({},{}) slice={s}\n", .{i, data.lhs, data.rhs, ast.tokenSlice(main_token)});
+            try stream.writeByteNTimes(' ', indent);
+            indent -= 2;
+        }
+        try stream.writeByteNTimes(' ', indent);
+        try stream.writeAll("}\n");
+    }
+}
+
 export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
-    const name_len = std.mem.len(name_ptr);
-    const source_len = std.mem.len(source_ptr);
+    const name_len = strlen(name_ptr);
+    const source_len = strlen(source_ptr);
 
     if (name_len == 0 or source_len == 0) {
         std.log.warn("zig: name or source is empty", .{});
@@ -103,9 +136,11 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
     }
 
     const name = name_ptr[0..name_len];
+    const source: [:0]const u8 = source_ptr[0..source_len:0];
+
     std.log.warn("zig: parsing filename '{s}'...", .{name});
 
-    const source: [:0]const u8 = source_ptr[0..source_len:0];
+
     const allocator = gpa.allocator();
     const ast = allocator.create(Ast) catch |err| {
         std.log.warn("zig: parsing {s} error: {}", .{name, err});
@@ -120,6 +155,12 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
         printAstError(ast, name, source) catch |err| {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
+    } else {
+        std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
+        var stdout = std.io.getStdOut().writer();
+        dumpAstFlat(ast, stdout) catch |err| {
+            std.log.debug("zig: failed to dump ast {}", .{err});
+        };
     }
 
     // Parsed successuflly
@@ -128,6 +169,7 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
 }
 
 export fn ast_error_count(ptr: ?*Ast) u32 {
+    // std.log.warn("zig: ast_error_count", .{});
     if (ptr) |ast| {
         return @intCast(ast.errors.len);
     }
@@ -135,13 +177,14 @@ export fn ast_error_count(ptr: ?*Ast) u32 {
 }
 
 export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
+    // std.log.warn("zig: ast_error_at {}", .{index});
     if (ptr) |ast| {
         if (index >= ast.errors.len) {
             return null;
         }
         const allocator = gpa.allocator();
         const result = allocator.create(ZError) catch {
-            std.log.warn("ast_error_at alloc failed", .{});
+            std.log.warn("zig: ast_error_at alloc failed", .{});
             return null;
         };
         // TODO: Expanding buffer?
@@ -151,12 +194,12 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
         const err = ast.errors[index];
         const loc = ast.tokenLocation(0, err.token);
         ast.renderError(err, fbs.writer()) catch {
-            std.log.warn("ast_error_at alloc error message too large", .{});
+            std.log.warn("zig: ast_error_at alloc error message too large", .{});
             allocator.destroy(result);
             return null;
         };
         const msg = allocator.dupeZ(u8, fbs.getWritten()) catch {
-            std.log.warn("ast_error_at message alloc failed", .{});
+            std.log.warn("zig: ast_error_at message alloc failed", .{});
             allocator.destroy(result);
             return null;
         };
@@ -164,12 +207,12 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
             .severity=if (err.is_note) .Hint else .Error,
             .range=ZAstRange{
                 .start=ZAstLocation{
-                    .line=@intCast(loc.line_start),
+                    .line=@intCast(loc.line),
                     .column=@intCast(loc.column),
                 },
                 .end=ZAstLocation{
+                    .line=@intCast(loc.line),
                     .column=@intCast(loc.column),
-                    .line=@intCast(loc.line_end),
                 },
             },
             .message=msg
@@ -183,7 +226,7 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
 //     if (ptr) |ast| {
 //         const allocator = gpa.allocator();
 //         const node = allocator.create(ZNode) catch {
-//             std.log.warn("ast_node_from_ast alloc failed", .{});
+//             std.log.warn("zig: ast_node_from_ast alloc failed", .{});
 //             return null;
 //         };
 //         node.* = ZNode{
@@ -196,6 +239,7 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
 // }
 
 export fn destroy_ast(ptr: ?*Ast) void {
+    std.log.debug("zig: destroy_ast {}", .{@intFromPtr(ptr)});
     if (ptr) |tree| {
         tree.deinit(gpa.allocator());
     }
@@ -208,90 +252,220 @@ export fn destroy_ast(ptr: ?*Ast) void {
 // }
 
 export fn destroy_error(ptr: ?*ZError) void {
+    std.log.debug("zig: destroy_error {}", .{@intFromPtr(ptr)});
     if (ptr) |err| {
         err.deinit(gpa.allocator());
     }
 }
 
-
-// export fn ast_node_index(ptr: ?*ZNode) u32 {
-//     if (ptr) |node| {
-//         return node.index;
-//     }
-//     return 0;
-// }
-
 export fn ast_node_spelling_range(node: ZNode) ZAstRange {
-    if (node.ast) |ast| {
-        if (node.index < ast.nodes.len) {
-            // TODO: What is the correct start_offset?
-            const loc = ast.tokenLocation(0, node.index);
-            return ZAstRange{
-                .start=ZAstLocation{
-                    .line=@intCast(loc.line_start),
-                    .column=@intCast(loc.column),
-                },
-                .end=ZAstLocation{
-                    .column=@intCast(loc.column),
-                    .line=@intCast(loc.line_end),
-                },
-            };
-        }
+    if (node.ast == null) {
+        return ZAstRange{};
+    }
+    const ast = node.ast.?;
+    if (findNodeIdentifier(ast, node.index)) |ident_token| {
+        const loc = ast.tokenLocation(0, ident_token);
+        const name = ast.tokenSlice(ident_token);
+        // std.log.warn("zig: ast_node_spelling_range {} {}", .{node.index, r});
+        //return r;
+        return ZAstRange{
+            .start=ZAstLocation{
+                .line=@intCast(loc.line),
+                .column=@intCast(loc.column),
+            },
+            .end=ZAstLocation{
+                .line=@intCast(loc.line),
+                .column=@intCast(loc.column + name.len),
+            },
+        };
+
     }
     return ZAstRange{};
 }
 
 export fn ast_node_extent(node: ZNode) ZAstRange {
-    if (node.ast) |ast| {
-        if (node.index < ast.nodes.len) {
-            // TODO: What is the correct start_offset?
-            const loc = ast.tokenLocation(0, node.index);
-            return ZAstRange{
-                .start=ZAstLocation{
-                    .line=@intCast(loc.line_start),
-                    .column=@intCast(loc.column),
-                },
-                .end=ZAstLocation{
-                    .column=@intCast(loc.column),
-                    .line=@intCast(loc.line_end),
-                },
-            };
-        }
+    if (node.ast == null) {
+        std.log.warn("zig: ast_node_extent ast null", .{});
+        return ZAstRange{};
     }
-    return ZAstRange{};
+    const ast = node.ast.?;
+    if (node.index >= ast.nodes.len) {
+        std.log.warn("zig: ast_node_extent index out of range {}", .{node.index});
+        return ZAstRange{};
+    }
+    // TODO: What is the correct start_offset?
+    const first_token = ast.firstToken(node.index);
+    const start_loc = ast.tokenLocation(0, first_token);
+    const last_token = ast.lastToken(node.index);
+    const end_loc = ast.tokenLocation(0, last_token);
+
+    var r = ZAstRange{
+        .start=ZAstLocation{
+            .line=@intCast(start_loc.line),
+            .column=@intCast(start_loc.column),
+        },
+        .end=ZAstLocation{
+            .line=@intCast(end_loc.line),
+            .column=@intCast(end_loc.column),
+        },
+    };
+    // std.log.warn("zig: ast_node_extent {} {}", .{node.index, r});
+    return r;
 }
 
 
 export fn ast_node_kind(node: ZNode) NodeKind {
+    // std.log.warn("zig: ast_node_kind {}", .{node.index});
     if (node.ast) |ast| {
-        if (node.index >= ast.nodes.len) {
-            return .Unknown;
+        if (node.index < ast.nodes.len) {
+            return switch (ast.nodes.items(.tag)[node.index]) {
+                .root => .Module,
+                .fn_decl => .FunctionDecl,
+                .simple_var_decl,
+                .local_var_decl,
+                .global_var_decl => .VarDecl,
+                .container_decl => .ContainerDecl,
+                .block,
+                .block_semicolon,
+                .block_two,
+                .block_two_semicolon => .BlockDecl,
+                .container_field_init,
+                .container_field_align,
+                .container_field => .FieldDecl,
+                .error_set_decl => .ErrorDecl,
+                // TODO: Param? Import? Detect if template
+                .struct_init,
+                .struct_init_comma => .ContainerInit,
+                .builtin_call,
+                .builtin_call_comma,
+                .call_one, .call_one_comma,
+                .call, .call_comma,
+                .async_call, .async_call_comma => .Call,
+
+                .assign,
+                .assign_destructure => .VarAccess,
+
+                .deref => .PtrAccess,
+
+                .unwrap_optional,
+                .error_value,
+                .field_access => .FieldAccess,
+                .array_access => .ArrayAccess,
+
+                // TODO
+                else => .Unknown,
+            };
         }
     }
     return .Unknown;
 }
 
-// Caller must free with destroy_string
-export fn ast_node_new_spelling_name(node: ZNode) ?[*]const u8 {
-    if (node.ast) |ast| {
-        if (node.index >= ast.nodes.len) {
-            return null;
+// Lookup the token index that has the name/identifier for the given node
+fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
+    if (index >= ast.nodes.len) {
+        return null;
+    }
+
+    const tag = ast.nodes.items(.tag)[index];
+    return switch (tag) {
+        // fn_decl lhs is a fn_proto
+        .fn_decl => findNodeIdentifier(ast, ast.nodes.items(.data)[index].lhs),
+
+        // Token after main_token is the name for all these
+        .fn_proto_simple,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto,
+        .global_var_decl,
+        .local_var_decl,
+        .simple_var_decl,
+        .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
+        else => null,
+    };
+}
+
+fn indexOfNodeWithTag(ast: Ast, start_token: Ast.TokenIndex, tag: Ast.Node.Tag) ?Ast.TokenIndex {
+    if (start_token < ast.nodes.len) {
+        const tags = ast.nodes.items(.tag);
+        for (start_token..ast.nodes.len) |i| {
+            if (tags[i] == tag) {
+                return @intCast(i);
+            }
         }
-        const allocator = gpa.allocator();
-        const tag = ast.nodes.items(.tag)[node.index];
-        const copy = allocator.dupeZ(u8, @tagName(tag)) catch {
-            return null;
-        };
-        return copy.ptr;
     }
     return null;
 }
 
+fn testNodeIdent(source: [:0]const u8, tag: Ast.Node.Tag, expected: ?[]const u8) !void {
+    const allocator = std.testing.allocator;
+    var ast = try Ast.parse(allocator, source, .zig);
+    defer ast.deinit(allocator);
+
+    var stdout = std.io.getStdOut().writer();
+    try stdout.print("-----------\n{s}\n--------\n", .{source});
+    if (ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+    try std.testing.expect(ast.errors.len == 0);
+    try dumpAstFlat(&ast, stdout);
+
+    const index = indexOfNodeWithTag(ast, 0, tag).?;
+    const r = findNodeIdentifier(&ast, index);
+    if (expected) |str| {
+        try std.testing.expectEqualSlices(u8, ast.tokenSlice(r.?), str);
+        try stdout.print("location={}\n", .{ast.tokenLocation(0, r.?)});
+    } else {
+        try std.testing.expect(r == null);
+    }
+}
+
+test "find-node-ident" {
+    try testNodeIdent("pub fn main () void {}", .fn_decl, "main");
+    try testNodeIdent("fn main () void {}", .fn_decl, "main");
+    try testNodeIdent("inline fn main () void {}", .fn_decl, "main");
+    try testNodeIdent("pub fn main(arg: u8) void {}", .fn_decl, "main");
+    try testNodeIdent("pub fn main(a: u8, b: bool) void {}", .fn_decl, "main");
+    try testNodeIdent("var foo = 1;", .simple_var_decl, "foo");
+    try testNodeIdent("const foo = 1;", .simple_var_decl, "foo");
+    try testNodeIdent("var foo: u8 = undefined;", .simple_var_decl, "foo");
+    try testNodeIdent("const Bar = struct {};", .simple_var_decl, "Bar");
+    try testNodeIdent("const Bar = struct {\npub fn foo() void {}\n};", .fn_decl, "foo");
+
+    try testNodeIdent("pub fn main(a: u8) callconv(.C) void {}", .fn_decl, "main");
+    try testNodeIdent("pub fn main(a: u8, b: bool) callconv(.C) void {}", .fn_decl, "main");
+
+}
+
+// Caller must free with destroy_string
+export fn ast_node_new_spelling_name(node: ZNode) ?[*]const u8 {
+    if (node.ast == null) {
+        return null;
+    }
+    const ast = node.ast.?;
+    if (node.index >= ast.nodes.len) {
+        std.log.warn("zig: token name index={} is out of range", .{node.index});
+        return null;
+    }
+    const tag = ast.nodes.items(.tag)[node.index];
+    if (findNodeIdentifier(ast, node.index)) |ident_token| {
+        const name = ast.tokenSlice(ident_token);
+        std.log.debug("zig: token name {} {s} = '{s}' ({})", .{node.index, @tagName(tag), name, name.len});
+        const copy = gpa.allocator().dupeZ(u8, name) catch {
+            return null;
+        };
+        return copy.ptr;
+    }
+    // std.log.warn("zig: token name index={} tag={s} is unknown", .{node.index, @tagName(tag)});
+    return null;
+}
+
 export fn destroy_string(str: [*c]const u8) void {
-    const len = std.mem.len(str);
+    // std.log.warn("zig: destroy_str {}", .{@intFromPtr(str)});
+    const len = strlen(str);
     if (len > 0) {
         const allocator = gpa.allocator();
-        allocator.free(str[0..len]);
+        allocator.free(str[0..len + 1]);
     }
 }
 
@@ -299,7 +473,10 @@ export fn destroy_string(str: [*c]const u8) void {
 export fn ast_format(
     source_ptr: [*c]const u8,
 ) ?[*]const u8 {
-    const source_len = std.mem.len(source_ptr);
+    if (source_ptr == null) {
+        return null;
+    }
+    const source_len = strlen(source_ptr);
     if (source_len == 0) {
         return null;
     }
@@ -318,30 +495,123 @@ export fn ast_format(
 }
 
 
-const CallbackFn = *const fn(node: ZNode, parent: ZNode, data: ?*anyopaque) VisitResult;
-export fn ast_visit_children(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void {
+const CallbackFn = *const fn(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult;
+
+// Return whether to continue or not
+export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void {
     if (node.ast == null) {
-        std.log.warn("ast_visit_children node.ast is null", .{});
+        std.log.warn("zig: ast_visit node.ast is null", .{});
         return;
     }
     const ast = node.ast.?;
     if (node.index >= ast.nodes.len) {
-        std.log.warn("ast_visit_children node.index is out of range", .{});
+        std.log.warn("zig: ast_visit index {} is out of range", .{node.index});
         return;
     }
+    const tag = ast.nodes.items(.tag)[node.index];
+    const d = ast.nodes.items(.data)[node.index];
+    const parent = ZNode{.ast=ast, .index=node.index};
+    std.log.debug("zig: ast_visit {} {s}", .{node.index, @tagName(tag)});
+    switch (tag) {
+        .root => for (ast.rootDecls()) |decl_index| {
+            // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
+            const child = ZNode{.ast=ast, .index=decl_index};
+            switch (callback(child, parent, data)) {
+                .Break => return,
+                .Continue => continue,
+                .Recurse => ast_visit(child, callback, data),
+            }
+        },
+        // Recurse to rhs
+        .fn_decl => {
+            const fn_proto = ZNode{.ast=ast, .index=d.lhs};
+            switch (callback(fn_proto, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => ast_visit(fn_proto, callback, data),
+            }
+            const fn_body = ZNode{.ast=ast, .index=d.rhs};
+            switch (callback(fn_body, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => ast_visit(fn_body, callback, data),
+            }
+        },
+//         .fn_proto_simple => {
+//             if (d.lhs != 0) {
+//                 const child = ZNode{.ast=ast, .index=d.lhs};
+//                 switch (callback(child, parent, data)) {
+//                     .Break => return,
+//                     .Continue => {},
+//                     .Recurse => ast_visit(child, callback, data),
+//                 }
+//             }
+//             const child = ZNode{.ast=ast, .index=d.rhs};
+//             switch (callback(child, parent, data)) {
+//                 .Break => return,
+//                 .Continue => {},
+//                 .Recurse => ast_visit(child, callback, data),
+//             }
+//         },
+        .fn_proto => {
+            // TODO: Args?
+            const child = ZNode{.ast=ast, .index=d.rhs};
+            switch (callback(child, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => ast_visit(child, callback, data),
+            }
+        },
+        // Walk lhs or rhs
+        .simple_var_decl,
+        .container_decl_two,
+        .block_two,
+        .block_two_semicolon => {
+            if (d.lhs != 0) {
+                const child = ZNode{.ast=ast, .index=d.lhs};
+                switch (callback(child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(child, callback, data),
+                }
+            }
+            if (d.rhs != 0) {
+                const child = ZNode{.ast=ast, .index=d.rhs};
+                switch (callback(child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(child, callback, data),
+                }
+            }
+        },
+        .block,
+        .block_semicolon => {
+            for (ast.extra_data[d.lhs..d.rhs]) |decl_index| {
+                // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
+                const child = ZNode{.ast=ast, .index=decl_index};
+                switch (callback(child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => ast_visit(child, callback, data),
+                }
+            }
+        },
+//         .@"return" => {
+//             const child = ZNode{.ast=ast, .index=d.lhs};
+//             switch (callback(parent, child, data)) {
+//                 .Break, .Continue => {},
+//                 .Recurse => ast_visit(child, callback, data),
+//             }
+//         },
+//         .@"break",
 
-    _ = callback;
-    _ = data;
-
-    var d = ast.nodes.items(.data)[node.index];
-    const start = d.lhs;
-    const end = d.rhs;
-    _ = start;
-    _ = end;
-//     while (true) {
-//         var parent = ZNode{.ast=ast, .index=i};
-//         var current = ZNode{.ast=ast, .index=data.rhs};
-//         callback(
-//
-//     }
+        // Leaf nodes
+        .char_literal,
+        .number_literal,
+        .identifier => {},
+        else => {
+            std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+        }
+    }
+    return;
 }

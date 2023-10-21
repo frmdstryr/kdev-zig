@@ -50,8 +50,7 @@ using ZigError = ZigAllocatedObject<ZError, destroy_error>;
 class KDEVZIGDUCHAIN_EXPORT ZigPath
 {
 public:
-    ZigPath(ZNode& node)
-;
+    ZigPath(ZNode& node);
 
     QString value;
 };

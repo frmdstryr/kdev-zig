@@ -17,7 +17,8 @@
         "Description[sv]": "Zig-språkstöd",
         "Description[uk]": "Підтримка мови Zig",
         "Description[x-test]": "xxZig Language Supportxx",
-        "Id": "kdevrustsupport",
+        "Id": "kdevzigsupport",
+        "Icon": "text-x-zig",
         "Name": "Zig Support",
         "Name[ca@valencia]": "Implementació del Zig",
         "Name[ca]": "Implementació del Zig",
@@ -47,6 +48,6 @@
     ],
     "X-KDevelop-Mode": "NoGUI",
     "X-KDevelop-SupportedMimeTypes": [
-        "text/rust"
+        "text/x-zig"
     ]
 }

@@ -40,11 +40,12 @@ public:
     ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
 private:
-    void visitPath(ZNode &node, ZNode &parent);
-    void visitPathSegment(ZNode &node, ZNode &parent);
-
-    KDevelop::QualifiedIdentifier fullPath;
-    KDevelop::QualifiedIdentifier currentPath;
+    void visitCall(ZNode &node, ZNode &parent);
+    void visitContainerInit(ZNode &node, ZNode &parent);
+    void visitVarAccess(ZNode &node, ZNode &parent);
+    void visitFieldAccess(ZNode &node, ZNode &parent);
+    void visitArrayAccess(ZNode &node, ZNode &parent);
+    void visitPtrAccess(ZNode &node, ZNode &parent);
 
     KDevelop::IndexedString document;
 };

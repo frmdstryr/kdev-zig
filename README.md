@@ -13,9 +13,14 @@ First, build and install kdevelop from source so the test libraries are availble
 ```
 mkdir build
 cd build
-cmake ..
-make
+cmake -G ninja ..
+ninja install
 ```
+
+Use `zig test duchain/kdevzigastparser.zig` to run zig tests.
+Run the `duchaintest` for kdev-zig tests.
+
+In case you run into problems with it use `ninja uninstall`.
 
 ## Running
 

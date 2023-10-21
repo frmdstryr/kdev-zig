@@ -31,19 +31,6 @@ ZigPath::ZigPath(ZNode &node)
     }
 }
 
-// ZigNode::ZigNode(ZNode *node)
-//     : ZigAllocatedObject(node)
-// {
-// }
-//
-// ZigNode::ZigNode(ZigOwnedNode &node)
-//     : ZigAllocatedObject(node.data())
-// {
-// }
-//
-// ZigNode::~ZigNode()
-// {
-// }
 
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
 ZigAllocatedObject<ZigObjectType, ZigDestructor>::ZigAllocatedObject(ZigObjectType *object)

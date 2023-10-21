@@ -50,37 +50,43 @@ ReferencedTopDUContext parseCode(QString code)
     declarationBuilder.setParseSession(&session);
     useBuilder.setParseSession(&session);
 
+    DUChainWriteLocker lock;
     ReferencedTopDUContext context = declarationBuilder.build(document, &root);
     useBuilder.buildUses(&root);
 
     return context;
 }
 
-QString inMain(QString code)
-{
-    return QString("fn main() !void { %1 }").arg(code);
-}
 
-DUContext *getMainContext(ReferencedTopDUContext topContext)
+DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name)
 {
     if (!topContext) {
         return nullptr;
     }
 
-    DUChainReadLocker lock;
-    QList<Declaration *> mainDeclaration = topContext->findDeclarations(QualifiedIdentifier("main"));
+    QList<Declaration *> declaration = topContext->findDeclarations(QualifiedIdentifier(name));
 
-    if (mainDeclaration.size() != 1 || !mainDeclaration.first()) {
+    if (declaration.size() != 1 || !declaration.first()) {
+        qDebug() << "No declaration for " << name;
         return nullptr;
     }
 
-    DUContext *mainContext = mainDeclaration.first()->internalContext();
-
-    if (mainContext->childContexts().size() != 1 || !mainContext->childContexts().first()) {
+    DUContext *internalContext = declaration.first()->internalContext();
+    if (!internalContext) {
+        qDebug() << "No internal context for " << name;
+        return nullptr;
+    }
+    auto n = internalContext->childContexts().size();
+    if (n != 1 || !internalContext->childContexts().first()) {
+        if (n < 1) {
+            qDebug() << "No child contexts for " << name;
+        } else if (n > 1) {
+            qDebug() << "Multiple child contexts for " << name;
+        }
         return nullptr;
     }
 
-    return mainContext->childContexts().first();
+    return internalContext->childContexts().first();
 }
 
 void DUChainTest::initTestCase()
@@ -89,7 +95,7 @@ void DUChainTest::initTestCase()
     TestCore::initialize(Core::NoUi);
 }
 
-void DUChainTest::sanityCheck()
+void DUChainTest::sanityCheckFn()
 {
     QString code("fn main() !void {}");
     ReferencedTopDUContext context = parseCode(code);
@@ -103,47 +109,73 @@ void DUChainTest::sanityCheck()
     QCOMPARE(funcDeclaration->identifier().toString(), QString("main"));
 }
 
+void DUChainTest::sanityCheckVar()
+{
+    QString code("const X = 1;");
+    ReferencedTopDUContext context = parseCode(code);
+    QVERIFY(context.data());
+
+    DUChainReadLocker lock;
+    auto decls = context->localDeclarations();
+    QCOMPARE(decls.size(), 1);
+    Declaration *varDeclaration = decls.first();
+    QVERIFY(varDeclaration);
+    QCOMPARE(varDeclaration->identifier().toString(), QString("X"));
+}
+
 void DUChainTest::cleanupTestCase()
 {
     TestCore::shutdown();
 }
 
-void DUChainTest::testPatternBindings()
+void DUChainTest::testVarBindings()
 {
-    QFETCH(QString, pattern);
+    QFETCH(QString, code);
+    QFETCH(QString, contextName);
     QFETCH(QStringList, bindings);
 
-    QString code = inMain(QString("let %1 = unreachable!();").arg(pattern));
     ReferencedTopDUContext context = parseCode(code);
-    DUContext *mainContext = getMainContext(context);
+    QVERIFY(context.data());
 
-    QCOMPARE(mainContext->localDeclarations().size(), bindings.size());
+    DUChainReadLocker lock;
+    if (!contextName.isEmpty()) {
+        DUContext *internalContext = getInternalContext(context, contextName);
+        QVERIFY(internalContext);
+        QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
 
-    for (const QString &binding : bindings) {
-        QCOMPARE(mainContext->findLocalDeclarations(Identifier(binding)).size(),  1);
+        qDebug() << "Decls are:";
+        for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
+            qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+        }
+
+        for (const QString &binding : bindings) {
+            QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
+        }
+    } else {
+        qDebug() << "Decls are:";
+        for (const KDevelop::Declaration *decl : context->localDeclarations()) {
+            qDebug() << "  " << decl->toString();
+        }
+        for (const QString &binding : bindings) {
+            QCOMPARE(context->findLocalDeclarations(Identifier(binding)).size(),  1);
+        }
     }
 }
 
-void DUChainTest::testPatternBindings_data()
+void DUChainTest::testVarBindings_data()
 {
-    QTest::addColumn<QString>("pattern");
+    QTest::addColumn<QString>("contextName");
+    QTest::addColumn<QString>("code");
     QTest::addColumn<QStringList>("bindings");
 
-    QTest::newRow("unit") << "()" << QStringList();
-    QTest::newRow("wildcard") << "_" << QStringList();
-    QTest::newRow("simple ident") << "x" << QStringList { "x" };
-    QTest::newRow("simple ident underscore") << "_x" << QStringList { "_x" };
-    QTest::newRow("mut ident") << "mut x" << QStringList { "x" };
-    QTest::newRow("ref ident") << "ref x" << QStringList { "x" };
-    QTest::newRow("ref mut ident") << "ref mut x" << QStringList { "x" };
-    QTest::newRow("struct single field") << "Foo { x }" << QStringList { "x" };
-    QTest::newRow("struct single field renamed") << "Foo { x: a }" << QStringList { "a" };
-    QTest::newRow("struct multiple fields") << "Foo { x, y }" << QStringList { "x", "y" };
-    QTest::newRow("struct multiple fields renamed") << "Foo { x: a, y: b }" << QStringList { "a", "b" };
-    QTest::newRow("struct multiple fields single renamed") << "Foo { x: a, y }" << QStringList { "a", "y" };
-    QTest::newRow("struct multiple fields with remaining") << "Foo { x, y, .. }" << QStringList { "x", "y" };
-    QTest::newRow("tuple") << "(x, y)" << QStringList { "x", "y" };
-    QTest::newRow("tuple with remaining") << "(x, y, .., z)" << QStringList { "x", "y", "z" };
-    QTest::newRow("full with destructure tuple") << "t@(x, y)" << QStringList { "t", "x", "y" };
-    QTest::newRow("full with destructure struct") << "t@Foo { x, y }" << QStringList { "t", "x", "y" };
+    QTest::newRow("simple var") << "" << "var x = 1;" << QStringList { "x" };
+    QTest::newRow("simple const") << "" << "const y = 2;" << QStringList { "y" };
+    QTest::newRow("simple var typed") << "" << "var y: u8 = 2;" << QStringList { "y" };
+    QTest::newRow("multiple vars") << "" << "var x = 1;\nvar y = 2;" << QStringList { "x", "y" };
+    QTest::newRow("fn and var") << "" << "var x = 1;\npub fn foo() void {}" << QStringList { "x", "foo" };
+    QTest::newRow("fn var") << "main" << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << QStringList { "y" };
+    QTest::newRow("struct decl") << "" << "const Foo = struct {};" << QStringList { "Foo" };
+    QTest::newRow("fn multiple vars") << "main" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
+    QTest::newRow("struct fn") << "Foo" << "const Foo = struct { pub fn bar() void {}};" << QStringList { "bar" };
+
 }

@@ -36,14 +36,14 @@ namespace Zig
 template <ZNodeKind Kind, class Enable = void>
 struct IdType;
 
-template <ZNodeKind Kind>
-struct IdType<Kind, typename std::enable_if<Kind == StructDecl || Kind == TraitDecl || Kind == ImplDecl>::type>
-{
-    typedef KDevelop::StructureType Type;
-};
+// template <ZNodeKind Kind>
+// struct IdType<Kind, typename std::enable_if<Kind == ContainerDecl>::type>
+// {
+//     typedef KDevelop::StructureType Type;
+// };
 
 template <ZNodeKind Kind>
-struct IdType<Kind, typename std::enable_if<Kind == TypeAliasDecl>::type>
+struct IdType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
 {
     typedef KDevelop::TypeAliasType Type;
 };
@@ -55,9 +55,9 @@ struct IdType<Kind, typename std::enable_if<Kind == EnumDecl>::type>
 };
 
 template <ZNodeKind Kind>
-struct IdType<Kind, typename std::enable_if<Kind == EnumVariantDecl>::type>
+struct IdType<Kind, typename std::enable_if<Kind == ErrorDecl>::type>
 {
-    typedef KDevelop::EnumeratorType Type;
+    typedef KDevelop::EnumerationType Type;
 };
 
 template <ZNodeKind Kind, class Enable = void>
@@ -70,23 +70,22 @@ struct DeclType<Kind, typename std::enable_if<NodeTraits::isKDevDeclaration(Kind
 };
 
 template <ZNodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == StructDecl || Kind == TraitDecl || Kind == ImplDecl>::type>
+struct DeclType<Kind, typename std::enable_if<Kind == ContainerDecl>::type>
 {
     typedef KDevelop::ClassDeclaration Type;
 };
 
 template <ZNodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == TypeAliasDecl>::type>
+struct DeclType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
 {
     typedef KDevelop::AliasDeclaration Type;
 };
 
-// FIXME: specialize
-//template <ZNodeKind Kind>
-//struct DeclType<Kind, typename std::enable_if<Kind == FunctionDecl>::type>
-//{
-//    typedef KDevelop::ClassFunctionDeclaration Type;
-//};
+template <ZNodeKind Kind>
+struct DeclType<Kind, typename std::enable_if<Kind == TemplateDecl>::type>
+{
+   typedef KDevelop::ClassFunctionDeclaration Type;
+};
 
 template <ZNodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == FunctionDecl>::type>
