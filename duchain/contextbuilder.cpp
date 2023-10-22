@@ -37,7 +37,7 @@ void ContextBuilder::setParseSession(ParseSession *session)
 RangeInRevision ContextBuilder::editorFindSpellingRange(ZNode &node, const QString &identifier)
 {
     ZAstRange range = ast_node_spelling_range(node);
-    KTextEditor::Range spellingRange = identifier.isEmpty() ?
+    KTextEditor::Range spellingRange = range.isEmpty() ?
         KTextEditor::Range::invalid() : KTextEditor::Range(
             range.start.line,
             range.start.column,
@@ -134,7 +134,10 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZNode *fromNode, ZNode
     ZAstRange fromRange = ast_node_extent(*fromNode);
     ZAstRange toRange = ast_node_extent(*toNode);
 
-    return RangeInRevision(fromRange.start.line - 1, fromRange.start.column, toRange.end.line - 1, toRange.end.column);
+    return RangeInRevision(
+        fromRange.start.line, fromRange.start.column,
+        toRange.end.line, toRange.end.column
+    );
 }
 
 KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(ZigPath *node)
