@@ -79,7 +79,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, b
 
     auto range = editorFindSpellingRange(node, name->value);
 
-    // qDebug()  << "Create decl name=" << name->value << " range" << range ;
+    // qDebug()  << "Create decl name=" << name->value << " range" << range  << " kind" << Kind;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         Identifier(name->value), range,
         hasContext ? DeclarationIsDefinition : NoFlags

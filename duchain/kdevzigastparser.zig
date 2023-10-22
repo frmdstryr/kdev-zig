@@ -140,7 +140,7 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
     const name = name_ptr[0..name_len];
     const source: [:0]const u8 = source_ptr[0..source_len:0];
 
-    std.log.warn("zig: parsing filename '{s}'...", .{name});
+    std.log.info("zig: parsing filename '{s}'...", .{name});
 
 
     const allocator = gpa.allocator();
@@ -392,6 +392,11 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
         .local_var_decl,
         .simple_var_decl,
         .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
+
+        // Field
+        .container_field,
+        .container_field_init,
+        .container_field_align => ast.nodes.items(.main_token)[index],
         else => null,
     };
 }
@@ -473,10 +478,39 @@ test "find-node-ident" {
     try testNodeIdent("var foo: u8 = undefined;", .simple_var_decl, "foo");
     try testNodeIdent("const Bar = struct {};", .simple_var_decl, "Bar");
     try testNodeIdent("const Bar = struct {\npub fn foo() void {}\n};", .fn_decl, "foo");
-
     try testNodeIdent("pub fn main(a: u8) callconv(.C) void {}", .fn_decl, "main");
     try testNodeIdent("pub fn main(a: u8, b: bool) callconv(.C) void {}", .fn_decl, "main");
+    try testNodeIdent("const Bar = struct {foo: u8,};", .container_field_init, "foo");
+    try testNodeIdent("const Bar = struct {foo: bool align(4),};", .container_field_align, "foo");
 
+}
+
+fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRange) !void {
+    const allocator = std.testing.allocator;
+    var ast = try Ast.parse(allocator, source, .zig);
+    defer ast.deinit(allocator);
+
+    var stdout = std.io.getStdOut().writer();
+    try stdout.print("-----------\n{s}\n--------\n", .{source});
+    if (ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+    try std.testing.expect(ast.errors.len == 0);
+    try dumpAstFlat(&ast, stdout);
+
+    const index = indexOfNodeWithTag(ast, 0, tag).?;
+    const range = ast_node_spelling_range(ZNode{.ast=&ast, .index=index});
+    try std.testing.expectEqual(expected, range);
+}
+
+test "spelling-range" {
+    try testSpellingRange("pub fn foo() void {}", .fn_decl, .{
+        .start=.{.line=0, .column=7}, .end=.{.line=0, .column=10}});
+    try testSpellingRange("const Foo = struct {\n pub fn foo() void {}\n};", .fn_decl, .{
+        .start=.{.line=1, .column=8}, .end=.{.line=1, .column=11}});
+    try testSpellingRange("pub fn foo() void {\n var x = 1;\n}", .simple_var_decl, .{
+        .start=.{.line=1, .column=5}, .end=.{.line=1, .column=6}});
 }
 
 // Caller must free with destroy_string
@@ -564,37 +598,45 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
                 .Recurse => ast_visit(child, callback, data),
             }
         },
-        // Recurse to rhs
+        // Recurse to both lhs and rhs, neither are optional
+        .@"orelse",
+        .for_range,
+        .if_simple,
+        .grouped_expression,
         .fn_decl => {
-            const fn_proto = ZNode{.ast=ast, .index=d.lhs};
-            switch (callback(fn_proto, parent, data)) {
+            const lhs = ZNode{.ast=ast, .index=d.lhs};
+            switch (callback(lhs, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => ast_visit(fn_proto, callback, data),
+                .Recurse => ast_visit(lhs, callback, data),
             }
-            const fn_body = ZNode{.ast=ast, .index=d.rhs};
-            switch (callback(fn_body, parent, data)) {
+            const rhs = ZNode{.ast=ast, .index=d.rhs};
+            switch (callback(rhs, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => ast_visit(fn_body, callback, data),
+                .Recurse => ast_visit(rhs, callback, data),
             }
         },
-//         .fn_proto_simple => {
-//             if (d.lhs != 0) {
-//                 const child = ZNode{.ast=ast, .index=d.lhs};
-//                 switch (callback(child, parent, data)) {
-//                     .Break => return,
-//                     .Continue => {},
-//                     .Recurse => ast_visit(child, callback, data),
-//                 }
-//             }
-//             const child = ZNode{.ast=ast, .index=d.rhs};
-//             switch (callback(child, parent, data)) {
-//                 .Break => return,
-//                 .Continue => {},
-//                 .Recurse => ast_visit(child, callback, data),
-//             }
-//         },
+        // Only walk data lhs
+        .@"try",
+        .@"await",
+        .@"comptime",
+        .@"nosuspend",
+        .@"resume",
+        .@"continue",
+        .enum_literal,
+        .optional_type => {
+            // TODO: Args?
+            const child = ZNode{.ast=ast, .index=d.rhs};
+            switch (callback(child, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => ast_visit(child, callback, data),
+            }
+        },
+
+        // Only walk data rhs
+        .@"defer",
         .fn_proto => {
             // TODO: Args?
             const child = ZNode{.ast=ast, .index=d.rhs};
@@ -604,9 +646,21 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
                 .Recurse => ast_visit(child, callback, data),
             }
         },
-        // Walk lhs or rhs
+
+        // For all of these walk lhs or rhs of the node's data
+        .assign,
         .simple_var_decl,
+        .aligned_var_decl,
         .container_decl_two,
+        .container_decl_two_trailing,
+        .container_field_init,
+        .container_field_align,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        .@"errdefer",
+        .@"catch",
+        .@"break",
+        .fn_proto_simple,
         .block_two,
         .block_two_semicolon => {
             if (d.lhs != 0) {
@@ -626,6 +680,11 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
                 }
             }
         },
+        // For these walk all sub list nodes in extra data
+        .builtin_call,
+        .builtin_call_comma,
+        .container_decl,
+        .container_decl_trailing,
         .block,
         .block_semicolon => {
             for (ast.extra_data[d.lhs..d.rhs]) |decl_index| {

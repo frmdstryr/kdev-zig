@@ -132,7 +132,7 @@ KDevelop::DUContext *ContextBuilder::contextFromNode(ZNode *node)
 KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZNode *fromNode, ZNode *toNode)
 {
     ZAstRange fromRange = ast_node_extent(*fromNode);
-    ZAstRange toRange = ast_node_extent(*toNode);
+    ZAstRange toRange = (fromNode == toNode) ? fromRange : ast_node_extent(*toNode);
 
     return RangeInRevision(
         fromRange.start.line, fromRange.start.column,
