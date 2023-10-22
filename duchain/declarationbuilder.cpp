@@ -35,34 +35,24 @@ ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
     ZNodeKind kind = ast_node_kind(node);
     switch (kind) {
     case Module:
-        qDebug() << "Visit node index=" << node.index << " kind=Module";
         return buildDeclaration<Module>(node, parent);
     case ContainerDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=StructDecl";
         return buildDeclaration<ContainerDecl>(node, parent);
     case EnumDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=EnumDecl";
         return buildDeclaration<EnumDecl>(node, parent);
     case TemplateDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=TemplateDecl";
         return buildDeclaration<TemplateDecl>(node, parent);
     case FunctionDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=FunctionDecl";
         return buildDeclaration<FunctionDecl>(node, parent);
     case AliasDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=TypeAlisaDecl";
         return buildDeclaration<AliasDecl>(node, parent);
     case FieldDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=FieldDecl";
         return buildDeclaration<FieldDecl>(node, parent);
     case VarDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=VarDecl";
         return buildDeclaration<VarDecl>(node, parent);
     case ErrorDecl:
-        qDebug() << "Visit node index=" << node.index << " kind=ErrorDecl";
         return buildDeclaration<ErrorDecl>(node, parent);
     default:
-        qDebug() << "Visit node index=" << node.index << " kind=" << kind;
         return ContextBuilder::visitNode(node, parent);
     }
 }
@@ -71,6 +61,7 @@ template<ZNodeKind Kind>
 ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 {
     Q_UNUSED(parent);
+    DUChainWriteLocker lock(DUChain::lock());
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
 
     ZigPath name(node);
@@ -85,8 +76,10 @@ ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 template <ZNodeKind Kind>
 Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, bool hasContext)
 {
-    qDebug() << "Create decl name=" << name->value;
+
     auto range = editorFindSpellingRange(node, name->value);
+
+    // qDebug()  << "Create decl name=" << name->value << " range" << range ;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         Identifier(name->value), range,
         hasContext ? DeclarationIsDefinition : NoFlags
@@ -113,10 +106,17 @@ typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZNode &node)
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
+template <ZNodeKind Kind, EnableIf<Kind == ContainerDecl>>
+StructureType::Ptr DeclarationBuilder::createType(ZNode &node)
+{
+    Q_UNUSED(node); // TODO: Determine container type (struct, union)
+    return StructureType::Ptr(new StructureType);
+}
+
 template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl>>
 FunctionType::Ptr DeclarationBuilder::createType(ZNode &node)
 {
-    Q_UNUSED(node);
+    Q_UNUSED(node); // TODO determine method in struct or regular method
     return FunctionType::Ptr(new FunctionType);
 }
 
@@ -124,6 +124,7 @@ template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind 
 AbstractType::Ptr DeclarationBuilder::createType(ZNode &node)
 {
     Q_UNUSED(node);
+    // TODO: Determine var type
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
 
@@ -144,6 +145,12 @@ template <ZNodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 {
     decl->setAbstractType(AbstractType::Ptr(type));
+}
+
+template <ZNodeKind Kind>
+void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
+{
+    type->setDeclaration(decl);
 }
 
 template<ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>

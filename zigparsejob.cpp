@@ -143,7 +143,6 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     if (num_errors == 0) {
         ZNode root = {session.ast(), 0};
         qCDebug(KDEV_ZIG) << "Parsing succeeded for: " << document().toUrl();
-        DUChainWriteLocker lock;
         DeclarationBuilder builder;
         builder.setParseSession(&session);
         context = builder.build(document(), &root, toUpdate);

@@ -36,6 +36,7 @@ constexpr bool hasContext(ZNodeKind kind)
         || kind == FunctionDecl
         || kind == BlockDecl
         || kind == ErrorDecl
+        || kind == VarDecl
     ;
 }
 
@@ -43,12 +44,13 @@ constexpr KDevelop::DUContext::ContextType contextType(ZNodeKind kind)
 {
     using namespace KDevelop;
     return
-        kind == Module       ? DUContext::Namespace
-        :  kind == ContainerDecl   ? DUContext::Class
-        :  kind == EnumDecl     ? DUContext::Enum
-        :  kind == FunctionDecl ? DUContext::Function
-        :  kind == BlockDecl        ? DUContext::Other
-        :  kind == ErrorDecl        ? DUContext::Enum
+        kind == Module           ? DUContext::Namespace
+        :  kind == ContainerDecl ? DUContext::Class
+        :  kind == EnumDecl      ? DUContext::Enum
+        :  kind == FunctionDecl  ? DUContext::Function
+        :  kind == ErrorDecl     ? DUContext::Enum
+        :  kind == BlockDecl     ? DUContext::Other
+        :  kind == VarDecl       ? DUContext::Other
         // TODO: Template decl?
         : static_cast<DUContext::ContextType>(-1);
 }
@@ -65,7 +67,8 @@ constexpr bool isKDevDeclaration(ZNodeKind kind)
 constexpr bool isTypeDeclaration(ZNodeKind kind)
 {
     return  kind == EnumDecl
-        || kind == ErrorDecl;
+        || kind == ErrorDecl
+        || kind == ContainerDecl;
 }
 
 }

@@ -149,6 +149,7 @@ void DUChainTest::testVarBindings()
         }
 
         for (const QString &binding : bindings) {
+            qDebug() << "Checking name " << binding;
             QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
         }
     } else {
@@ -157,6 +158,7 @@ void DUChainTest::testVarBindings()
             qDebug() << "  " << decl->toString();
         }
         for (const QString &binding : bindings) {
+            qDebug() << "Checking name " << binding;
             QCOMPARE(context->findLocalDeclarations(Identifier(binding)).size(),  1);
         }
     }

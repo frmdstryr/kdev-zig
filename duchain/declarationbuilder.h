@@ -65,6 +65,9 @@ private:
     template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
     KDevelop::FunctionType::Ptr createType(ZNode &node);
 
+    template <ZNodeKind Kind, EnableIf<Kind == ContainerDecl> = dummy>
+    KDevelop::StructureType::Ptr createType(ZNode &node);
+
     template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
     KDevelop::AbstractType::Ptr createType(ZNode &node);
 
@@ -91,6 +94,9 @@ private:
 
     template <ZNodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::AbstractType *type);
+
+    template <ZNodeKind Kind>
+    void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 };
 
 }

@@ -2,6 +2,7 @@
 // LGPL
 const std = @import("std");
 const Ast = std.zig.Ast;
+const assert = std.debug.assert;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -48,7 +49,8 @@ const NodeKind = enum(c_int) {
     VarAccess,
     FieldAccess,
     ArrayAccess,
-    PtrAccess // Deref
+    PtrAccess, // Deref
+
 };
 
 // std.mem.len does not check for null
@@ -156,15 +158,12 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
     } else {
-        std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
-        var stdout = std.io.getStdOut().writer();
-        dumpAstFlat(ast, stdout) catch |err| {
-            std.log.debug("zig: failed to dump ast {}", .{err});
-        };
+//         std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
+//         var stdout = std.io.getStdOut().writer();
+//         dumpAstFlat(ast, stdout) catch |err| {
+//             std.log.debug("zig: failed to dump ast {}", .{err});
+//         };
     }
-
-    // Parsed successuflly
-    std.log.warn("zig: parsed sucessfully! {s}", .{name});
     return ast;
 }
 
@@ -239,7 +238,7 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
 // }
 
 export fn destroy_ast(ptr: ?*Ast) void {
-    std.log.debug("zig: destroy_ast {}", .{@intFromPtr(ptr)});
+    // std.log.debug("zig: destroy_ast {}", .{@intFromPtr(ptr)});
     if (ptr) |tree| {
         tree.deinit(gpa.allocator());
     }
@@ -252,7 +251,7 @@ export fn destroy_ast(ptr: ?*Ast) void {
 // }
 
 export fn destroy_error(ptr: ?*ZError) void {
-    std.log.debug("zig: destroy_error {}", .{@intFromPtr(ptr)});
+    // std.log.debug("zig: destroy_error {}", .{@intFromPtr(ptr)});
     if (ptr) |err| {
         err.deinit(gpa.allocator());
     }
@@ -299,7 +298,7 @@ export fn ast_node_extent(node: ZNode) ZAstRange {
     const last_token = ast.lastToken(node.index);
     const end_loc = ast.tokenLocation(0, last_token);
 
-    var r = ZAstRange{
+    return ZAstRange{
         .start=ZAstLocation{
             .line=@intCast(start_loc.line),
             .column=@intCast(start_loc.column),
@@ -309,52 +308,65 @@ export fn ast_node_extent(node: ZNode) ZAstRange {
             .column=@intCast(end_loc.column),
         },
     };
-    // std.log.warn("zig: ast_node_extent {} {}", .{node.index, r});
-    return r;
 }
 
 
+
+pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
+    if (index >= ast.nodes.len) {
+        return null;
+    }
+    return switch (ast.nodes.items(.tag)[index]) {
+        .root => .Module,
+        .fn_decl => .FunctionDecl,
+        .simple_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .global_var_decl => .VarDecl,
+        .container_decl,
+        .container_decl_trailing,
+        .container_decl_two,
+        .container_decl_two_trailing,
+        .container_decl_arg,
+        .container_decl_arg_trailing => .ContainerDecl,
+
+        .block,
+        .block_semicolon,
+        .block_two,
+        .block_two_semicolon => .BlockDecl,
+        .container_field_init,
+        .container_field_align,
+        .container_field => .FieldDecl,
+        .error_set_decl => .ErrorDecl,
+        // TODO: Param? Import? Detect if template
+        .struct_init,
+        .struct_init_comma => .ContainerInit,
+        .builtin_call,
+        .builtin_call_comma,
+        .call_one, .call_one_comma,
+        .call, .call_comma,
+        .async_call, .async_call_comma => .Call,
+
+        .assign,
+        .assign_destructure => .VarAccess,
+
+        .deref => .PtrAccess,
+
+        .unwrap_optional,
+        .error_value,
+        .field_access => .FieldAccess,
+        .array_access => .ArrayAccess,
+
+        // TODO
+        else => .Unknown,
+    };
+}
+
 export fn ast_node_kind(node: ZNode) NodeKind {
-    // std.log.warn("zig: ast_node_kind {}", .{node.index});
     if (node.ast) |ast| {
-        if (node.index < ast.nodes.len) {
-            return switch (ast.nodes.items(.tag)[node.index]) {
-                .root => .Module,
-                .fn_decl => .FunctionDecl,
-                .simple_var_decl,
-                .local_var_decl,
-                .global_var_decl => .VarDecl,
-                .container_decl => .ContainerDecl,
-                .block,
-                .block_semicolon,
-                .block_two,
-                .block_two_semicolon => .BlockDecl,
-                .container_field_init,
-                .container_field_align,
-                .container_field => .FieldDecl,
-                .error_set_decl => .ErrorDecl,
-                // TODO: Param? Import? Detect if template
-                .struct_init,
-                .struct_init_comma => .ContainerInit,
-                .builtin_call,
-                .builtin_call_comma,
-                .call_one, .call_one_comma,
-                .call, .call_comma,
-                .async_call, .async_call_comma => .Call,
-
-                .assign,
-                .assign_destructure => .VarAccess,
-
-                .deref => .PtrAccess,
-
-                .unwrap_optional,
-                .error_value,
-                .field_access => .FieldAccess,
-                .array_access => .ArrayAccess,
-
-                // TODO
-                else => .Unknown,
-            };
+        if (kindFromAstNode(ast, node.index)) |kind| {
+            // std.log.debug("zig: ast_node_kind {} is {s}", .{node.index, @tagName(kind)});
+            return kind;
         }
     }
     return .Unknown;
@@ -394,6 +406,36 @@ fn indexOfNodeWithTag(ast: Ast, start_token: Ast.TokenIndex, tag: Ast.Node.Tag) 
         }
     }
     return null;
+}
+
+fn isTagContainerDecl(tag: Ast.Node.Tag) bool {
+    return switch (tag) {
+        .container_decl,
+        .container_decl_trailing,
+        .container_decl_two,
+        .container_decl_two_trailing,
+        .container_decl_arg,
+        .container_decl_arg_trailing => true,
+        else => false
+    };
+}
+
+fn isTagVarDecl(tag: Ast.Node.Tag) bool {
+    return switch (tag) {
+        .simple_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .global_var_decl => true,
+        else => false
+    };
+}
+
+fn isNodeConstVarDecl(ast: *Ast, index: Ast.TokenIndex) bool {
+    if (index < ast.nodes.len and isTagVarDecl(ast.nodes.items(.tag)[index])) {
+        const main_token = ast.nodes.items(.main_token)[index];
+        return ast.tokens.items(.tag)[main_token] == .keyword_const;
+    }
+    return false;
 }
 
 fn testNodeIdent(source: [:0]const u8, tag: Ast.Node.Tag, expected: ?[]const u8) !void {
@@ -447,10 +489,10 @@ export fn ast_node_new_spelling_name(node: ZNode) ?[*]const u8 {
         std.log.warn("zig: token name index={} is out of range", .{node.index});
         return null;
     }
-    const tag = ast.nodes.items(.tag)[node.index];
+    // const tag = ast.nodes.items(.tag)[node.index];
     if (findNodeIdentifier(ast, node.index)) |ident_token| {
         const name = ast.tokenSlice(ident_token);
-        std.log.debug("zig: token name {} {s} = '{s}' ({})", .{node.index, @tagName(tag), name, name.len});
+        // std.log.debug("zig: token name {} {s} = '{s}' ({})", .{node.index, @tagName(tag), name, name.len});
         const copy = gpa.allocator().dupeZ(u8, name) catch {
             return null;
         };
@@ -511,7 +553,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
     const tag = ast.nodes.items(.tag)[node.index];
     const d = ast.nodes.items(.data)[node.index];
     const parent = ZNode{.ast=ast, .index=node.index};
-    std.log.debug("zig: ast_visit {} {s}", .{node.index, @tagName(tag)});
+    // std.log.debug("zig: ast_visit {} {s}", .{node.index, @tagName(tag)});
     switch (tag) {
         .root => for (ast.rootDecls()) |decl_index| {
             // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
@@ -610,7 +652,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .number_literal,
         .identifier => {},
         else => {
-            std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+           // std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
         }
     }
     return;

@@ -534,6 +534,11 @@ struct ZAstRange
 {
     ZAstLocation start;
     ZAstLocation end;
+
+    bool isEmpty() {
+        return start.line == 0 && start.column == 0 &&
+               end.line == 0 && end.column == 0;
+    }
 };
 
 struct ZError
@@ -556,6 +561,7 @@ void destroy_error(ZError *err);
 ZNodeKind ast_node_kind(ZNode node);
 
 const char *ast_node_new_spelling_name(ZNode node);
+// NOTE: Lines are 0 indexed so the first line is 0 not 1
 ZAstRange ast_node_spelling_range(ZNode node);
 ZAstRange ast_node_extent(ZNode node);
 
