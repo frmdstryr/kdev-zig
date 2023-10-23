@@ -127,6 +127,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     }
 
     if (toUpdate) {
+        DUChainWriteLocker lock;
         translateDUChainToRevision(toUpdate);
         toUpdate->setRange(RangeInRevision(0, 0, INT_MAX, INT_MAX));
         toUpdate->clearProblems();
@@ -185,9 +186,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         if(error.data() != nullptr) {
             ProblemPointer p = ProblemPointer(new Problem());
             p->setFinalLocation(DocumentRange(document(), KTextEditor::Range(
-                error.data()->range.start.line - 1,
+                error.data()->range.start.line,
                 error.data()->range.start.column,
-                error.data()->range.end.line - 1,
+                error.data()->range.end.line,
                 error.data()->range.end.column)));
             p->setSource(IProblem::Parser);
             p->setSeverity(static_cast<IProblem::Severity>(error.data()->severity));
