@@ -48,7 +48,9 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     auto declarations = m_duContext->allDeclarations(CursorInRevision::invalid(), m_duContext->topContext());
     for(const QPair<Declaration *, int> &decl : declarations)
     {
-        if(decl.first->topContext() != m_duContext->topContext())
+        if (abort)
+            break;
+        if(!decl.first || decl.first->topContext() != m_duContext->topContext())
             continue;
         if(decl.first->identifier() == globalImportIdentifier() || decl.first->identifier() == globalAliasIdentifier()
             || decl.first->identifier() == Identifier())

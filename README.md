@@ -1,6 +1,7 @@
 # Zig Language Support plugin
 
-This package is a WIP to provide language support for Zig.
+This package is a WIP to provide language support for Zig. It uses zig's
+builtin parser.
 
 It was forked from kdev-rust.
 

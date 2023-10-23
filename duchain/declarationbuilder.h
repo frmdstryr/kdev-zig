@@ -51,10 +51,14 @@ public:
 protected:
     ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
+    KDevelop::AbstractType::Ptr findTypeForName(const ZigPath& name) const;
 
 private:
     template <ZNodeKind Kind>
     ZVisitResult buildDeclaration(ZNode &node, ZNode &parent);
+
+    template <ZNodeKind Kind>
+    ZVisitResult updateDeclaration(ZNode &node, ZNode &parent);
 
     template <ZNodeKind Kind>
     KDevelop::Declaration *createDeclaration(ZNode &node, ZigPath *name, bool hasContext);
@@ -97,6 +101,8 @@ private:
 
     template <ZNodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
+
+
 };
 
 }

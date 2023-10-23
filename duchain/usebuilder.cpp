@@ -58,6 +58,12 @@ ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
         case PtrAccess:
             visitPtrAccess(node, parent);
             break;
+        case Literal:
+            visitLiteral(node, parent);
+            break;
+        case Ident:
+            visitIdent(node, parent);
+            break;
         default:
             break;
     }
@@ -71,7 +77,58 @@ void UseBuilder::visitCall(ZNode &node, ZNode &parent)
 
 void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
 {
-    // TODO
+    ZigPath containerName(node);
+    RangeInRevision useRange = editorFindSpellingRange(node, containerName.value);
+
+    IndexedIdentifier identifier = IndexedIdentifier(Identifier(containerName.value));
+    currentPath.clear();
+    currentPath.push(identifier);
+    if (containerName.value.isEmpty()) {
+        return;
+    }
+    if (containerName.value == ".") {
+        return;  // TODO: Handle .
+    }
+
+    DUChainWriteLocker lock(DUChain::lock());
+    DUContext *context = topContext()->findContextAt(useRange.start);
+    if (!context) return;
+
+    QList<Declaration *> declarations = context->findDeclarations(
+        currentPath,
+        CursorInRevision::invalid(),
+        AbstractType::Ptr(),
+        nullptr,
+        DUContext::NoSearchFlags);
+
+    // TODO: Find only structs
+    DUContext* parentContext = context->parentContext();
+    while (declarations.isEmpty() && parentContext) {
+        declarations = parentContext->findDeclarations(
+            currentPath,
+            CursorInRevision::invalid(),
+            AbstractType::Ptr(),
+            nullptr,
+            DUContext::NoSearchFlags);
+    }
+
+    if (declarations.isEmpty()) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Undefined %1", containerName.value));
+        topContext()->addProblem(p);
+    } else {
+        for (Declaration *declaration : declarations) {
+            // TODO: Check if a struct or alias of struct
+            if (declaration->range() != useRange) {
+                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
+                break;
+            }
+        }
+    }
+
 }
 
 void UseBuilder::visitVarAccess(ZNode &node, ZNode &parent)
@@ -90,6 +147,16 @@ void UseBuilder::visitArrayAccess(ZNode &node, ZNode &parent)
 }
 
 void UseBuilder::visitPtrAccess(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+void UseBuilder::visitIdent(ZNode &node, ZNode &parent)
+{
+    // TODO
+}
+
+void UseBuilder::visitLiteral(ZNode &node, ZNode &parent)
 {
     // TODO
 }

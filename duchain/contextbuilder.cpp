@@ -76,6 +76,7 @@ ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
     BUILD_CONTEXT_FOR(BlockDecl);
     BUILD_CONTEXT_FOR(ErrorDecl);
     BUILD_CONTEXT_FOR(AliasDecl);
+    BUILD_CONTEXT_FOR(TestDecl);
 
     BUILD_CONTEXT_FOR(Call);
     BUILD_CONTEXT_FOR(ContainerInit);
@@ -83,6 +84,8 @@ ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
     BUILD_CONTEXT_FOR(FieldAccess);
     BUILD_CONTEXT_FOR(ArrayAccess);
     BUILD_CONTEXT_FOR(PtrAccess);
+    BUILD_CONTEXT_FOR(Literal);
+    BUILD_CONTEXT_FOR(Ident);
 
     BUILD_CONTEXT_FOR(Unknown);
 
@@ -101,9 +104,11 @@ ZVisitResult ContextBuilder::buildContext(ZNode &node, ZNode &parent)
     ZigPath name(node);
 
     if (hasContext) {
+        // qDebug() << "Open context node:" << node.index;
         openContext(&node, NodeTraits::contextType(Kind), &name);
         visitChildren(node);
         closeContext();
+        // qDebug() << "Close context node:" << node.index;
         return Continue;
     }
     return Recurse;

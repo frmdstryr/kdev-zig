@@ -43,6 +43,7 @@ const NodeKind = enum(c_int) {
     BlockDecl,
     ErrorDecl,
     AliasDecl, // Import
+    TestDecl,
     // Uses
     Call,
     ContainerInit,
@@ -50,7 +51,8 @@ const NodeKind = enum(c_int) {
     FieldAccess,
     ArrayAccess,
     PtrAccess, // Deref
-
+    Literal,
+    Ident
 };
 
 // std.mem.len does not check for null
@@ -108,23 +110,18 @@ fn printAstError(ast: *Ast, filename: []const u8, source: []const u8) !void {
 
 pub fn dumpAstFlat(ast: *Ast, stream: anytype) !void {
     var i: usize = 0;
-    var indent: usize = 0;
+    const tags = ast.nodes.items(.tag);
+    const node_data = ast.nodes.items(.data);
+    const main_tokens = ast.nodes.items(.main_token);
+    try stream.writeAll("|  #  | Tag                       |   Data    |    Main token   |\n");
+    try stream.writeAll("|-----|---------------------------|-----------|-----------------|\n");
     while (i < ast.nodes.len) : (i += 1) {
-        const tag = ast.nodes.items(.tag)[i];
-        const data = ast.nodes.items(.data)[i];
-        const main_token = ast.nodes.items(.main_token)[i];
-        try stream.writeByteNTimes(' ', indent);
-        try stream.print("{s}", .{@tagName(tag)});
-        try stream.writeAll("{\n");
-        {
-            indent += 2;
-            try stream.writeByteNTimes(' ', indent);
-            try stream.print("i={}, data=({},{}) slice={s}\n", .{i, data.lhs, data.rhs, ast.tokenSlice(main_token)});
-            try stream.writeByteNTimes(' ', indent);
-            indent -= 2;
-        }
-        try stream.writeByteNTimes(' ', indent);
-        try stream.writeAll("}\n");
+        const tag = tags[i];
+        const data = node_data[i];
+        const main_token = main_tokens[i];
+        try stream.print("|{: >5}| {s: <25} | {: >4},{: >4} | {s: <15} |\n", .{
+            i, @tagName(tag), data.lhs, data.rhs, ast.tokenSlice(main_token)
+        });
     }
 }
 
@@ -158,11 +155,11 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
     } else {
-//         std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
-//         var stdout = std.io.getStdOut().writer();
-//         dumpAstFlat(ast, stdout) catch |err| {
-//             std.log.debug("zig: failed to dump ast {}", .{err});
-//         };
+        std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
+        var stdout = std.io.getStdOut().writer();
+        dumpAstFlat(ast, stdout) catch |err| {
+            std.log.debug("zig: failed to dump ast {}", .{err});
+        };
     }
     return ast;
 }
@@ -319,6 +316,7 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
     return switch (ast.nodes.items(.tag)[index]) {
         .root => .Module,
         .fn_decl => .FunctionDecl,
+        .test_decl => .TestDecl,
         .simple_var_decl,
         .local_var_decl,
         .aligned_var_decl,
@@ -340,7 +338,9 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
         .error_set_decl => .ErrorDecl,
         // TODO: Param? Import? Detect if template
         .struct_init,
-        .struct_init_comma => .ContainerInit,
+        .struct_init_comma,
+        .struct_init_one,
+        .struct_init_one_comma => .ContainerInit,
         .builtin_call,
         .builtin_call_comma,
         .call_one, .call_one_comma,
@@ -356,6 +356,13 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
         .error_value,
         .field_access => .FieldAccess,
         .array_access => .ArrayAccess,
+
+        .string_literal,
+        .multiline_string_literal,
+        .number_literal,
+        .char_literal => .Literal,
+
+        .identifier => .Ident,
 
         // TODO
         else => .Unknown,
@@ -380,7 +387,9 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
 
     const tag = ast.nodes.items(.tag)[index];
     return switch (tag) {
-        // fn_decl lhs is a fn_proto
+        // Data lhs is the identifier
+        .struct_init_one,
+        .struct_init_one_comma,
         .fn_decl => findNodeIdentifier(ast, ast.nodes.items(.data)[index].lhs),
 
         // Token after main_token is the name for all these
@@ -393,10 +402,15 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
         .simple_var_decl,
         .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
 
-        // Field
+        // Main token is identifier
+        .identifier,
+        .string_literal,
         .container_field,
         .container_field_init,
         .container_field_align => ast.nodes.items(.main_token)[index],
+        .test_decl =>
+            if (ast.nodes.items(.data)[index].lhs == 0)
+                null else ast.nodes.items(.data)[index].lhs,
         else => null,
     };
 }
@@ -468,6 +482,7 @@ fn testNodeIdent(source: [:0]const u8, tag: Ast.Node.Tag, expected: ?[]const u8)
 }
 
 test "find-node-ident" {
+    // Note: It uses the first node with the token found
     try testNodeIdent("pub fn main () void {}", .fn_decl, "main");
     try testNodeIdent("fn main () void {}", .fn_decl, "main");
     try testNodeIdent("inline fn main () void {}", .fn_decl, "main");
@@ -482,7 +497,12 @@ test "find-node-ident" {
     try testNodeIdent("pub fn main(a: u8, b: bool) callconv(.C) void {}", .fn_decl, "main");
     try testNodeIdent("const Bar = struct {foo: u8,};", .container_field_init, "foo");
     try testNodeIdent("const Bar = struct {foo: bool align(4),};", .container_field_align, "foo");
-
+    try testNodeIdent("pub fn main() u8 {}", .identifier, "u8");
+    try testNodeIdent("pub fn main(a: bool) void {}", .identifier, "bool");
+    try testNodeIdent("pub fn main() void {var a: u8 = 0;}", .simple_var_decl, "a");
+    try testNodeIdent("const Foo = struct{ a: u8 = 0};\nvar foo = Foo{};", .struct_init_one, "Foo");
+    try testNodeIdent("const Foo = struct{ a: u8 = 0};\nvar foo = Foo{.a=0,};", .struct_init_one_comma, "Foo");
+    try testNodeIdent("test \"first\" { }", .test_decl, "\"first\"");
 }
 
 fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRange) !void {
@@ -511,6 +531,10 @@ test "spelling-range" {
         .start=.{.line=1, .column=8}, .end=.{.line=1, .column=11}});
     try testSpellingRange("pub fn foo() void {\n var x = 1;\n}", .simple_var_decl, .{
         .start=.{.line=1, .column=5}, .end=.{.line=1, .column=6}});
+    try testSpellingRange("pub fn foo() void {\n if (true) {\n  var x = 1;}\n}", .simple_var_decl, .{
+        .start=.{.line=2, .column=6}, .end=.{.line=2, .column=7}});
+    try testSpellingRange("const Foo = struct {a: bool};\nvar foo = Foo{};", .struct_init_one, .{
+        .start=.{.line=1, .column=10}, .end=.{.line=1, .column=13}});
 }
 
 // Caller must free with destroy_string
@@ -523,9 +547,11 @@ export fn ast_node_new_spelling_name(node: ZNode) ?[*]const u8 {
         std.log.warn("zig: token name index={} is out of range", .{node.index});
         return null;
     }
-    // const tag = ast.nodes.items(.tag)[node.index];
+    const tag = ast.nodes.items(.tag)[node.index];
     if (findNodeIdentifier(ast, node.index)) |ident_token| {
-        const name = ast.tokenSlice(ident_token);
+        const name = if (tag == .test_decl)
+            std.mem.trim(u8, ast.tokenSlice(ident_token), "\"")
+            else ast.tokenSlice(ident_token);
         // std.log.debug("zig: token name {} {s} = '{s}' ({})", .{node.index, @tagName(tag), name, name.len});
         const copy = gpa.allocator().dupeZ(u8, name) catch {
             return null;
@@ -587,7 +613,11 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
     const tag = ast.nodes.items(.tag)[node.index];
     const d = ast.nodes.items(.data)[node.index];
     const parent = ZNode{.ast=ast, .index=node.index};
-    // std.log.debug("zig: ast_visit {} {s}", .{node.index, @tagName(tag)});
+    std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
+        @tagName(tag),
+        node.index,
+        ast.tokenSlice(ast.nodes.items(.main_token)[node.index])
+    });
     switch (tag) {
         .root => for (ast.rootDecls()) |decl_index| {
             // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
@@ -626,7 +656,6 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"continue",
         .enum_literal,
         .optional_type => {
-            // TODO: Args?
             const child = ZNode{.ast=ast, .index=d.rhs};
             switch (callback(child, parent, data)) {
                 .Break => return,
@@ -660,6 +689,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"errdefer",
         .@"catch",
         .@"break",
+        .test_decl,
         .fn_proto_simple,
         .block_two,
         .block_two_semicolon => {
@@ -697,16 +727,10 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
                 }
             }
         },
-//         .@"return" => {
-//             const child = ZNode{.ast=ast, .index=d.lhs};
-//             switch (callback(parent, child, data)) {
-//                 .Break, .Continue => {},
-//                 .Recurse => ast_visit(child, callback, data),
-//             }
-//         },
-//         .@"break",
 
         // Leaf nodes
+        .string_literal,
+        .multiline_string_literal,
         .char_literal,
         .number_literal,
         .identifier => {},

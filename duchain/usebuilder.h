@@ -46,8 +46,12 @@ private:
     void visitFieldAccess(ZNode &node, ZNode &parent);
     void visitArrayAccess(ZNode &node, ZNode &parent);
     void visitPtrAccess(ZNode &node, ZNode &parent);
+    void visitLiteral(ZNode &node, ZNode &parent);
+    void visitIdent(ZNode &node, ZNode &parent);
 
     KDevelop::IndexedString document;
+    KDevelop::QualifiedIdentifier fullPath;
+    KDevelop::QualifiedIdentifier currentPath;
 };
 
 }

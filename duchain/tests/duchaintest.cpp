@@ -133,7 +133,7 @@ void DUChainTest::testVarBindings()
     QFETCH(QString, code);
     QFETCH(QString, contextName);
     QFETCH(QStringList, bindings);
-
+    qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code);
     QVERIFY(context.data());
 
@@ -141,13 +141,13 @@ void DUChainTest::testVarBindings()
     if (!contextName.isEmpty()) {
         DUContext *internalContext = getInternalContext(context, contextName);
         QVERIFY(internalContext);
-        QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
 
         qDebug() << "Decls are:";
         for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
             qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
         }
 
+        QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
         for (const QString &binding : bindings) {
             qDebug() << "Checking name " << binding;
             QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
@@ -157,6 +157,7 @@ void DUChainTest::testVarBindings()
         for (const KDevelop::Declaration *decl : context->localDeclarations()) {
             qDebug() << "  " << decl->toString();
         }
+        QCOMPARE(context->localDeclarations().size(), bindings.size());
         for (const QString &binding : bindings) {
             qDebug() << "Checking name " << binding;
             QCOMPARE(context->findLocalDeclarations(Identifier(binding)).size(),  1);
@@ -180,5 +181,70 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("fn multiple vars") << "main" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
     QTest::newRow("struct fn") << "Foo" << "const Foo = struct { pub fn bar() void {}};" << QStringList { "bar" };
     QTest::newRow("struct var") << "Foo" << "const Foo = struct { var x = 1; };" << QStringList { "x" };
+    QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
     QTest::newRow("struct field") << "Foo" << "const Foo = struct { a: u8, };" << QStringList { "a" };
+    QTest::newRow("test decl") << "" << "test \"foo\" {  }" << QStringList { "foo" };
+    // Interal context ?
+    // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
+
 }
+
+// void DUChainTest::testVarUsage()
+// {
+//     QFETCH(QString, code);
+//     QFETCH(QString, contextName);
+//     QFETCH(QStringList, uses);
+//     qDebug() << "Code:" << code;
+//     ReferencedTopDUContext context = parseCode(code);
+//     QVERIFY(context.data());
+//
+//     DUChainReadLocker lock;
+//     if (!contextName.isEmpty()) {
+//         DUContext *internalContext = getInternalContext(context, contextName);
+//         QVERIFY(internalContext);
+//
+//         qDebug() << "Decls are:";
+//         for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
+//             qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+//         }
+//
+//         QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
+//         for (const QString &binding : bindings) {
+//             qDebug() << "Checking name " << binding;
+//             QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
+//         }
+//     } else {
+//         qDebug() << "Decls are:";
+//         for (const KDevelop::Declaration *decl : context->localDeclarations()) {
+//             qDebug() << "  " << decl->toString();
+//         }
+//         QCOMPARE(context->localDeclarations().size(), bindings.size());
+//         for (const QString &binding : bindings) {
+//             qDebug() << "Checking name " << binding;
+//             QCOMPARE(context->findLocalDeclarations(Identifier(binding)).size(),  1);
+//         }
+//     }
+// }
+//
+// void DUChainTest::testVarUsage_data()
+// {
+//     QTest::addColumn<QString>("contextName");
+//     QTest::addColumn<QString>("code");
+//     QTest::addColumn<QStringList>("uses");
+//
+//     QTest::newRow("simple var") << "" << "var x = 1; x = 2;" << QStringList { "x" };
+//     // QTest::newRow("simple const") << "" << "const y = 2;" << QStringList { "y" };
+//     // QTest::newRow("simple var typed") << "" << "var y: u8 = 2;" << QStringList { "y" };
+//     // QTest::newRow("multiple vars") << "" << "var x = 1;\nvar y = 2;" << QStringList { "x", "y" };
+//     // QTest::newRow("fn and var") << "" << "var x = 1;\npub fn foo() void {}" << QStringList { "x", "foo" };
+//     // QTest::newRow("fn var") << "main" << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << QStringList { "y" };
+//     // QTest::newRow("struct decl") << "" << "const Foo = struct {};" << QStringList { "Foo" };
+//     // QTest::newRow("fn multiple vars") << "main" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
+//     // QTest::newRow("struct fn") << "Foo" << "const Foo = struct { pub fn bar() void {}};" << QStringList { "bar" };
+//     // QTest::newRow("struct var") << "Foo" << "const Foo = struct { var x = 1; };" << QStringList { "x" };
+//     // QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
+//     // QTest::newRow("struct field") << "Foo" << "const Foo = struct { a: u8, };" << QStringList { "a" };
+//     // Interal context ?
+//     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
+//
+// }

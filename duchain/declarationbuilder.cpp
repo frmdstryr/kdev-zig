@@ -52,6 +52,10 @@ ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
         return buildDeclaration<VarDecl>(node, parent);
     case ErrorDecl:
         return buildDeclaration<ErrorDecl>(node, parent);
+    case TestDecl:
+        return buildDeclaration<TestDecl>(node, parent);
+    case Ident:
+        return updateDeclaration<Ident>(node, parent);
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -61,11 +65,11 @@ template<ZNodeKind Kind>
 ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 {
     Q_UNUSED(parent);
-    DUChainWriteLocker lock(DUChain::lock());
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
 
     ZigPath name(node);
 
+    DUChainWriteLocker lock(DUChain::lock());
     createDeclaration<Kind>(node, &name, hasContext);
     ZVisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
@@ -79,7 +83,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, b
 
     auto range = editorFindSpellingRange(node, name->value);
 
-    // qDebug()  << "Create decl name=" << name->value << " range" << range  << " kind" << Kind;
+    qDebug()  << "Create decl node:" << node.index << " name:" << name->value << " range:" << range  << " kind:" << Kind;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         Identifier(name->value), range,
         hasContext ? DeclarationIsDefinition : NoFlags
@@ -186,4 +190,29 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     Q_UNUSED(decl);
 }
 
+template<ZNodeKind Kind>
+ZVisitResult DeclarationBuilder::updateDeclaration(ZNode &node, ZNode &parent)
+{
+    // ZNodeKind parentKind = ast_node_kind(parent);
+    if (auto type = lastType().dynamicCast<FunctionType>()) {
+        ZigPath name(node);
+        auto returnType = findTypeForName(name);
+        if (returnType) {
+            type->setReturnType(returnType);
+        } else {
+            qDebug() << "TODO: Set fn return type " << name.value;
+        }
+    }
+    return ContextBuilder::visitNode(node, parent);
 }
+
+AbstractType::Ptr DeclarationBuilder::findTypeForName(const ZigPath &name) const
+{
+    if (name.value == "void")
+        return AbstractType::Ptr(new IntegralType(IntegralType::TypeVoid));
+    if (name.value == "bool")
+        return AbstractType::Ptr(new IntegralType(IntegralType::TypeBoolean));
+    return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
+}
+
+} // namespace zig

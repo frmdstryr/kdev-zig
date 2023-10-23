@@ -501,13 +501,16 @@ enum ZNodeKind
     BlockDecl,
     ErrorDecl,
     AliasDecl, // Import
+    TestDecl,
     // Uses
     Call,
     ContainerInit,
     VarAccess,
     FieldAccess,
     ArrayAccess,
-    PtrAccess // Deref
+    PtrAccess, // Deref
+    Literal,
+    Ident
 };
 
 enum ZVisitResult
