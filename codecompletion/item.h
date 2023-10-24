@@ -1,5 +1,5 @@
 /*
- * Copyright 2017  Emma Gospodinova <emma.gospodinova@gmail.com>
+ * Copyright 2023  frmdstryr <frmdstryr@protonmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -14,27 +14,23 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
 
-#ifndef COMPLETIONMODEL_H
-#define COMPLETIONMODEL_H
-
-#include <language/codecompletion/codecompletionmodel.h>
-
+#include <language/codecompletion/normaldeclarationcompletionitem.h>
 #include "kdevzigcompletion_export.h"
 
 namespace Zig
 {
 
-class KDEVZIGCOMPLETION_EXPORT CompletionModel : public KDevelop::CodeCompletionModel
+class KDEVZIGCOMPLETION_EXPORT CompletionItem : public KDevelop::NormalDeclarationCompletionItem
 {
-    Q_OBJECT
 public:
-    CompletionModel(QObject *parent);
+    CompletionItem(
+        const KDevelop::DeclarationPointer& decl,
+        int inheritanceDepth = 0);
 
 protected:
-    KDevelop::CodeCompletionWorker *createCompletionWorker() override;
+    virtual QWidget* createExpandingWidget(const KDevelop::CodeCompletionModel* model) const override;
+    virtual bool createsExpandingWidget() const override;
 };
-
 }
-
-#endif // COMPLETIONMODEL_H

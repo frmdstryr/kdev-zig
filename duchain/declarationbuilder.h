@@ -30,6 +30,7 @@
 #include "zignode.h"
 
 #include "kdevzigduchain_export.h"
+#include "types/builtintype.h"
 
 namespace Zig
 {
@@ -51,7 +52,8 @@ public:
 protected:
     ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
 
-    KDevelop::AbstractType::Ptr findTypeForName(const ZigPath& name) const;
+    // Returns nullptr if not a known builtin
+    BuiltinType* findBuiltinType(const ZigPath& name) const;
 
 private:
     template <ZNodeKind Kind>

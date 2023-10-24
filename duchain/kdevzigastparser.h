@@ -562,6 +562,7 @@ ZError *ast_error_at(ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
 ZNodeKind ast_node_kind(ZNode node);
+ZNode ast_visit_one_child(ZNode node);
 
 const char *ast_node_new_spelling_name(ZNode node);
 // NOTE: Lines are 0 indexed so the first line is 0 not 1

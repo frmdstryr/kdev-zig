@@ -20,6 +20,7 @@
 #include <QtTest/QtTest>
 
 #include <language/duchain/ducontext.h>
+#include <language/duchain/duchainutils.h>
 #include <language/duchain/topducontext.h>
 #include <tests/testcore.h>
 #include <tests/autotestshell.h>
@@ -32,6 +33,17 @@
 using namespace KDevelop;
 
 QTEST_MAIN(DUChainTest)
+
+// Parse start_line,start_col,end_line,end_col into range
+static RangeInRevision rangeFromString(const QString &values) {
+    auto parts = values.trimmed().split(",");
+    Q_ASSERT(parts.size() == 4);
+    CursorInRevision start(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
+    CursorInRevision end(parts[2].trimmed().toInt(), parts[3].trimmed().toInt());
+    RangeInRevision range(start, end);
+    return range;
+}
+
 
 ReferencedTopDUContext parseCode(QString code)
 {
@@ -180,36 +192,46 @@ void DUChainTest::testVarBindings_data()
 void DUChainTest::testVarUsage()
 {
     QFETCH(QString, code);
-    QFETCH(QString, contextName);
+    QFETCH(CursorInRevision, cursor);
     QFETCH(QStringList, uses);
     qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code);
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    DUContext *internalContext = contextName.isEmpty() ? context : getInternalContext(context, contextName);
-    QVERIFY(internalContext);
-    QCOMPARE(internalContext->usesCount(), uses.size());
-
-    qDebug() << "Decls are:";
-    for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
-        qDebug() << "  " << decl->toString();
-    }
-    for (const QString &use : uses) {
+    uint32_t i = 0;
+    for (const QString &param : uses) {
+        QStringList parts = param.split("@");
+        QString use = parts[0];
+        RangeInRevision expectedRange = rangeFromString(parts[1]);
         qDebug() << "Checking for use of" << use;
-        auto decls = internalContext->findLocalDeclarations(Identifier(use));
-        QVERIFY(DUContext::declarationHasUses(decls.first()));
+        auto localContext = context->findContextAt(cursor);
+        //qDebug() << "Local decls at:" << cursor;
+
+        auto decls = localContext->findDeclarations(Identifier(use));
+        for (const KDevelop::Declaration *decl : decls) {
+            qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+        }
+
+        QVERIFY(decls.size() >  0);
         QCOMPARE(decls.first()->uses().size(),  1);
+        QVector<RangeInRevision> useRanges = decls.first()->uses().values().at(0);
+        QCOMPARE(useRanges.size(),  1);
+        QCOMPARE(useRanges.at(0), expectedRange);
+
+        i += 1;
     }
 }
 
 void DUChainTest::testVarUsage_data()
 {
-    QTest::addColumn<QString>("contextName");
+    QTest::addColumn<CursorInRevision>("cursor");
     QTest::addColumn<QString>("code");
     QTest::addColumn<QStringList>("uses");
 
-    QTest::newRow("struct init") << "" << "var x = Foo{};" << QStringList { "Foo" };
-    QTest::newRow("fn call") << "" << "pub fn main() void {}\ttest {main();}" << QStringList { "main" };
+    QTest::newRow("struct init") << CursorInRevision(3, 0)
+        << "const Foo = struct{};\ntest {\n var x = Foo{};\n}" << QStringList { "Foo@2,9,2,12" };
+    QTest::newRow("fn call") << CursorInRevision(3, 0)
+        << "pub fn main() void {}\ntest {\n main();\n}" << QStringList { "main@2,1,2,5" };
 
 }

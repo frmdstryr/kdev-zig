@@ -14,34 +14,26 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
 
-#ifndef COMPLETIONCONTEXT_H
-#define COMPLETIONCONTEXT_H
-
-#include <QString>
-
-#include <language/codecompletion/codecompletioncontext.h>
-
-#include <kdevzigcompletion_export.h>
+#include <language/codecompletion/codecompletionworker.h>
 
 namespace Zig
 {
 
-class KDEVZIGCOMPLETION_EXPORT CompletionContext : public KDevelop::CodeCompletionContext
+class CompletionModel;
+
+class CompletionWorker : public KDevelop::CodeCompletionWorker
 {
+    Q_OBJECT
 public:
-    CompletionContext(KDevelop::DUContextPointer context,
-                      const QString &contextText,
-                      const QString &followingText,
-                      const KDevelop::CursorInRevision &position,
-                      int depth);
+    CompletionWorker(CompletionModel *parent);
 
-    QList<KDevelop::CompletionTreeItemPointer> completionItems(bool &abort, bool fullCompletion) override;
-
-private:
-    QString m_followingText;
+protected:
+    KDevelop::CodeCompletionContext *createCompletionContext(const KDevelop::DUContextPointer &context,
+                                                             const QString &contextText,
+                                                             const QString &followingText,
+                                                             const KDevelop::CursorInRevision &position) const override;
 };
 
 }
-
-#endif // COMPLETIONCONTEXT_H

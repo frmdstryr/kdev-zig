@@ -33,7 +33,7 @@
 #include <QStandardPaths>
 
 #include "zigparsejob.h"
-#include "codecompletion/completionmodel.h"
+#include "codecompletion/model.h"
 
 K_PLUGIN_FACTORY_WITH_JSON(KDevZigSupportFactory, "kdevzigsupport.json", registerPlugin<Zig::LanguageSupport>(); )
 

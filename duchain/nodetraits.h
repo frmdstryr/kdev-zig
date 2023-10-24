@@ -47,7 +47,7 @@ constexpr KDevelop::DUContext::ContextType contextType(ZNodeKind kind)
     return
         kind == Module           ? DUContext::Namespace
         :  kind == ContainerDecl ? DUContext::Namespace
-        :  kind == TestDecl      ? DUContext::Namespace
+        :  kind == TestDecl      ? DUContext::Other
         :  kind == EnumDecl      ? DUContext::Enum
         :  kind == FunctionDecl  ? DUContext::Function
         :  kind == ErrorDecl     ? DUContext::Enum

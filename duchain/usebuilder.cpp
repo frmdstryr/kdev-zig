@@ -83,26 +83,37 @@ void UseBuilder::visitCall(ZNode &node, ZNode &parent)
         return;
     }
 
-    DUContext *context;
+    ZNode child = ast_visit_one_child(node);
+    ZNodeKind childKind = ast_node_kind(child);
+
     QList<Declaration *> declarations;
-    {
-        DUChainReadLocker lock;
-        context = topContext()->findContextAt(useRange.start);
-        if (!context) return;
-        // TODO: Find only structs
-        DUContext* parentContext = context;
-        while (declarations.isEmpty() && parentContext) {
-            declarations = parentContext->findDeclarations(
-                currentPath,
-                CursorInRevision::invalid(),
-                AbstractType::Ptr(),
-                nullptr,
-                DUContext::OnlyFunctions);
-            parentContext = parentContext->parentContext();
+    bool show_error = true;
+
+    if (childKind == FieldAccess) {
+        // TODO: Find type of child or use generic expression parser?
+        ZNode owner = ast_visit_one_child(child);
+        ZNodeKind ownerKind = ast_node_kind(owner);
+        if (ownerKind == Ident) {
+            ZigPath ownerName(owner);
+            QualifiedIdentifier ownerPath(Identifier(ownerName.value));
+            DUChainReadLocker lock;
+            DUContext* context = topContext()->findContextAt(useRange.start);
+            declarations = findSimpleVar(ownerPath, context);
+            if (!declarations.isEmpty()) {
+                DUContext* ownerContext = declarations.first()->internalContext();
+                declarations = findSimpleVar(currentPath, ownerContext, DUContext::OnlyFunctions);
+            }
+        } else {
+            show_error = false; // Might be a problem, IDK
         }
+    } else {
+        // Look for fn in scope
+        DUChainReadLocker lock;
+        DUContext *context = topContext()->findContextAt(useRange.start);
+        declarations = findSimpleVar(currentPath, context, DUContext::OnlyFunctions);
     }
 
-    if (declarations.isEmpty()) {
+    if (declarations.isEmpty() && show_error) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -137,25 +148,12 @@ void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
         return;  // TODO: Handle .
     }
 
-    DUContext *context;
     QList<Declaration *> declarations;
     {
         DUChainReadLocker lock;
-        context = topContext()->findContextAt(useRange.start);
-        if (!context) return;
-        // TODO: Find only structs
-        DUContext* parentContext = context;
-        while (declarations.isEmpty() && parentContext) {
-            declarations = parentContext->findDeclarations(
-                currentPath,
-                CursorInRevision::invalid(),
-                AbstractType::Ptr(),
-                nullptr,
-                DUContext::OnlyContainerTypes);
-            parentContext = parentContext->parentContext();
-        }
+        DUContext *context = topContext()->findContextAt(useRange.start);
+        declarations = findSimpleVar(currentPath, context, DUContext::OnlyContainerTypes);
     }
-
 
     if (declarations.isEmpty()) {
         ProblemPointer p = ProblemPointer(new Problem());
@@ -206,6 +204,7 @@ void UseBuilder::visitLiteral(ZNode &node, ZNode &parent)
 {
     // TODO
 }
+
 
 // void UseBuilder::visitPath(ZNode &node, ZNode &parent)
 // {

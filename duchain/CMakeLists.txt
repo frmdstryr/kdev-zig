@@ -7,6 +7,7 @@ set(kdevzigduchain_SRC
     parsesession.cpp
     kdevzigastparser.h
     nodetraits.h
+    types/builtintype.cpp
 )
 
 find_package(Zig MODULE REQUIRED)

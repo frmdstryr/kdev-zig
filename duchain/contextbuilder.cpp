@@ -175,4 +175,25 @@ ZVisitResult visitCallback(ZNode node, ZNode parent, void *data)
 
 }
 
+QList<Declaration*> ContextBuilder::findSimpleVar(
+    QualifiedIdentifier &ident, DUContext* context,
+    KDevelop::DUContext::SearchFlag flag
+)
+{
+    QList<Declaration *> declarations;
+    if (context) {
+        DUContext* parentContext = context;
+        while (declarations.isEmpty() && parentContext) {
+            declarations = parentContext->findDeclarations(
+                ident,
+                CursorInRevision::invalid(),
+                AbstractType::Ptr(),
+                nullptr,
+                flag);
+            parentContext = parentContext->parentContext();
+        }
+    }
+    return declarations;
+}
+
 }

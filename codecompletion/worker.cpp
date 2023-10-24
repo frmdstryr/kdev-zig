@@ -15,9 +15,9 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "completionworker.h"
-#include "completionmodel.h"
-#include "completioncontext.h"
+#include "worker.h"
+#include "model.h"
+#include "context.h"
 
 namespace Zig
 {

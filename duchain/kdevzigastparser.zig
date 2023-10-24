@@ -154,7 +154,7 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
         printAstError(ast, name, source) catch |err| {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
-    } else {
+    } else if (@import("builtin").is_test) {
         std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
         var stdout = std.io.getStdOut().writer();
         dumpAstFlat(ast, stdout) catch |err| {
@@ -632,8 +632,68 @@ export fn ast_format(
     return formatted.ptr;
 }
 
+fn visitOne(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult {
+    _ = parent;
+    if (data) |ptr| {
+        const result: *ZNode = @ptrCast(@alignCast(ptr));
+        result.index = node.index;
+    } else {
+        std.log.warn("zig: visit one data is null", .{});
+    }
+    return .Break;
+}
+
+// Visit one child
+export fn ast_visit_one_child(node: ZNode) ZNode {
+    var result = ZNode{.ast=node.ast, .index=0};
+    ast_visit(node, visitOne, &result);
+    return result;
+}
+
+fn testVisitChild(source: [:0]const u8, tag: Ast.Node.Tag, expected: Ast.Node.Tag) !void {
+    const allocator = std.testing.allocator;
+    var ast = try Ast.parse(allocator, source, .zig);
+    defer ast.deinit(allocator);
+
+    var stdout = std.io.getStdOut().writer();
+    try stdout.print("-----------\n{s}\n--------\n", .{source});
+    if (ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+    try std.testing.expect(ast.errors.len == 0);
+    try dumpAstFlat(&ast, stdout);
+
+    const index = indexOfNodeWithTag(ast, 0, tag).?;
+    const child = ast_visit_one_child(ZNode{.ast=&ast, .index=index});
+    const result = ast.nodes.items(.tag)[child.index];
+    try std.testing.expectEqual(expected, result);
+}
+
+test "child-node" {
+    try testVisitChild("test { try main(); }", .@"try", .call_one);
+    try testVisitChild("test { main(); }", .call_one, .identifier);
+    try testVisitChild("test { a.main(); }", .call_one, .field_access);
+    try testVisitChild("test { a.main(); }", .field_access, .identifier);
+
+
+}
 
 const CallbackFn = *const fn(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult;
+
+
+pub fn assertNodeIndexValid(node: ZNode, parent: ZNode) void {
+    if (node.ast) |ast| {
+        if (node.index > ast.nodes.len) {
+            var stderr = std.io.getStdErr().writer();
+            dumpAstFlat(ast, stderr) catch {};
+            std.log.err("zig: ast_visit chlid index {} from parent {} is out of range", .{
+                node.index, parent.index
+            });
+            assert(false);
+        }
+    }
+}
 
 // Return whether to continue or not
 export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void {
@@ -642,10 +702,8 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         return;
     }
     const ast = node.ast.?;
-    if (node.index >= ast.nodes.len) {
-        var stderr = std.io.getStdErr().writer();
-        dumpAstFlat(ast, stderr) catch {};
-        std.log.warn("zig: ast_visit index {} is out of range", .{node.index});
+    if (node.index > ast.nodes.len) {
+        std.log.warn("zig: ast_visit node.index {} is out of range", .{node.index});
         return;
     }
     const tag = ast.nodes.items(.tag)[node.index];
@@ -660,6 +718,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .root => for (ast.rootDecls()) |decl_index| {
             // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
             const child = ZNode{.ast=ast, .index=decl_index};
+            assertNodeIndexValid(child, parent);
             switch (callback(child, parent, data)) {
                 .Break => return,
                 .Continue => continue,
@@ -670,19 +729,24 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"orelse",
         .for_range,
         .if_simple,
-        .grouped_expression,
         .fn_decl => {
-            const lhs = ZNode{.ast=ast, .index=d.lhs};
-            switch (callback(lhs, parent, data)) {
-                .Break => return,
-                .Continue => {},
-                .Recurse => ast_visit(lhs, callback, data),
+            {
+                const child = ZNode{.ast=ast, .index=d.lhs};
+                assertNodeIndexValid(child, parent);
+                switch (callback(child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(child, callback, data),
+                }
             }
-            const rhs = ZNode{.ast=ast, .index=d.rhs};
-            switch (callback(rhs, parent, data)) {
-                .Break => return,
-                .Continue => {},
-                .Recurse => ast_visit(rhs, callback, data),
+            {
+                const child = ZNode{.ast=ast, .index=d.rhs};
+                assertNodeIndexValid(child, parent);
+                switch (callback(child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(child, callback, data),
+                }
             }
         },
         // Only walk data lhs
@@ -692,8 +756,11 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"nosuspend",
         .@"resume",
         .@"continue",
-        .optional_type => {
-            const child = ZNode{.ast=ast, .index=d.rhs};
+        .field_access,
+        .grouped_expression,
+        .optional_type => if (d.lhs != 0 ) {
+            const child = ZNode{.ast=ast, .index=d.lhs};
+            assertNodeIndexValid(child, parent);
             switch (callback(child, parent, data)) {
                 .Break => return,
                 .Continue => {},
@@ -703,10 +770,12 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
 
         // Only walk data rhs
         .@"defer",
+        .@"errdefer",
+        .@"break",
         .test_decl,
-        .fn_proto => {
-            // TODO: Args?
+        .fn_proto => if (d.rhs != 0) {
             const child = ZNode{.ast=ast, .index=d.rhs};
+            assertNodeIndexValid(child, parent);
             switch (callback(child, parent, data)) {
                 .Break => return,
                 .Continue => {},
@@ -722,16 +791,19 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .container_decl_two_trailing,
         .container_field_init,
         .container_field_align,
+        .call_one,
+        .call_one_comma,
+        .async_call_one,
+        .async_call_one_comma,
         .builtin_call_two,
         .builtin_call_two_comma,
-        .@"errdefer",
         .@"catch",
-        .@"break",
         .fn_proto_simple,
         .block_two,
         .block_two_semicolon => {
             if (d.lhs != 0) {
                 const child = ZNode{.ast=ast, .index=d.lhs};
+                assertNodeIndexValid(child, parent);
                 switch (callback(child, parent, data)) {
                     .Break => return,
                     .Continue => {},
@@ -740,6 +812,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
             }
             if (d.rhs != 0) {
                 const child = ZNode{.ast=ast, .index=d.rhs};
+                assertNodeIndexValid(child, parent);
                 switch (callback(child, parent, data)) {
                     .Break => return,
                     .Continue => {},
@@ -757,6 +830,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
             for (ast.extra_data[d.lhs..d.rhs]) |decl_index| {
                 // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
                 const child = ZNode{.ast=ast, .index=decl_index};
+                assertNodeIndexValid(child, parent);
                 switch (callback(child, parent, data)) {
                     .Break => return,
                     .Continue => continue,

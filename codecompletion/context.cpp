@@ -14,14 +14,13 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include "completioncontext.h"
-
 #include <language/duchain/ducontext.h>
 #include <language/duchain/declaration.h>
+#include <language/duchain/duchain.h>
 #include <language/duchain/duchainlock.h>
-#include <language/codecompletion/normaldeclarationcompletionitem.h>
 
+#include "context.h"
+#include "item.h"
 #include "zigdebug.h"
 
 namespace Zig
@@ -44,19 +43,25 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
 {
     QList<CompletionTreeItemPointer> items;
 
-    DUChainReadLocker lock;
+    if (!m_duContext) {
+        return items;
+    }
+    DUChainReadLocker lock(DUChain::lock(), 100);
+    if (!lock.locked()) {
+        return items;
+    }
+
     auto declarations = m_duContext->allDeclarations(CursorInRevision::invalid(), m_duContext->topContext());
     for(const QPair<Declaration *, int> &decl : declarations)
     {
-        if (abort)
-            break;
+
         if(!decl.first || decl.first->topContext() != m_duContext->topContext())
             continue;
         if(decl.first->identifier() == globalImportIdentifier() || decl.first->identifier() == globalAliasIdentifier()
             || decl.first->identifier() == Identifier())
             continue;
 
-        items << CompletionTreeItemPointer(new NormalDeclarationCompletionItem(DeclarationPointer(decl.first)));
+        items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl.first)));
     }
     return items;
 }

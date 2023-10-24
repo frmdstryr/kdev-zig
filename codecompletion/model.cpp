@@ -15,9 +15,8 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "completionmodel.h"
-
-#include "completionworker.h"
+#include "model.h"
+#include "worker.h"
 
 namespace Zig
 {
@@ -32,4 +31,4 @@ KDevelop::CodeCompletionWorker *CompletionModel::createCompletionWorker()
     return new CompletionWorker(this);
 }
 
-}
+} // namespace Zig

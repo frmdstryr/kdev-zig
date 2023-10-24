@@ -18,9 +18,11 @@
 #include "declarationbuilder.h"
 
 #include <type_traits>
+#include <QRegularExpression>
 
 #include <language/duchain/duchainlock.h>
 
+#include "types/builtintype.h"
 #include "types/declarationtypes.h"
 #include "nodetraits.h"
 #include "zigdebug.h"
@@ -71,8 +73,10 @@ ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
 
     DUChainWriteLocker lock(DUChain::lock());
     createDeclaration<Kind>(node, &name, hasContext);
+    // qDebug() << "Open decl" << name.value;
     ZVisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
+    // qDebug() << "Close decl" << name.value;
     closeDeclaration();
     return ret;
 }
@@ -194,25 +198,68 @@ template<ZNodeKind Kind>
 ZVisitResult DeclarationBuilder::updateDeclaration(ZNode &node, ZNode &parent)
 {
     // ZNodeKind parentKind = ast_node_kind(parent);
-    if (auto type = lastType().dynamicCast<FunctionType>()) {
-        ZigPath name(node);
-        auto returnType = findTypeForName(name);
-        if (returnType) {
-            type->setReturnType(returnType);
-        } else {
-            qDebug() << "TODO: Set fn return type " << name.value;
+    if (Kind == Ident && lastType() && hasCurrentDeclaration()) {
+        auto type = lastType().dynamicCast<FunctionType>();
+        auto decl = dynamic_cast<FunctionDeclaration*>(currentDeclaration());
+        if (type && decl) {
+            ZigPath name(node);
+            if (auto builtinType = findBuiltinType(name)) {
+                DUChainWriteLocker lock;
+                // qDebug() << "fn return type is" << returnType->toString();
+                type->setReturnType(AbstractType::Ptr(builtinType));
+                decl->setAbstractType(type);
+            } else {
+                QList<Declaration*> declarations;
+                {
+                    DUChainReadLocker lock;
+                    QualifiedIdentifier typeName(Identifier(name.value));
+                    declarations = findSimpleVar(typeName, currentContext());
+                }
+                if (!declarations.isEmpty()) {
+                    Declaration* decl = declarations.first();
+                    DUChainWriteLocker lock;
+                    type->setReturnType(decl->abstractType());
+                    decl->setAbstractType(type);
+                } // else might not be defined yet
+            }
         }
     }
     return ContextBuilder::visitNode(node, parent);
 }
 
-AbstractType::Ptr DeclarationBuilder::findTypeForName(const ZigPath &name) const
+BuiltinType* DeclarationBuilder::findBuiltinType(const ZigPath &name) const
 {
+    static QRegularExpression unsignedIntPattern("u\\d+");
+    static QRegularExpression signedIntPattern("i\\d+");
+    static QRegularExpression floatPattern("f(16|32|64|80|128)");
     if (name.value == "void")
-        return AbstractType::Ptr(new IntegralType(IntegralType::TypeVoid));
+        return new BuiltinType("void");
     if (name.value == "bool")
-        return AbstractType::Ptr(new IntegralType(IntegralType::TypeBoolean));
-    return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
+        return new BuiltinType("bool");
+    if (name.value == "isize")
+        return new BuiltinType("isize");
+    if (name.value == "usize")
+        return new BuiltinType("usize");
+    if (name.value == "type")
+        return new BuiltinType("type");
+    if (name.value == "anyerror")
+        return new BuiltinType("anyerror");
+    if (name.value == "noreturn")
+        return new BuiltinType("noreturn");
+    if (name.value == "anyopaque")
+        return new BuiltinType("anyopaque");
+    if (name.value == "comptime_int")
+        return new BuiltinType("comptime_int");
+    if (name.value == "comptime_float")
+        return new BuiltinType("comptime_float");
+    if (unsignedIntPattern.match(name.value).hasMatch())
+        return new BuiltinType(name.value);
+    if (signedIntPattern.match(name.value).hasMatch())
+        return new BuiltinType(name.value);
+    if (floatPattern.match(name.value).hasMatch())
+        return new BuiltinType(name.value);
+    // TODO: c_ types
+    return nullptr;
 }
 
 } // namespace zig

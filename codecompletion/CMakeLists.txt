@@ -1,7 +1,8 @@
 set(kdevzigcompletion_SRC
-    completionmodel.cpp
-    completionworker.cpp
-    completioncontext.cpp
+    model.cpp
+    worker.cpp
+    context.cpp
+    item.cpp
 )
 
 ecm_qt_declare_logging_category(kdevzigcompletion_SRC
