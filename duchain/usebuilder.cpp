@@ -73,6 +73,53 @@ ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
 void UseBuilder::visitCall(ZNode &node, ZNode &parent)
 {
     // TODO
+    ZigPath functionName(node);
+    RangeInRevision useRange = editorFindSpellingRange(node, functionName.value);
+
+    IndexedIdentifier identifier = IndexedIdentifier(Identifier(functionName.value));
+    currentPath.clear();
+    currentPath.push(identifier);
+    if (functionName.value.isEmpty()) {
+        return;
+    }
+
+    DUContext *context;
+    QList<Declaration *> declarations;
+    {
+        DUChainReadLocker lock;
+        context = topContext()->findContextAt(useRange.start);
+        if (!context) return;
+        // TODO: Find only structs
+        DUContext* parentContext = context;
+        while (declarations.isEmpty() && parentContext) {
+            declarations = parentContext->findDeclarations(
+                currentPath,
+                CursorInRevision::invalid(),
+                AbstractType::Ptr(),
+                nullptr,
+                DUContext::OnlyFunctions);
+            parentContext = parentContext->parentContext();
+        }
+    }
+
+    if (declarations.isEmpty()) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Undefined %1", functionName.value));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+    } else {
+        for (Declaration *declaration : declarations) {
+            // TODO: Check if a struct or alias of struct
+            if (declaration->range() != useRange) {
+                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
+                break;
+            }
+        }
+    }
+
 }
 
 void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
@@ -90,27 +137,25 @@ void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
         return;  // TODO: Handle .
     }
 
-    DUChainWriteLocker lock(DUChain::lock());
-    DUContext *context = topContext()->findContextAt(useRange.start);
-    if (!context) return;
-
-    QList<Declaration *> declarations = context->findDeclarations(
-        currentPath,
-        CursorInRevision::invalid(),
-        AbstractType::Ptr(),
-        nullptr,
-        DUContext::NoSearchFlags);
-
-    // TODO: Find only structs
-    DUContext* parentContext = context->parentContext();
-    while (declarations.isEmpty() && parentContext) {
-        declarations = parentContext->findDeclarations(
-            currentPath,
-            CursorInRevision::invalid(),
-            AbstractType::Ptr(),
-            nullptr,
-            DUContext::NoSearchFlags);
+    DUContext *context;
+    QList<Declaration *> declarations;
+    {
+        DUChainReadLocker lock;
+        context = topContext()->findContextAt(useRange.start);
+        if (!context) return;
+        // TODO: Find only structs
+        DUContext* parentContext = context;
+        while (declarations.isEmpty() && parentContext) {
+            declarations = parentContext->findDeclarations(
+                currentPath,
+                CursorInRevision::invalid(),
+                AbstractType::Ptr(),
+                nullptr,
+                DUContext::OnlyContainerTypes);
+            parentContext = parentContext->parentContext();
+        }
     }
+
 
     if (declarations.isEmpty()) {
         ProblemPointer p = ProblemPointer(new Problem());
@@ -118,6 +163,7 @@ void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         p->setDescription(i18n("Undefined %1", containerName.value));
+        DUChainWriteLocker lock;
         topContext()->addProblem(p);
     } else {
         for (Declaration *declaration : declarations) {

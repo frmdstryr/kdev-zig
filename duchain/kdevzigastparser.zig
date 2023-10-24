@@ -262,7 +262,7 @@ export fn ast_node_spelling_range(node: ZNode) ZAstRange {
     if (findNodeIdentifier(ast, node.index)) |ident_token| {
         const loc = ast.tokenLocation(0, ident_token);
         const name = ast.tokenSlice(ident_token);
-        // std.log.warn("zig: ast_node_spelling_range {} {}", .{node.index, r});
+        // std.log.warn("zig: ast_node_spelling_range {} {s}", .{node.index, name});
         //return r;
         return ZAstRange{
             .start=ZAstLocation{
@@ -274,8 +274,10 @@ export fn ast_node_spelling_range(node: ZNode) ZAstRange {
                 .column=@intCast(loc.column + name.len),
             },
         };
-
     }
+//     std.log.warn("zig: ast_node_spelling_range {} unknown {}", .{
+//         node.index, ast.nodes.items(.tag)[node.index]
+//     });
     return ZAstRange{};
 }
 
@@ -343,9 +345,15 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
         .struct_init_one_comma => .ContainerInit,
         .builtin_call,
         .builtin_call_comma,
-        .call_one, .call_one_comma,
-        .call, .call_comma,
-        .async_call, .async_call_comma => .Call,
+
+        .call,
+        .call_comma,
+        .call_one,
+        .call_one_comma,
+        .async_call,
+        .async_call_comma,
+        .async_call_one,
+        .async_call_one_comma => .Call,
 
         .assign,
         .assign_destructure => .VarAccess,
@@ -384,13 +392,24 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
     if (index >= ast.nodes.len) {
         return null;
     }
-
     const tag = ast.nodes.items(.tag)[index];
+    // std.log.warn("zig: findNodeIdentifier {} {s}", .{index, @tagName(tag)});
     return switch (tag) {
         // Data lhs is the identifier
+        .call,
+        .call_comma,
+        .call_one,
+        .call_one_comma,
+        .async_call,
+        .async_call_comma,
+        .async_call_one,
+        .async_call_one_comma,
         .struct_init_one,
         .struct_init_one_comma,
         .fn_decl => findNodeIdentifier(ast, ast.nodes.items(.data)[index].lhs),
+
+        // Data rhs is the identifier
+        .field_access => ast.nodes.items(.data)[index].rhs,
 
         // Token after main_token is the name for all these
         .fn_proto_simple,
@@ -503,6 +522,17 @@ test "find-node-ident" {
     try testNodeIdent("const Foo = struct{ a: u8 = 0};\nvar foo = Foo{};", .struct_init_one, "Foo");
     try testNodeIdent("const Foo = struct{ a: u8 = 0};\nvar foo = Foo{.a=0,};", .struct_init_one_comma, "Foo");
     try testNodeIdent("test \"first\" { }", .test_decl, "\"first\"");
+    try testNodeIdent("const Foo = struct{ a: u8 = 0};\nvar foo = Foo{.a=0,};", .struct_init_one_comma, "Foo");
+
+    // Calls
+    try testNodeIdent("pub fn main() void { foo(); }", .call_one, "foo");
+    try testNodeIdent("pub fn main() void { foo(1,); }", .call_one_comma, "foo");
+    try testNodeIdent("pub fn main() void { async foo(1); }", .async_call_one, "foo");
+    try testNodeIdent("pub fn main() void { async foo(1,); }", .async_call_one_comma, "foo");
+    try testNodeIdent("pub fn main() void { foo(1,2); }", .call, "foo");
+    try testNodeIdent("pub fn main() void { async foo(1,2); }", .async_call, "foo");
+    try testNodeIdent("pub fn main() void { foo(1,2,); }", .call_comma, "foo");
+    try testNodeIdent("pub fn main() void { async foo(1,2,); }", .async_call_comma, "foo");
 }
 
 fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRange) !void {
@@ -521,7 +551,11 @@ fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRang
 
     const index = indexOfNodeWithTag(ast, 0, tag).?;
     const range = ast_node_spelling_range(ZNode{.ast=&ast, .index=index});
-    try std.testing.expectEqual(expected, range);
+    std.log.warn("zig: {} range {}", .{index, range});
+    try std.testing.expectEqual(expected.start.line, range.start.line);
+    try std.testing.expectEqual(expected.start.column, range.start.column);
+    try std.testing.expectEqual(expected.end.line, range.end.line);
+    try std.testing.expectEqual(expected.end.column, range.end.column);
 }
 
 test "spelling-range" {
@@ -535,6 +569,8 @@ test "spelling-range" {
         .start=.{.line=2, .column=6}, .end=.{.line=2, .column=7}});
     try testSpellingRange("const Foo = struct {a: bool};\nvar foo = Foo{};", .struct_init_one, .{
         .start=.{.line=1, .column=10}, .end=.{.line=1, .column=13}});
+    try testSpellingRange("var x = y.foo();", .call_one, .{
+        .start=.{.line=0, .column=10}, .end=.{.line=0, .column=13}});
 }
 
 // Caller must free with destroy_string
@@ -607,17 +643,19 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
     }
     const ast = node.ast.?;
     if (node.index >= ast.nodes.len) {
+        var stderr = std.io.getStdErr().writer();
+        dumpAstFlat(ast, stderr) catch {};
         std.log.warn("zig: ast_visit index {} is out of range", .{node.index});
         return;
     }
     const tag = ast.nodes.items(.tag)[node.index];
     const d = ast.nodes.items(.data)[node.index];
     const parent = ZNode{.ast=ast, .index=node.index};
-    std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
-        @tagName(tag),
-        node.index,
-        ast.tokenSlice(ast.nodes.items(.main_token)[node.index])
-    });
+//     std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
+//         @tagName(tag),
+//         node.index,
+//         ast.tokenSlice(ast.nodes.items(.main_token)[node.index])
+//     });
     switch (tag) {
         .root => for (ast.rootDecls()) |decl_index| {
             // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
@@ -654,7 +692,6 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"nosuspend",
         .@"resume",
         .@"continue",
-        .enum_literal,
         .optional_type => {
             const child = ZNode{.ast=ast, .index=d.rhs};
             switch (callback(child, parent, data)) {
@@ -666,6 +703,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
 
         // Only walk data rhs
         .@"defer",
+        .test_decl,
         .fn_proto => {
             // TODO: Args?
             const child = ZNode{.ast=ast, .index=d.rhs};
@@ -689,7 +727,6 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"errdefer",
         .@"catch",
         .@"break",
-        .test_decl,
         .fn_proto_simple,
         .block_two,
         .block_two_semicolon => {
@@ -733,6 +770,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .multiline_string_literal,
         .char_literal,
         .number_literal,
+        .enum_literal,
         .identifier => {},
         else => {
            // std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
