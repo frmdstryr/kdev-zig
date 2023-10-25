@@ -4,16 +4,19 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const assert = std.debug.assert;
 
+const TokenIndex = Ast.TokenIndex;
+const Tag = Ast.Node.Tag;
+
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-const ZAstLocation = extern struct {
+const SourceLocation = extern struct {
     line: u32 = 0,
     column: u32 = 0,
 };
 
-const ZAstRange = extern struct {
-    start: ZAstLocation = .{},
-    end: ZAstLocation = .{}
+const SourceRange = extern struct {
+    start: SourceLocation = .{},
+    end: SourceLocation = .{}
 };
 
 const Severity = enum(c_int) {
@@ -66,7 +69,7 @@ fn strlen(value: [*c]const u8) usize {
 const ZError = extern struct {
     const Self = @This();
     severity: Severity,
-    range: ZAstRange,
+    range: SourceRange,
     message: [*c]const u8,
 
     pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
@@ -78,17 +81,6 @@ const ZError = extern struct {
     }
 
 };
-
-const ZNode = extern struct {
-    const Self = @This();
-    ast: ?*Ast,
-    index: Ast.TokenIndex,
-
-    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-        allocator.destroy(self);
-    }
-};
-
 
 fn printAstError(ast: *Ast, filename: []const u8, source: []const u8) !void {
     const stderr = std.io.getStdErr().writer();
@@ -132,7 +124,7 @@ pub fn dumpAstFlat(ast: *Ast, stream: anytype) !void {
     try stream.writeAll("\n");
 }
 
-pub fn dumpAstNodes(ast: *Ast, nodes: []Ast.TokenIndex, stream: anytype) !void {
+pub fn dumpAstNodes(ast: *Ast, nodes: []TokenIndex, stream: anytype) !void {
     const tags = ast.nodes.items(.tag);
     const node_data = ast.nodes.items(.data);
     const main_tokens = ast.nodes.items(.main_token);
@@ -224,12 +216,12 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
         };
         result.* = ZError{
             .severity=if (err.is_note) .Hint else .Error,
-            .range=ZAstRange{
-                .start=ZAstLocation{
+            .range=SourceRange{
+                .start=SourceLocation{
                     .line=@intCast(loc.line),
                     .column=@intCast(loc.column),
                 },
-                .end=ZAstLocation{
+                .end=SourceLocation{
                     .line=@intCast(loc.line),
                     .column=@intCast(loc.column),
                 },
@@ -255,55 +247,55 @@ export fn destroy_error(ptr: ?*ZError) void {
     }
 }
 
-export fn ast_node_spelling_range(node: ZNode) ZAstRange {
-    if (node.ast == null) {
-        return ZAstRange{};
+export fn ast_node_spelling_range(ptr: ?*Ast, index: TokenIndex) SourceRange {
+    if (ptr == null) {
+        return SourceRange{};
     }
-    const ast = node.ast.?;
-    if (findNodeIdentifier(ast, node.index)) |ident_token| {
+    const ast = ptr.?;
+    if (findNodeIdentifier(ast, index)) |ident_token| {
         const loc = ast.tokenLocation(0, ident_token);
         const name = ast.tokenSlice(ident_token);
-        // std.log.warn("zig: ast_node_spelling_range {} {s}", .{node.index, name});
+        // std.log.warn("zig: ast_node_spelling_range {} {s}", .{index, name});
         //return r;
-        return ZAstRange{
-            .start=ZAstLocation{
+        return SourceRange{
+            .start=SourceLocation{
                 .line=@intCast(loc.line),
                 .column=@intCast(loc.column),
             },
-            .end=ZAstLocation{
+            .end=SourceLocation{
                 .line=@intCast(loc.line),
                 .column=@intCast(loc.column + name.len),
             },
         };
     }
 //     std.log.warn("zig: ast_node_spelling_range {} unknown {}", .{
-//         node.index, ast.nodes.items(.tag)[node.index]
+//         index, ast.nodes.items(.tag)[index]
 //     });
-    return ZAstRange{};
+    return SourceRange{};
 }
 
-export fn ast_node_extent(node: ZNode) ZAstRange {
-    if (node.ast == null) {
+export fn ast_node_extent(ptr: ?*Ast, index: TokenIndex) SourceRange {
+    if (ptr == null) {
         std.log.warn("zig: ast_node_extent ast null", .{});
-        return ZAstRange{};
+        return SourceRange{};
     }
-    const ast = node.ast.?;
-    if (node.index >= ast.nodes.len) {
-        std.log.warn("zig: ast_node_extent index out of range {}", .{node.index});
-        return ZAstRange{};
+    const ast = ptr.?;
+    if (index >= ast.nodes.len) {
+        std.log.warn("zig: ast_node_extent index out of range {}", .{index});
+        return SourceRange{};
     }
     // TODO: What is the correct start_offset?
-    const first_token = ast.firstToken(node.index);
+    const first_token = ast.firstToken(index);
     const start_loc = ast.tokenLocation(0, first_token);
-    const last_token = ast.lastToken(node.index);
+    const last_token = ast.lastToken(index);
     const end_loc = ast.tokenLocation(0, last_token);
 
-    return ZAstRange{
-        .start=ZAstLocation{
+    return SourceRange{
+        .start=SourceLocation{
             .line=@intCast(start_loc.line),
             .column=@intCast(start_loc.column),
         },
-        .end=ZAstLocation{
+        .end=SourceLocation{
             .line=@intCast(end_loc.line),
             .column=@intCast(end_loc.column),
         },
@@ -312,7 +304,7 @@ export fn ast_node_extent(node: ZNode) ZAstRange {
 
 
 
-pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
+pub fn kindFromAstNode(ast: *Ast, index: TokenIndex) ?NodeKind {
     if (index >= ast.nodes.len) {
         return null;
     }
@@ -342,6 +334,10 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
         // TODO: Param? Import? Detect if template
         .struct_init,
         .struct_init_comma,
+        .struct_init_dot,
+        .struct_init_dot_comma,
+        .struct_init_dot_two,
+        .struct_init_dot_two_comma,
         .struct_init_one,
         .struct_init_one_comma => .ContainerInit,
         .builtin_call,
@@ -378,10 +374,10 @@ pub fn kindFromAstNode(ast: *Ast, index: Ast.TokenIndex) ?NodeKind {
     };
 }
 
-export fn ast_node_kind(node: ZNode) NodeKind {
-    if (node.ast) |ast| {
-        if (kindFromAstNode(ast, node.index)) |kind| {
-            // std.log.debug("zig: ast_node_kind {} is {s}", .{node.index, @tagName(kind)});
+export fn ast_node_kind(ptr: ?*Ast, index: TokenIndex) NodeKind {
+    if (ptr) |ast| {
+        if (kindFromAstNode(ast, index)) |kind| {
+            // std.log.debug("zig: ast_node_kind {} is {s}", .{index, @tagName(kind)});
             return kind;
         }
     }
@@ -389,7 +385,7 @@ export fn ast_node_kind(node: ZNode) NodeKind {
 }
 
 // Lookup the token index that has the name/identifier for the given node
-fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
+fn findNodeIdentifier(ast: *Ast, index: TokenIndex) ?TokenIndex {
     if (index >= ast.nodes.len) {
         return null;
     }
@@ -407,6 +403,8 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
         .async_call_one_comma,
         .struct_init_one,
         .struct_init_one_comma,
+        .struct_init,
+        .struct_init_comma,
         .fn_decl => findNodeIdentifier(ast, ast.nodes.items(.data)[index].lhs),
 
         // Data rhs is the identifier
@@ -435,7 +433,7 @@ fn findNodeIdentifier(ast: *Ast, index: Ast.TokenIndex) ?Ast.TokenIndex {
     };
 }
 
-fn indexOfNodeWithTag(ast: Ast, start_token: Ast.TokenIndex, tag: Ast.Node.Tag) ?Ast.TokenIndex {
+fn indexOfNodeWithTag(ast: Ast, start_token: TokenIndex, tag: Tag) ?TokenIndex {
     if (start_token < ast.nodes.len) {
         const tags = ast.nodes.items(.tag);
         for (start_token..ast.nodes.len) |i| {
@@ -447,7 +445,7 @@ fn indexOfNodeWithTag(ast: Ast, start_token: Ast.TokenIndex, tag: Ast.Node.Tag) 
     return null;
 }
 
-fn isTagContainerDecl(tag: Ast.Node.Tag) bool {
+fn isTagContainerDecl(tag: Tag) bool {
     return switch (tag) {
         .container_decl,
         .container_decl_trailing,
@@ -459,7 +457,7 @@ fn isTagContainerDecl(tag: Ast.Node.Tag) bool {
     };
 }
 
-fn isTagVarDecl(tag: Ast.Node.Tag) bool {
+fn isTagVarDecl(tag: Tag) bool {
     return switch (tag) {
         .simple_var_decl,
         .local_var_decl,
@@ -469,7 +467,7 @@ fn isTagVarDecl(tag: Ast.Node.Tag) bool {
     };
 }
 
-fn isNodeConstVarDecl(ast: *Ast, index: Ast.TokenIndex) bool {
+fn isNodeConstVarDecl(ast: *Ast, index: TokenIndex) bool {
     if (index < ast.nodes.len and isTagVarDecl(ast.nodes.items(.tag)[index])) {
         const main_token = ast.nodes.items(.main_token)[index];
         return ast.tokens.items(.tag)[main_token] == .keyword_const;
@@ -477,7 +475,7 @@ fn isNodeConstVarDecl(ast: *Ast, index: Ast.TokenIndex) bool {
     return false;
 }
 
-fn testNodeIdent(source: [:0]const u8, tag: Ast.Node.Tag, expected: ?[]const u8) !void {
+fn testNodeIdent(source: [:0]const u8, tag: Tag, expected: ?[]const u8) !void {
     const allocator = std.testing.allocator;
     var ast = try Ast.parse(allocator, source, .zig);
     defer ast.deinit(allocator);
@@ -536,7 +534,7 @@ test "find-node-ident" {
     try testNodeIdent("pub fn main() void { async foo(1,2,); }", .async_call_comma, "foo");
 }
 
-fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRange) !void {
+fn testSpellingRange(source: [:0]const u8, tag: Tag, expected: SourceRange) !void {
     const allocator = std.testing.allocator;
     var ast = try Ast.parse(allocator, source, .zig);
     defer ast.deinit(allocator);
@@ -551,7 +549,7 @@ fn testSpellingRange(source: [:0]const u8, tag: Ast.Node.Tag, expected: ZAstRang
     try dumpAstFlat(&ast, stdout);
 
     const index = indexOfNodeWithTag(ast, 0, tag).?;
-    const range = ast_node_spelling_range(ZNode{.ast=&ast, .index=index});
+    const range = ast_node_spelling_range(&ast, index);
     std.log.warn("zig: {} range {}", .{index, range});
     try std.testing.expectEqual(expected.start.line, range.start.line);
     try std.testing.expectEqual(expected.start.column, range.start.column);
@@ -575,27 +573,27 @@ test "spelling-range" {
 }
 
 // Caller must free with destroy_string
-export fn ast_node_new_spelling_name(node: ZNode) ?[*]const u8 {
-    if (node.ast == null) {
+export fn ast_node_new_spelling_name(ptr: ?*Ast, index: TokenIndex) ?[*]const u8 {
+    if (ptr == null) {
         return null;
     }
-    const ast = node.ast.?;
-    if (node.index >= ast.nodes.len) {
-        std.log.warn("zig: token name index={} is out of range", .{node.index});
+    const ast = ptr.?;
+    if (index >= ast.nodes.len) {
+        std.log.warn("zig: token name index={} is out of range", .{index});
         return null;
     }
-    const tag = ast.nodes.items(.tag)[node.index];
-    if (findNodeIdentifier(ast, node.index)) |ident_token| {
+    const tag = ast.nodes.items(.tag)[index];
+    if (findNodeIdentifier(ast, index)) |ident_token| {
         const name = if (tag == .test_decl)
             std.mem.trim(u8, ast.tokenSlice(ident_token), "\"")
             else ast.tokenSlice(ident_token);
-        // std.log.debug("zig: token name {} {s} = '{s}' ({})", .{node.index, @tagName(tag), name, name.len});
+        // std.log.debug("zig: token name {} {s} = '{s}' ({})", .{index, @tagName(tag), name, name.len});
         const copy = gpa.allocator().dupeZ(u8, name) catch {
             return null;
         };
         return copy.ptr;
     }
-    // std.log.warn("zig: token name index={} tag={s} is unknown", .{node.index, @tagName(tag)});
+    // std.log.warn("zig: token name index={} tag={s} is unknown", .{index, @tagName(tag)});
     return null;
 }
 
@@ -633,11 +631,12 @@ export fn ast_format(
     return formatted.ptr;
 }
 
-fn visitOne(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult {
+fn visitOne(ptr: ?*Ast, node: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult {
+    _ = ptr;
     _ = parent;
-    if (data) |ptr| {
-        const result: *ZNode = @ptrCast(@alignCast(ptr));
-        result.index = node.index;
+    if (data) |index_ptr| {
+        const index: *TokenIndex = @ptrCast(@alignCast(index_ptr));
+        index.* = node;
     } else {
         std.log.warn("zig: visit one data is null", .{});
     }
@@ -645,21 +644,22 @@ fn visitOne(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitRes
 }
 
 // Visit one child
-export fn ast_visit_one_child(node: ZNode) ZNode {
-    var result = ZNode{.ast=node.ast, .index=0};
-    ast_visit(node, visitOne, &result);
+export fn ast_visit_one_child(ptr: ?*Ast, node: TokenIndex) TokenIndex {
+    var result: TokenIndex = 0;
+    ast_visit(ptr, node, visitOne, &result);
     return result;
 }
 
 
 
-fn visitAll(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult {
+fn visitAll(ptr: ?*Ast, child: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult {
+    _ = ptr;
     _ = parent;
-    if (data) |ptr| {
-        const nodes: *std.ArrayList(Ast.TokenIndex) = @ptrCast(@alignCast(ptr));
+    if (data) |nodes_ptr| {
+        const nodes: *std.ArrayList(TokenIndex) = @ptrCast(@alignCast(nodes_ptr));
         const remaining = nodes.unusedCapacitySlice();
         if (remaining.len > 0) {
-            remaining[0] = node.index;
+            remaining[0] = child;
             nodes.items.len += 1;
             return .Recurse;
         }
@@ -669,12 +669,12 @@ fn visitAll(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitRes
 }
 
 // Visit all nodes up to the capacity provided in the node list
-fn astVisitAll(node: ZNode, nodes: *std.ArrayList(Ast.TokenIndex)) []Ast.TokenIndex {
-    ast_visit(node, visitAll, @ptrCast(nodes));
+fn astVisitAll(ptr: ?*Ast, node: TokenIndex, nodes: *std.ArrayList(TokenIndex)) []TokenIndex {
+    ast_visit(ptr, node, visitAll, @ptrCast(nodes));
     return nodes.items[0..nodes.items.len];
 }
 
-fn testVisitChild(source: [:0]const u8, tag: Ast.Node.Tag, expected: Ast.Node.Tag) !void {
+fn testVisitChild(source: [:0]const u8, tag: Tag, expected: Tag) !void {
     const allocator = std.testing.allocator;
     var ast = try Ast.parse(allocator, source, .zig);
     defer ast.deinit(allocator);
@@ -689,8 +689,8 @@ fn testVisitChild(source: [:0]const u8, tag: Ast.Node.Tag, expected: Ast.Node.Ta
     try dumpAstFlat(&ast, stdout);
 
     const index = indexOfNodeWithTag(ast, 0, tag).?;
-    const child = ast_visit_one_child(ZNode{.ast=&ast, .index=index});
-    const result = ast.nodes.items(.tag)[child.index];
+    const child = ast_visit_one_child(&ast, index);
+    const result = ast.nodes.items(.tag)[child];
     try std.testing.expectEqual(expected, result);
 }
 
@@ -702,54 +702,52 @@ test "child-node" {
 }
 
 
-const CallbackFn = *const fn(node: ZNode, parent: ZNode, data: ?*anyopaque) callconv(.C) VisitResult;
-
-
-pub fn assertNodeIndexValid(node: ZNode, parent: ZNode) void {
-    if (node.ast) |ast| {
-        if (node.index > ast.nodes.len) {
+pub fn assertNodeIndexValid(ptr:?*Ast, child: TokenIndex, parent: TokenIndex) void {
+    if (ptr) |ast| {
+        if (child == 0 or child > ast.nodes.len) {
             var stderr = std.io.getStdErr().writer();
             dumpAstFlat(ast, stderr) catch {};
-            std.log.err("zig: ast_visit chlid index {} from parent {} is out of range", .{
-                node.index, parent.index
+            std.log.err("zig: ast_visit child index {} from parent {} is out of range or will create a loop", .{
+                child, parent
             });
             assert(false);
         }
     }
 }
 
+
+const CallbackFn = *const fn(ptr: ?*Ast, node: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult;
+
 // Return whether to continue or not
-export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void {
-    if (node.ast == null) {
-        std.log.warn("zig: ast_visit node.ast is null", .{});
+export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data: ?*anyopaque) void {
+    if (ptr == null) {
+        std.log.warn("zig: ast_visit ast is null", .{});
         return;
     }
-    const ast = node.ast.?;
-    if (node.index > ast.nodes.len) {
-        std.log.warn("zig: ast_visit node.index {} is out of range", .{node.index});
+    const ast = ptr.?;
+    if (parent > ast.nodes.len) {
+        std.log.warn("zig: ast_visit node index {} is out of range", .{parent});
         return;
     }
-    const tag = ast.nodes.items(.tag)[node.index];
-    const d = ast.nodes.items(.data)[node.index];
-    const parent = ZNode{.ast=ast, .index=node.index};
+    const tag = ast.nodes.items(.tag)[parent];
+    const d = ast.nodes.items(.data)[parent];
     std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
         @tagName(tag),
-        node.index,
-        ast.tokenSlice(ast.nodes.items(.main_token)[node.index])
+        parent,
+        ast.tokenSlice(ast.nodes.items(.main_token)[parent])
     });
     switch (tag) {
-        .root => for (ast.rootDecls()) |decl_index| {
+        .root => for (ast.rootDecls()) |child| {
             // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
-            const child = ZNode{.ast=ast, .index=decl_index};
-            assertNodeIndexValid(child, parent);
-            switch (callback(child, parent, data)) {
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
                 .Break => return,
                 .Continue => continue,
-                .Recurse => ast_visit(child, callback, data),
+                .Recurse => ast_visit(ast, child, callback, data),
             }
         },
         // Recurse to both lhs and rhs, neither are optional
-        .for_range,
+        .for_simple,
         .if_simple,
         .equal_equal,
         .bang_equal,
@@ -802,31 +800,29 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .array_type,
         // TODO array_type_sentinel
         .slice_open,
-        // TODO .slice, ???
         // TODO .slice_sentinel, ???
         .array_access,
         .array_init_one_comma,
         .struct_init_one_comma,
         .switch_range,
         .while_simple,
-        .error_union,
-        .fn_decl => {
+        .error_union => {
             {
-                const child = ZNode{.ast=ast, .index=d.lhs};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                const child = d.lhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
             {
-                const child = ZNode{.ast=ast, .index=d.rhs};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                const child = d.rhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
         },
@@ -843,17 +839,18 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"comptime",
         .@"nosuspend",
         .@"resume",
-        .@"continue",
+        .@"return",
+        .@"suspend",
         .@"usingnamespace",
         .field_access,
         .unwrap_optional,
         .grouped_expression => if (d.lhs != 0 ) {
-            const child = ZNode{.ast=ast, .index=d.lhs};
-            assertNodeIndexValid(child, parent);
-            switch (callback(child, parent, data)) {
+            const child = d.lhs;
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => ast_visit(child, callback, data),
+                .Recurse => ast_visit(ast, child, callback, data),
             }
         },
 
@@ -861,18 +858,19 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .@"defer",
         .@"errdefer",
         .@"break",
-        .test_decl,
-        .fn_proto => if (d.rhs != 0) {
-            const child = ZNode{.ast=ast, .index=d.rhs};
-            assertNodeIndexValid(child, parent);
-            switch (callback(child, parent, data)) {
+        .anyframe_type,
+        .test_decl => if (d.rhs != 0) {
+            const child = d.rhs;
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => ast_visit(child, callback, data),
+                .Recurse => ast_visit(ast, child, callback, data),
             }
         },
 
         // For all of these walk lhs and/or rhs of the node's data
+        .for_range, // rhs is optional
         .struct_init_one,
         .struct_init_dot_two,
         .struct_init_dot_two_comma,
@@ -885,6 +883,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .call_one,
         .call_one_comma,
         .async_call_one,
+        .async_call_one_comma,
         .builtin_call_two,
         .builtin_call_two_comma,
         .ptr_type_aligned,
@@ -897,24 +896,25 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .switch_case_one,
         .switch_case_inline_one,
         .fn_proto_simple,
+        .fn_decl,
         .block_two,
         .block_two_semicolon => {
             if (d.lhs != 0) {
-                const child = ZNode{.ast=ast, .index=d.lhs};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                const child = d.lhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
             if (d.rhs != 0) {
-                const child = ZNode{.ast=ast, .index=d.rhs};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                const child = d.rhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
         },
@@ -929,78 +929,92 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .array_init_dot_comma,
         .block,
         .block_semicolon => {
-            for (ast.extra_data[d.lhs..d.rhs]) |decl_index| {
+            for (ast.extra_data[d.lhs..d.rhs]) |child| {
                 // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
-                const child = ZNode{.ast=ast, .index=decl_index};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
         },
 
         // Special nodes
-        // .array_init,
 
         // Visit lhs and rhs as sub range
         .call,
         .call_comma,
+        .async_call,
+        .async_call_comma,
         .container_decl_arg,
         .container_decl_arg_trailing,
-        .async_call_one_comma,
-        .async_call_comma,
         .@"switch",
         .switch_comma,
         .array_init,
+        .array_init_comma,
         .struct_init,
         .struct_init_comma => {
             {
-                const child = ZNode{.ast=ast, .index=d.lhs};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+                const child = d.lhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
             const field_range = ast.extraData(d.rhs, Ast.Node.SubRange);
-            for (ast.extra_data[field_range.start..field_range.end]) |decl_index| {
-                // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
-                const child = ZNode{.ast=ast, .index=decl_index};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+            for (ast.extra_data[field_range.start..field_range.end]) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
 
         },
-        // .array_init_comma,
-
+        // Visit lhs sub range, then rhs
+        .switch_case,
+        .switch_case_inline,
+        .fn_proto_multi => {
+            const field_range = ast.extraData(d.lhs, Ast.Node.SubRange);
+            for (ast.extra_data[field_range.start..field_range.end]) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+            const child = d.rhs;
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => ast_visit(ast, child, callback, data),
+            }
+        },
         .while_cont => {
             const while_data = ast.extraData(d.rhs, Ast.Node.WhileCont);
-            inline for (.{d.lhs, while_data.cont_expr, while_data.then_expr}) |i| {
-                const child = ZNode{.ast=ast, .index=i};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+            inline for (.{d.lhs, while_data.cont_expr, while_data.then_expr}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
         },
         .@"while" => {
             const while_data = ast.extraData(d.rhs, Ast.Node.While);
-            inline for (.{d.lhs, while_data.cont_expr, while_data.then_expr, while_data.else_expr}) |i| {
-                const child = ZNode{.ast=ast, .index=i};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+            inline for (.{d.lhs, while_data.cont_expr, while_data.then_expr, while_data.else_expr}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
                 }
             }
         },
@@ -1008,38 +1022,138 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
 
         .@"if" => {
             const if_data = ast.extraData(d.rhs, Ast.Node.If);
-            inline for (.{d.lhs, if_data.then_expr, if_data.else_expr}) |i| {
-                const child = ZNode{.ast=ast, .index=i};
-                assertNodeIndexValid(child, parent);
-                switch (callback(child, parent, data)) {
+            inline for (.{d.lhs, if_data.then_expr, if_data.else_expr}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => ast_visit(child, callback, data),
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+        },
+
+        .@"for" => {
+            // See std.zig.Ast.forFull
+            const extra = @as(Ast.Node.For, @bitCast(d.rhs));
+            for (ast.extra_data[d.lhs..][0..extra.inputs]) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+
+            // For body
+            {
+                const child = ast.extra_data[d.lhs+extra.inputs];
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+
+            // Else body
+            if (extra.has_else) {
+                const child = ast.extra_data[d.lhs+extra.inputs+1];
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+
+        },
+        .fn_proto,
+        .fn_proto_one => |t| {
+            var buf: [1]Ast.Node.Index = undefined;
+            const fn_proto = if (t == .fn_proto_one)
+                ast.fnProtoOne(&buf, parent).ast
+                else ast.fnProto(parent).ast;
+            for (fn_proto.params) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+            inline for (.{d.rhs, fn_proto.align_expr, fn_proto.addrspace_expr, fn_proto.section_expr, fn_proto.callconv_expr}) |child| {
+                if (child != 0 ) {
+                    assertNodeIndexValid(ast, child, parent);
+                    switch (callback(ast, child, parent, data)) {
+                        .Break => return,
+                        .Continue => {},
+                        .Recurse => ast_visit(ast, child, callback, data),
+                    }
                 }
             }
         },
 
         .local_var_decl => {
             const var_data = ast.extraData(d.lhs, Ast.Node.LocalVarDecl);
-            inline for (.{var_data.type_node, var_data.align_node, d.rhs}) |i| {
-                if (i != 0 ) {
-                    const child = ZNode{.ast=ast, .index=i};
-                    assertNodeIndexValid(child, parent);
-                    switch (callback(child, parent, data)) {
+            inline for (.{var_data.type_node, var_data.align_node, d.rhs}) |child| {
+                if (child != 0 ) {
+                    assertNodeIndexValid(ast, child, parent);
+                    switch (callback(ast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => ast_visit(child, callback, data),
+                        .Recurse => ast_visit(ast, child, callback, data),
                     }
                 }
             }
         },
 
+        .array_type_sentinel => {
+            const array_data = ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
+            inline for (.{d.lhs, array_data.sentinel, array_data.elem_type}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+
+        },
+
+        .slice => {
+            const slice_data = ast.extraData(d.rhs, Ast.Node.Slice);
+            inline for (.{d.lhs, slice_data.start, slice_data.end}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+        },
+
+        .slice_sentinel => {
+            const slice_data = ast.extraData(d.rhs, Ast.Node.SliceSentinel);
+            inline for (.{d.lhs, slice_data.start, slice_data.end, slice_data.sentinel}) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+
+        },
+
         // Leaf nodes have no children
+        .@"continue",
         .string_literal,
         .multiline_string_literal,
         .char_literal,
         .number_literal,
         .enum_literal,
+        .anyframe_literal,
+        .unreachable_literal,
         .error_value,
         .identifier => {},
         else => {
@@ -1052,7 +1166,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
 }
 
 
-fn testVisitTree(source: [:0]const u8, expectedTag: ?Ast.Node.Tag) !void {
+fn testVisitTree(source: [:0]const u8, expectedTag: ?Tag) !void {
     const allocator = std.testing.allocator;
     var ast = try Ast.parse(allocator, source, .zig);
     defer ast.deinit(allocator);
@@ -1066,18 +1180,18 @@ fn testVisitTree(source: [:0]const u8, expectedTag: ?Ast.Node.Tag) !void {
     try std.testing.expect(ast.errors.len == 0);
     try dumpAstFlat(&ast, stdout);
 
-    var nodes = try std.ArrayList(Ast.TokenIndex).initCapacity(allocator, ast.nodes.len+1);
+    var nodes = try std.ArrayList(TokenIndex).initCapacity(allocator, ast.nodes.len+1);
     nodes.appendAssumeCapacity(0); // Callback does not call on initial node
     defer nodes.deinit();
     try stdout.writeAll("Visited order\n");
-    const visited = astVisitAll(ZNode{.ast=&ast, .index=0}, &nodes);
+    const visited = astVisitAll(&ast, 0, &nodes);
     try dumpAstNodes(&ast, visited, stdout);
     try std.testing.expectEqual(ast.nodes.len, visited.len);
 
     // Sort visited nodes and make sure each was hit
-    std.mem.sort(Ast.TokenIndex, visited, {}, std.sort.asc(Ast.TokenIndex));
+    std.mem.sort(TokenIndex, visited, {}, std.sort.asc(TokenIndex));
     for (visited, 0..) |a, b| {
-        try std.testing.expectEqual(@as(Ast.TokenIndex, @intCast(b)), a);
+        try std.testing.expectEqual(@as(TokenIndex, @intCast(b)), a);
     }
 
     // If given, make sure the tag is actually used in the source parsed
@@ -1155,5 +1269,83 @@ test "ast-visit" {
     try testVisitTree("test { var a = 0; var b = &a; }", .address_of);
     try testVisitTree("test { try foo(); }", .@"try");
     try testVisitTree("test { await foo(); }", .@"await");
+    try testVisitTree("test { var a: ?bool = null; }", .optional_type);
+    try testVisitTree("test { var a: [2]u8 = undefined; }", .array_type);
+    try testVisitTree("test { var a: [2:0]u8 = undefined; }", .array_type_sentinel);
+    try testVisitTree("test { var a: *align(8) u8 = undefined; }", .ptr_type_aligned);
+    try testVisitTree("test { var a: [*]align(8) u8 = undefined; }", .ptr_type_aligned);
+    try testVisitTree("test { var a: []u8 = undefined; }", .ptr_type_aligned);
+    try testVisitTree("test { var a: [*:0]u8 = undefined; }", .ptr_type_sentinel);
+    try testVisitTree("test { var a: [:0]u8 = undefined; }", .ptr_type_sentinel);
+    // try testVisitTree("test { var a: *u8 = undefined; }", .ptr_type_sentinel); // FIXME: maybe docs incorrect ?
+    // try testVisitTree("test { var a: [*c]u8 = undefined; }", .ptr_type);  // TODO: How
+    // try testVisitTree("test { var a: [*c]u8 = undefined; }", .ptr_type_bit_range);  // TODO: How
+    try testVisitTree("test { var a = [2]u8{1,2}; var b = a[0..]; }", .slice_open);
+    try testVisitTree("test { var a = [2]u8{1,2}; var b = a[0..1]; }", .slice);
+    try testVisitTree("test { var a = [2]u8{1,2}; var b = a[0..1:0]; }", .slice_sentinel);
+    try testVisitTree("test { var a = 0; var b = &a; var c = b.*; }", .deref);
+    try testVisitTree("test { var a = [_]u8{1}; }", .array_init_one);
+    try testVisitTree("test { var a = [_]u8{1,}; }", .array_init_one_comma);
+    try testVisitTree("test { var a: [2]u8 = .{1,2}; }", .array_init_dot_two);
+    try testVisitTree("test { var a: [2]u8 = .{1,2,}; }", .array_init_dot_two_comma);
+    try testVisitTree("test { var a = [_]u8{1,2,3,4,5}; }", .array_init);
+    try testVisitTree("test { var a = [_]u8{1,2,3,}; }", .array_init_comma);
+    try testVisitTree("const A = struct {a: u8};test { var a = A{.a=0}; }", .struct_init_one);
+    try testVisitTree("const A = struct {a: u8};test { var a = A{.a=0,}; }", .struct_init_one_comma);
+    try testVisitTree("const A = struct {a: u8, b: u8};test { var a: A = .{.a=0,.b=1}; }", .struct_init_dot_two);
+    try testVisitTree("const A = struct {a: u8, b: u8};test { var a: A = .{.a=0,.b=1,}; }", .struct_init_dot_two_comma);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8};test { var a: A = .{.a=0,.b=1,.c=2}; }", .struct_init_dot);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8};test { var a: A = .{.a=0,.b=1,.c=2,}; }", .struct_init_dot_comma);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8};test { var a = A{.a=0,.b=1,.c=2}; }", .struct_init);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8};test { var a = A{.a=0,.b=1,.c=2,}; }", .struct_init_comma);
+    try testVisitTree("pub fn main(a: u8) void {}\ntest { main(1); }", .call_one);
+    try testVisitTree("pub fn main(a: u8) void {}\ntest { main(1,); }", .call_one_comma);
+    try testVisitTree("pub fn main(a: u8) void {}\ntest { async main(1); }", .async_call_one);
+    try testVisitTree("pub fn main(a: u8) void {}\ntest { async main(1,); }", .async_call_one_comma);
+    try testVisitTree("pub fn main(a: u8, b: u8, c: u8) void {}\ntest { main(1, 2, 3); }", .call);
+    try testVisitTree("pub fn main(a: u8, b: u8, c: u8) void {}\ntest { main(1, 2, 3, ); }", .call_comma);
+    try testVisitTree("pub fn main(a: u8, b: u8, c: u8) void {}\ntest { async main(1, 2, 3); }", .async_call);
+    try testVisitTree("pub fn main(a: u8, b: u8, c: u8) void {}\ntest { async main(1, 2, 3, ); }", .async_call_comma);
+    try testVisitTree("test { var i: u1 = 0; switch (i) {0=>{}, 1=>{}} }", .@"switch");
+    try testVisitTree("test { var a = \"ab\"; switch (a[0]) {'a'=> {}, else=>{},} }", .switch_comma);
+    try testVisitTree("test { var a = \"ab\"; switch (a[0]) {'a'=> {}, else=>{},} }", .switch_case_one);
+    try testVisitTree("test { var i: u1 = 0; switch (i) {0=>{}, inline else=>{}} }", .switch_case_inline_one);
+    try testVisitTree("test { var i: u1 = 0; switch (i) {0, 1=>{} } }", .switch_case);
+    try testVisitTree("test { var i: u1 = 0; switch (i) {inline 0, 1=>{} } }", .switch_case_inline);
+    try testVisitTree("test { var i: u8 = 0; switch (i) {0...8=>{}, else=>{}} }", .switch_range);
+    try testVisitTree("test { while (true) {} }", .while_simple);
+    try testVisitTree("test {var opt: ?u8 = null; while (opt) |v| { _ = v; } }", .while_simple); // TODO: Where is the x ?
+    try testVisitTree("test {var i = 0; while (i < 10) : (i+=1) {} }", .while_cont);
+    try testVisitTree("test {var i = 0; while (i < 0) : (i+=1) {} else {} }", .@"while");
+    try testVisitTree("test {var opt: ?u8 = null; while (opt) |v| : (opt = null) { _ = v; } else {} }", .@"while"); // ???
+    try testVisitTree("test {\n for ([2]u8{1,2}) |i| {\n  print(i);\n }\n}", .for_simple);
+    // TODO: For
+    try testVisitTree("test {\n for ([2]u8{1,2}, [2]u8{3,4}) |a, b| {\n  print(a + b);\n }\n}", .@"for");
+    try testVisitTree("test {\n for ([2]u8{1,2}, 0..) |a, i| {\n  print(a + i);\n }\n}", .@"for");
+    try testVisitTree("test {var x = [_]u8{}; for (x)|i| {print(i);} else {print(0);}}", .@"for");
+    try testVisitTree("test {\n for (0..2) |i| {\n  print(i);\n }\n}", .for_range);
+    try testVisitTree("test {\n for (0..0) |i| {\n  print(i); if (i == 2) break;\n }\n}", .for_range);
     try testVisitTree("test { if (true) { var a = 0; } }", .if_simple);
+    try testVisitTree("test {var x = if (true) 1 else 2; }", .@"if");
+    try testVisitTree("test {var x: ?anyframe = null; suspend x;}", .@"suspend");
+    try testVisitTree("test {var x: ?anyframe = null; resume x.?;}", .@"resume");
+    try testVisitTree("test {var i: usize = 0; outer: while (i < 10) : (i += 1) { while (true) { continue :outer; } }}", .@"continue");
+    try testVisitTree("test {var i: usize = 0; while (i < 10) : (i += 1) { continue; } }", .@"continue");
+    try testVisitTree("test {var i: usize = 0; while (i < 10) : (i += 1) { break; } }", .@"break");
+    try testVisitTree("test {var i: usize = 0; outer: while (i < 10) : (i += 1) { while (true) { break :outer; } }}", .@"break");
+    try testVisitTree("pub fn foo() u8 { return 1; }", .@"return");
+    try testVisitTree("pub fn foo() void { return; }", .@"return");
+    try testVisitTree("pub fn foo(a: u8) u8 { return a; }", .fn_proto_simple);
+    try testVisitTree("pub fn foo(a: u8, b: u8) u8 { return a + b; }", .fn_proto_multi);
+    try testVisitTree("pub fn foo(a: u8) callconv(.C) u8 { return a; }", .fn_proto_one);
+    try testVisitTree("pub fn foo(a: u8, b: u8) callconv(.C) u8 { return a + b; }", .fn_proto);
+    try testVisitTree("pub fn foo(a: u8, b: u8) callconv(.C) u8 { return a + b; }", .fn_decl);
+    try testVisitTree("test {var f: anyframe = undefined; anyframe->foo;}", .anyframe_type);
+    try testVisitTree("test {var f: anyframe = undefined;}", .anyframe_literal);
+    try testVisitTree("test {var f: u8 = 'c';}", .char_literal);
+    try testVisitTree("test {var f: u8 = 0;}", .number_literal);
+    try testVisitTree("test {if (false) {unreachable;}}", .unreachable_literal);
+    try testVisitTree("test {var f: u8 = 0;}", .identifier);
+    try testVisitTree("const A = enum {a, b, c}; test {var x: A = .a;}", .enum_literal);
+    try testVisitTree("test {var x = \"abcd\";}", .string_literal);
 }

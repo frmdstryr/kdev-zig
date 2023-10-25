@@ -75,13 +75,13 @@ ZAst *ParseSession::ast() const
     return d->m_ast;
 }
 
-void ParseSession::setContextOnNode(const ZNode &node, KDevelop::DUContext *context)
+void ParseSession::setContextOnNode(const ZigNode &node, KDevelop::DUContext *context)
 {
     Q_ASSERT(node.ast == d->m_ast);
     d->m_nodeContextMap.insert(node.index, context);
 }
 
-KDevelop::DUContext *ParseSession::contextFromNode(const ZNode &node)
+KDevelop::DUContext *ParseSession::contextFromNode(const ZigNode &node)
 {
     Q_ASSERT(node.ast == d->m_ast);
     return d->m_nodeContextMap.value(node.index);

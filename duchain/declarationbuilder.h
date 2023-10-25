@@ -19,6 +19,7 @@
 #define DECLARATIONBUILDER_H
 
 #include <type_traits>
+#include <QString>
 
 #include <language/duchain/builders/abstracttypebuilder.h>
 #include <language/duchain/builders/abstractdeclarationbuilder.h>
@@ -35,8 +36,8 @@
 namespace Zig
 {
 
-using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZNode, ZigPath, ContextBuilder>;
-using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZNode, ZigPath, TypeBuilderBase>;
+using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZigNode, QString, ContextBuilder>;
+using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZigNode, QString, TypeBuilderBase>;
 
 namespace detail { enum class enabler {}; }
 constexpr detail::enabler dummy = {};
@@ -50,58 +51,58 @@ public:
     ~DeclarationBuilder() override = default;
 
 protected:
-    ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
+    VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
 
     // Returns nullptr if not a known builtin
-    BuiltinType* findBuiltinType(const ZigPath& name) const;
+    BuiltinType* findBuiltinType(const QString& name) const;
 
 private:
-    template <ZNodeKind Kind>
-    ZVisitResult buildDeclaration(ZNode &node, ZNode &parent);
+    template <NodeKind Kind>
+    VisitResult buildDeclaration(ZigNode &node, ZigNode &parent);
 
-    template <ZNodeKind Kind>
-    ZVisitResult updateDeclaration(ZNode &node, ZNode &parent);
+    template <NodeKind Kind>
+    VisitResult updateDeclaration(ZigNode &node, ZigNode &parent);
 
-    template <ZNodeKind Kind>
-    KDevelop::Declaration *createDeclaration(ZNode &node, ZigPath *name, bool hasContext);
+    template <NodeKind Kind>
+    KDevelop::Declaration *createDeclaration(ZigNode &node, const QString &name, bool hasContext);
 
-    template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
-    typename IdType<Kind>::Type::Ptr createType(ZNode &node);
+    template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
+    typename IdType<Kind>::Type::Ptr createType(ZigNode &node);
 
-    template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
-    KDevelop::FunctionType::Ptr createType(ZNode &node);
+    template <NodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
+    KDevelop::FunctionType::Ptr createType(ZigNode &node);
 
-    template <ZNodeKind Kind, EnableIf<Kind == ContainerDecl> = dummy>
-    KDevelop::StructureType::Ptr createType(ZNode &node);
+    template <NodeKind Kind, EnableIf<Kind == ContainerDecl> = dummy>
+    KDevelop::StructureType::Ptr createType(ZigNode &node);
 
-    template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
-    KDevelop::AbstractType::Ptr createType(ZNode &node);
+    template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
+    KDevelop::AbstractType::Ptr createType(ZigNode &node);
 
-    template <ZNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
+    template <NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<ZNodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
+    template<NodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<ZNodeKind Kind, EnableIf<Kind == Module> = dummy>
+    template<NodeKind Kind, EnableIf<Kind == Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<ZNodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
+    template<NodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
     void setDeclData(KDevelop::AliasDeclaration *decl);
 
-    template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
+    template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
     void setDeclData(KDevelop::ClassDeclaration *decl);
 
-    template <ZNodeKind Kind>
+    template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, typename IdType<Kind>::Type *type);
 
-    template <ZNodeKind Kind>
+    template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::IdentifiedType *type);
 
-    template <ZNodeKind Kind>
+    template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::AbstractType *type);
 
-    template <ZNodeKind Kind>
+    template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 
 

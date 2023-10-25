@@ -32,10 +32,9 @@ namespace Zig
 
 using namespace KDevelop;
 
-ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
+VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node);
-    switch (kind) {
+    switch (node.kind()) {
     case Module:
         return buildDeclaration<Module>(node, parent);
     case ContainerDecl:
@@ -63,33 +62,33 @@ ZVisitResult DeclarationBuilder::visitNode(ZNode &node, ZNode &parent)
     }
 }
 
-template<ZNodeKind Kind>
-ZVisitResult DeclarationBuilder::buildDeclaration(ZNode &node, ZNode &parent)
+template<NodeKind Kind>
+VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
 
-    ZigPath name(node);
+    QString name = node.spellingName();
 
     DUChainWriteLocker lock(DUChain::lock());
-    createDeclaration<Kind>(node, &name, hasContext);
+    createDeclaration<Kind>(node, name, hasContext);
     // qDebug() << "Open decl" << name.value;
-    ZVisitResult ret = buildContext<Kind>(node, parent);
+    VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
     // qDebug() << "Close decl" << name.value;
     closeDeclaration();
     return ret;
 }
 
-template <ZNodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, bool hasContext)
+template <NodeKind Kind>
+Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString &name, bool hasContext)
 {
 
-    auto range = editorFindSpellingRange(node, name->value);
+    auto range = editorFindSpellingRange(node, name);
 
     // qDebug()  << "Create decl node:" << node.index << " name:" << name->value << " range:" << range  << " kind:" << Kind;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
-        Identifier(name->value), range,
+        Identifier(name), range,
         hasContext ? DeclarationIsDefinition : NoFlags
     );
 
@@ -107,61 +106,61 @@ Declaration *DeclarationBuilder::createDeclaration(ZNode &node, ZigPath *name, b
     return decl;
 }
 
-template <ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
-typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZNode &node)
+template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
+typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node);
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
-template <ZNodeKind Kind, EnableIf<Kind == ContainerDecl>>
-StructureType::Ptr DeclarationBuilder::createType(ZNode &node)
+template <NodeKind Kind, EnableIf<Kind == ContainerDecl>>
+StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node); // TODO: Determine container type (struct, union)
     return StructureType::Ptr(new StructureType);
 }
 
-template <ZNodeKind Kind, EnableIf<Kind == FunctionDecl>>
-FunctionType::Ptr DeclarationBuilder::createType(ZNode &node)
+template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
+FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node); // TODO determine method in struct or regular method
     return FunctionType::Ptr(new FunctionType);
 }
 
-template <ZNodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
-AbstractType::Ptr DeclarationBuilder::createType(ZNode &node)
+template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
+AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node);
     // TODO: Determine var type
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, typename IdType<Kind>::Type *type)
 {
     setType<Kind>(decl, static_cast<IdentifiedType *>(type));
     setType<Kind>(decl, static_cast<AbstractType *>(type));
 }
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, IdentifiedType *type)
 {
     type->setDeclaration(decl);
 }
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 {
     decl->setAbstractType(AbstractType::Ptr(type));
 }
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 {
     type->setDeclaration(decl);
 }
 
-template<ZNodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
+template<NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
 void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
 {
     if (Kind == ContainerDecl) {
@@ -169,40 +168,40 @@ void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
     }
 }
 
-template<ZNodeKind Kind, EnableIf<Kind == Module>>
+template<NodeKind Kind, EnableIf<Kind == Module>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     decl->setKind(Declaration::Namespace);
 }
 
-template<ZNodeKind Kind, EnableIf<Kind == VarDecl>>
+template<NodeKind Kind, EnableIf<Kind == VarDecl>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     decl->setKind(Declaration::Instance);
 }
 
-template<ZNodeKind Kind, EnableIf<Kind == AliasDecl>>
+template<NodeKind Kind, EnableIf<Kind == AliasDecl>>
 void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
 {
     decl->setIsTypeAlias(true);
     decl->setKind(Declaration::Type);
 }
 
-template<ZNodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
+template<NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
 {
     Q_UNUSED(decl);
 }
 
-template<ZNodeKind Kind>
-ZVisitResult DeclarationBuilder::updateDeclaration(ZNode &node, ZNode &parent)
+template<NodeKind Kind>
+VisitResult DeclarationBuilder::updateDeclaration(ZigNode &node, ZigNode &parent)
 {
     // ZNodeKind parentKind = ast_node_kind(parent);
     if (Kind == Ident && lastType() && hasCurrentDeclaration()) {
         auto type = lastType().dynamicCast<FunctionType>();
         auto decl = dynamic_cast<FunctionDeclaration*>(currentDeclaration());
         if (type && decl) {
-            ZigPath name(node);
+            QString name = node.spellingName();
             if (auto builtinType = findBuiltinType(name)) {
                 DUChainWriteLocker lock;
                 // qDebug() << "fn return type is" << returnType->toString();
@@ -212,7 +211,7 @@ ZVisitResult DeclarationBuilder::updateDeclaration(ZNode &node, ZNode &parent)
                 QList<Declaration*> declarations;
                 {
                     DUChainReadLocker lock;
-                    QualifiedIdentifier typeName(Identifier(name.value));
+                    QualifiedIdentifier typeName((Identifier(name)));
                     declarations = findSimpleVar(typeName, currentContext());
                 }
                 if (!declarations.isEmpty()) {
@@ -227,37 +226,37 @@ ZVisitResult DeclarationBuilder::updateDeclaration(ZNode &node, ZNode &parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
-BuiltinType* DeclarationBuilder::findBuiltinType(const ZigPath &name) const
+BuiltinType* DeclarationBuilder::findBuiltinType(const QString &name) const
 {
     static QRegularExpression unsignedIntPattern("u\\d+");
     static QRegularExpression signedIntPattern("i\\d+");
     static QRegularExpression floatPattern("f(16|32|64|80|128)");
-    if (name.value == "void")
+    if (name == "void")
         return new BuiltinType("void");
-    if (name.value == "bool")
+    if (name == "bool")
         return new BuiltinType("bool");
-    if (name.value == "isize")
+    if (name == "isize")
         return new BuiltinType("isize");
-    if (name.value == "usize")
+    if (name == "usize")
         return new BuiltinType("usize");
-    if (name.value == "type")
+    if (name == "type")
         return new BuiltinType("type");
-    if (name.value == "anyerror")
+    if (name == "anyerror")
         return new BuiltinType("anyerror");
-    if (name.value == "noreturn")
+    if (name == "noreturn")
         return new BuiltinType("noreturn");
-    if (name.value == "anyopaque")
+    if (name == "anyopaque")
         return new BuiltinType("anyopaque");
-    if (name.value == "comptime_int")
+    if (name == "comptime_int")
         return new BuiltinType("comptime_int");
-    if (name.value == "comptime_float")
+    if (name == "comptime_float")
         return new BuiltinType("comptime_float");
-    if (unsignedIntPattern.match(name.value).hasMatch())
-        return new BuiltinType(name.value);
-    if (signedIntPattern.match(name.value).hasMatch())
-        return new BuiltinType(name.value);
-    if (floatPattern.match(name.value).hasMatch())
-        return new BuiltinType(name.value);
+    if (unsignedIntPattern.match(name).hasMatch())
+        return new BuiltinType(name);
+    if (signedIntPattern.match(name).hasMatch())
+        return new BuiltinType(name);
+    if (floatPattern.match(name).hasMatch())
+        return new BuiltinType(name);
     // TODO: c_ types
     return nullptr;
 }

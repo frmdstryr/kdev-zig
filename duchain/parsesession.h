@@ -66,8 +66,8 @@ public:
     KDevelop::IndexedString document() const;
     ZAst *ast() const;
 
-    void setContextOnNode(const ZNode &node, KDevelop::DUContext *context);
-    KDevelop::DUContext *contextFromNode(const ZNode &node);
+    void setContextOnNode(const ZigNode &node, KDevelop::DUContext *context);
+    KDevelop::DUContext *contextFromNode(const ZigNode &node);
 
 private:
     Q_DISABLE_COPY(ParseSession)

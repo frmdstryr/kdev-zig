@@ -34,10 +34,10 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 {
 }
 
-ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
+VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node);
-    ZNodeKind parentKind = ast_node_kind(parent);
+    NodeKind kind = ast_node_kind(node.ast, node.index);
+    NodeKind parentKind = ast_node_kind(parent.ast, parent.index);
 
     switch (kind){
         case Call:
@@ -70,32 +70,29 @@ ZVisitResult UseBuilder::visitNode(ZNode &node, ZNode &parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
-void UseBuilder::visitCall(ZNode &node, ZNode &parent)
+void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
 {
     // TODO
-    ZigPath functionName(node);
-    RangeInRevision useRange = editorFindSpellingRange(node, functionName.value);
+    QString functionName = node.spellingName();
+    RangeInRevision useRange = editorFindSpellingRange(node, functionName);
 
-    IndexedIdentifier identifier = IndexedIdentifier(Identifier(functionName.value));
+    IndexedIdentifier identifier = IndexedIdentifier(Identifier(functionName));
     currentPath.clear();
     currentPath.push(identifier);
-    if (functionName.value.isEmpty()) {
+    if (functionName.isEmpty()) {
         return;
     }
 
-    ZNode child = ast_visit_one_child(node);
-    ZNodeKind childKind = ast_node_kind(child);
+    ZigNode child = node.nextChild();
 
     QList<Declaration *> declarations;
     bool show_error = true;
 
-    if (childKind == FieldAccess) {
+    if (child.kind() == FieldAccess) {
         // TODO: Find type of child or use generic expression parser?
-        ZNode owner = ast_visit_one_child(child);
-        ZNodeKind ownerKind = ast_node_kind(owner);
-        if (ownerKind == Ident) {
-            ZigPath ownerName(owner);
-            QualifiedIdentifier ownerPath(Identifier(ownerName.value));
+        ZigNode owner = child.nextChild();
+        if (node.kind() == Ident) {
+            QualifiedIdentifier ownerPath(Identifier(owner.spellingName()));
             DUChainReadLocker lock;
             DUContext* context = topContext()->findContextAt(useRange.start);
             declarations = findSimpleVar(ownerPath, context);
@@ -118,7 +115,7 @@ void UseBuilder::visitCall(ZNode &node, ZNode &parent)
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined %1", functionName.value));
+        p->setDescription(i18n("Undefined function %1", functionName));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
     } else {
@@ -133,18 +130,18 @@ void UseBuilder::visitCall(ZNode &node, ZNode &parent)
 
 }
 
-void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
+void UseBuilder::visitContainerInit(ZigNode &node, ZigNode &parent)
 {
-    ZigPath containerName(node);
-    RangeInRevision useRange = editorFindSpellingRange(node, containerName.value);
+    QString containerName = node.spellingName();
+    RangeInRevision useRange = editorFindSpellingRange(node, containerName);
 
-    IndexedIdentifier identifier = IndexedIdentifier(Identifier(containerName.value));
+    IndexedIdentifier identifier = IndexedIdentifier(Identifier(containerName));
     currentPath.clear();
     currentPath.push(identifier);
-    if (containerName.value.isEmpty()) {
+    if (containerName.isEmpty()) {
         return;
     }
-    if (containerName.value == ".") {
+    if (containerName == ".") {
         return;  // TODO: Handle .
     }
 
@@ -160,7 +157,7 @@ void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined %1", containerName.value));
+        p->setDescription(i18n("Undefined container %1", containerName));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
     } else {
@@ -175,91 +172,34 @@ void UseBuilder::visitContainerInit(ZNode &node, ZNode &parent)
 
 }
 
-void UseBuilder::visitVarAccess(ZNode &node, ZNode &parent)
+void UseBuilder::visitVarAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
 
-void UseBuilder::visitFieldAccess(ZNode &node, ZNode &parent)
+void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
 
-void UseBuilder::visitArrayAccess(ZNode &node, ZNode &parent)
+void UseBuilder::visitArrayAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
 
-void UseBuilder::visitPtrAccess(ZNode &node, ZNode &parent)
+void UseBuilder::visitPtrAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
 
-void UseBuilder::visitIdent(ZNode &node, ZNode &parent)
+void UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
 
-void UseBuilder::visitLiteral(ZNode &node, ZNode &parent)
+void UseBuilder::visitLiteral(ZigNode &node, ZigNode &parent)
 {
     // TODO
 }
-
-
-// void UseBuilder::visitPath(ZNode &node, ZNode &parent)
-// {
-//     ZigPath path(node);
-//     fullPath = identifierForNode(&path);
-//     currentPath.clear();
-// }
-//
-// void UseBuilder::visitPathSegment(ZNode &node, ZNode &parent)
-// {
-//     ZigPath segment(node);
-//     IndexedIdentifier pathSegment = IndexedIdentifier(Identifier(segment.value));
-//
-//     currentPath.push(pathSegment);
-//
-//     DUContext::SearchFlags flags = DUContext::NoSearchFlags;
-//
-//     if (fullPath.isQualified()) {
-//         flags = DUContext::NoFiltering;
-//     }
-//
-//     RangeInRevision useRange = editorFindRange(&node, &node);
-//     DUContext *context = topContext()->findContextAt(useRange.start);
-//     QList<Declaration *> declarations = context->findDeclarations(currentPath,
-//                                                                   CursorInRevision::invalid(),
-//                                                                   AbstractType::Ptr(),
-//                                                                   nullptr,
-//                                                                   flags);
-//
-//     if (declarations.isEmpty() || !declarations.first()) {
-//         ProblemPointer p = ProblemPointer(new Problem());
-//         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-//         p->setSource(IProblem::SemanticAnalysis);
-//         p->setSeverity(IProblem::Hint);
-//         p->setDescription(i18n("Undefined %1", fullPath.toString()));
-//
-//         DUChainWriteLocker lock(DUChain::lock());
-//         topContext()->addProblem(p);
-//     } else {
-//         for (Declaration *declaration : declarations) {
-//             if (fullPath.isQualified() && currentPath != fullPath) {
-//                 // We are dealing with a container-like path, ignore functions and variables
-//                 if (!declaration->internalContext()
-//                         || declaration->internalContext()->type() == DUContext::Other
-//                         || declaration->internalContext()->type() == DUContext::Function) {
-//                     continue;
-//                 }
-//             }
-//
-//             if (declaration->range() != useRange) {
-//                 UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-//                 break;
-//             }
-//         }
-//     }
-// }
 
 }

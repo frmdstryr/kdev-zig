@@ -23,13 +23,23 @@ BuiltinTypeData::BuiltinTypeData()
 
 BuiltinTypeData::BuiltinTypeData(const QString& name)
 {
-    m_dataType = name;
+    setData(name);
+}
+
+void BuiltinTypeData::setData(const QString& name)
+{
+    QByteArray data = name.toUtf8();
+    if (data.size() > 0) {
+        size_t len = std::min(static_cast<size_t>(data.size()), sizeof(m_dataType));
+        Q_ASSERT(len <= sizeof(m_dataType));
+        memcpy(m_dataType, data, len);
+    }
 }
 
 BuiltinTypeData::BuiltinTypeData(const BuiltinTypeData& rhs)
-    :AbstractTypeData(rhs), m_dataType(rhs.m_dataType)
+    :AbstractTypeData(rhs)
 {
-
+    memcpy(m_dataType, rhs.m_dataType, sizeof(m_dataType));
 }
 
 REGISTER_TYPE(BuiltinType);
@@ -44,17 +54,17 @@ BuiltinType::BuiltinType(BuiltinTypeData& data) : AbstractType(data)
 
 QString BuiltinType::dataType() const
 {
-    return d_func()->m_dataType;
+    return toString();
 }
 
 void BuiltinType::setDataType(QString &dataType)
 {
-    d_func_dynamic()->m_dataType = dataType;
+    d_func_dynamic()->setData(dataType);
 }
 
 AbstractType* BuiltinType::clone() const
 {
-    return new BuiltinType(*this);
+    return new BuiltinType(toString());
 }
 
 bool BuiltinType::equals(const AbstractType* _rhs) const
@@ -65,11 +75,10 @@ bool BuiltinType::equals(const AbstractType* _rhs) const
     if (!AbstractType::equals(_rhs))
         return false;
 
-    Q_ASSERT(dynamic_cast<const BuiltinType*>(_rhs));
-    const auto* rhs = static_cast<const BuiltinType*>(_rhs);
-    if (!d_func() || !rhs->d_func())
-        return false;
-    return d_func()->m_dataType == rhs->d_func()->m_dataType;
+    if (const auto *rhs =dynamic_cast<const BuiltinType*>(_rhs))
+        return toString() == rhs->toString();
+
+    return false;
 }
 
 BuiltinType::BuiltinType(QString name)
@@ -85,7 +94,7 @@ BuiltinType::~BuiltinType()
 
 QString BuiltinType::toString() const
 {
-    return d_func()->m_dataType;
+    return QString::fromUtf8(d_func()->m_dataType, 15);
 }
 
 void BuiltinType::accept0(TypeVisitor* v) const
@@ -100,7 +109,7 @@ AbstractType::WhichType BuiltinType::whichType() const
 
 uint BuiltinType::hash() const
 {
-    return KDevHash(AbstractType::hash()) << d_func()->m_dataType;
+    return KDevHash(AbstractType::hash()) << toString();
 }
 
 

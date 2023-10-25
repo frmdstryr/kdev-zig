@@ -474,20 +474,8 @@ enum AstType {
     AstType_invalid,
 };
 
-struct NodeData {
-    uint32_t lhs;
-    uint32_t rhs;
-};
-
-struct AstNode {
-    uint32_t node_index;
-    uint32_t token_index;
-    AstType type;
-    NodeData data;
-};
-
 // Must be kept in sync with NodeKind enum in kdevzigastparser.zig
-enum ZNodeKind
+enum NodeKind
 {
     Unknown = 0,
     Module, // Root
@@ -513,7 +501,7 @@ enum ZNodeKind
     Ident
 };
 
-enum ZVisitResult
+enum VisitResult
 {
     Break = 0,
     Continue = 1,
@@ -521,22 +509,17 @@ enum ZVisitResult
 };
 
 struct ZAst;
-struct ZNode
-{
-    ZAst* ast;
-    uint32_t index;
-};
 
-struct ZAstLocation
+struct SourceLocation
 {
     uint32_t line;
     uint32_t column;
 };
 
-struct ZAstRange
+struct SourceRange
 {
-    ZAstLocation start;
-    ZAstLocation end;
+    SourceLocation start;
+    SourceLocation end;
 
     bool isEmpty() {
         return start.line == 0 && start.column == 0 &&
@@ -547,11 +530,11 @@ struct ZAstRange
 struct ZError
 {
     int severity;
-    ZAstRange range;
+    SourceRange range;
     const char* message;
 };
 
-typedef ZVisitResult (*CallbackFn)(ZNode node, ZNode parent, void *data);
+typedef VisitResult (*CallbackFn)(ZAst* tree, uint32_t node, uint32_t parent, void *data);
 
 
 ZAst *parse_ast(const char *name, const char *source);
@@ -561,17 +544,17 @@ void destroy_ast(ZAst *tree);
 ZError *ast_error_at(ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
-ZNodeKind ast_node_kind(ZNode node);
-ZNode ast_visit_one_child(ZNode node);
+NodeKind ast_node_kind(ZAst *tree, uint32_t node);
+uint32_t ast_visit_one_child(ZAst *tree, uint32_t node);
 
-const char *ast_node_new_spelling_name(ZNode node);
+const char *ast_node_new_spelling_name(ZAst *tree, uint32_t node);
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
-ZAstRange ast_node_spelling_range(ZNode node);
-ZAstRange ast_node_extent(ZNode node);
+SourceRange ast_node_spelling_range(ZAst *tree, uint32_t node);
+SourceRange ast_node_extent(ZAst *tree, uint32_t node);
 
 void destroy_string(const char *str);
 
-void ast_visit(ZNode node, CallbackFn callback, void *data);
+void ast_visit(ZAst *tree, uint32_t node, CallbackFn callback, void *data);
 
 }
 

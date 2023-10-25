@@ -20,7 +20,7 @@
 
 #include <language/duchain/builders/abstractusebuilder.h>
 #include <serialization/indexedstring.h>
-
+#include <QString>
 #include "contextbuilder.h"
 #include "zignode.h"
 
@@ -29,7 +29,7 @@
 namespace Zig
 {
 
-using UseBuilderBase = KDevelop::AbstractUseBuilder<ZNode, ZigPath, ContextBuilder>;
+using UseBuilderBase = KDevelop::AbstractUseBuilder<ZigNode, QString, ContextBuilder>;
 
 class KDEVZIGDUCHAIN_EXPORT UseBuilder : public UseBuilderBase
 {
@@ -37,17 +37,17 @@ public:
     UseBuilder(const KDevelop::IndexedString &document);
     ~UseBuilder() override = default;
 
-    ZVisitResult visitNode(ZNode &node, ZNode &parent) override;
+    VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
 
 private:
-    void visitCall(ZNode &node, ZNode &parent);
-    void visitContainerInit(ZNode &node, ZNode &parent);
-    void visitVarAccess(ZNode &node, ZNode &parent);
-    void visitFieldAccess(ZNode &node, ZNode &parent);
-    void visitArrayAccess(ZNode &node, ZNode &parent);
-    void visitPtrAccess(ZNode &node, ZNode &parent);
-    void visitLiteral(ZNode &node, ZNode &parent);
-    void visitIdent(ZNode &node, ZNode &parent);
+    void visitCall(ZigNode &node, ZigNode &parent);
+    void visitContainerInit(ZigNode &node, ZigNode &parent);
+    void visitVarAccess(ZigNode &node, ZigNode &parent);
+    void visitFieldAccess(ZigNode &node, ZigNode &parent);
+    void visitArrayAccess(ZigNode &node, ZigNode &parent);
+    void visitPtrAccess(ZigNode &node, ZigNode &parent);
+    void visitLiteral(ZigNode &node, ZigNode &parent);
+    void visitIdent(ZigNode &node, ZigNode &parent);
 
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;

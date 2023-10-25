@@ -47,12 +47,15 @@ using ZigAst = ZigAllocatedObject<ZAst, destroy_ast>;
 using ZigString = ZigAllocatedObject<const char, destroy_string>;
 using ZigError = ZigAllocatedObject<ZError, destroy_error>;
 
-class KDEVZIGDUCHAIN_EXPORT ZigPath
+struct KDEVZIGDUCHAIN_EXPORT ZigNode
 {
-public:
-    ZigPath(ZNode& node);
+    ZAst* ast;
+    uint32_t index;
 
-    QString value;
+    NodeKind kind();
+    ZigNode nextChild();
+    SourceRange extent();
+    QString spellingName();
 };
 
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<const char, destroy_string>;

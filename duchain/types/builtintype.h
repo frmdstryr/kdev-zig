@@ -18,7 +18,10 @@ public:
     BuiltinTypeData(const BuiltinTypeData& rhs);
     BuiltinTypeData& operator=(const BuiltinTypeData& rhs) = delete;
     ~BuiltinTypeData() = default;
-    QString m_dataType = "";
+
+    void setData(const QString &name);
+
+    char m_dataType[16];
 };
 
 class KDEVPLATFORMLANGUAGE_EXPORT BuiltinType : public AbstractType

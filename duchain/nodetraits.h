@@ -28,7 +28,7 @@ namespace Zig
 namespace NodeTraits
 {
 
-constexpr bool hasContext(ZNodeKind kind)
+constexpr bool hasContext(NodeKind kind)
 {
     return kind == Module
         || kind == ContainerDecl
@@ -41,7 +41,7 @@ constexpr bool hasContext(ZNodeKind kind)
     ;
 }
 
-constexpr KDevelop::DUContext::ContextType contextType(ZNodeKind kind)
+constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
 {
     using namespace KDevelop;
     return
@@ -57,7 +57,7 @@ constexpr KDevelop::DUContext::ContextType contextType(ZNodeKind kind)
         : static_cast<DUContext::ContextType>(-1);
 }
 
-constexpr bool isKDevDeclaration(ZNodeKind kind)
+constexpr bool isKDevDeclaration(NodeKind kind)
 {
     return kind == ParmDecl
         || kind == EnumDecl
@@ -67,7 +67,7 @@ constexpr bool isKDevDeclaration(ZNodeKind kind)
         || kind == Module;
 }
 
-constexpr bool isTypeDeclaration(ZNodeKind kind)
+constexpr bool isTypeDeclaration(NodeKind kind)
 {
     return  kind == EnumDecl
         || kind == ErrorDecl

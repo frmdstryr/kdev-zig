@@ -27,16 +27,16 @@
 namespace Zig
 {
 
-ZVisitResult visitCallback(ZNode node, ZNode parent, void *data);
+VisitResult visitCallback(ZAst* ast, uint32_t node, uint32_t parent, void *data);
 
 void ContextBuilder::setParseSession(ParseSession *session)
 {
     this->session = session;
 }
 
-RangeInRevision ContextBuilder::editorFindSpellingRange(ZNode &node, const QString &identifier)
+RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QString &identifier)
 {
-    ZAstRange range = ast_node_spelling_range(node);
+    SourceRange range = ast_node_spelling_range(node.ast, node.index);
     KTextEditor::Range spellingRange = range.isEmpty() ?
         KTextEditor::Range::invalid() : KTextEditor::Range(
             range.start.line,
@@ -59,9 +59,9 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZNode &node, const QStri
     //return RangeInRevision::castFromSimpleRange(ranges.first());
 }
 
-ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
+VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    ZNodeKind kind = ast_node_kind(node);
+    NodeKind kind = ast_node_kind(node.ast, node.index);
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
@@ -95,13 +95,13 @@ ZVisitResult ContextBuilder::visitNode(ZNode &node, ZNode &parent)
     return Recurse;
 }
 
-template <ZNodeKind Kind>
-ZVisitResult ContextBuilder::buildContext(ZNode &node, ZNode &parent)
+template <NodeKind Kind>
+VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
 
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
-    ZigPath name(node);
+    QString name = node.spellingName();
 
     if (hasContext) {
         // qDebug() << "Open context node:" << node.index;
@@ -114,30 +114,30 @@ ZVisitResult ContextBuilder::buildContext(ZNode &node, ZNode &parent)
     return Recurse;
 }
 
-void ContextBuilder::visitChildren(ZNode &node)
+void ContextBuilder::visitChildren(ZigNode &node)
 {
-    ast_visit(node, visitCallback, this);
+    ast_visit(node.ast, node.index, visitCallback, this);
 }
 
-void ContextBuilder::startVisiting(ZNode *node)
+void ContextBuilder::startVisiting(ZigNode *node)
 {
     visitChildren(*node);
 }
 
-void ContextBuilder::setContextOnNode(ZNode *node, KDevelop::DUContext *context)
+void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
 {
     session->setContextOnNode(*node, context);
 }
 
-KDevelop::DUContext *ContextBuilder::contextFromNode(ZNode *node)
+KDevelop::DUContext *ContextBuilder::contextFromNode(ZigNode *node)
 {
     return session->contextFromNode(*node);
 }
 
-KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZNode *fromNode, ZNode *toNode)
+KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, ZigNode *toNode)
 {
-    ZAstRange fromRange = ast_node_extent(*fromNode);
-    ZAstRange toRange = (fromNode == toNode) ? fromRange : ast_node_extent(*toNode);
+    SourceRange fromRange = fromNode->extent();
+    SourceRange toRange = (fromNode == toNode) ? fromRange : toNode->extent();
 
     return RangeInRevision(
         fromRange.start.line, fromRange.start.column,
@@ -145,9 +145,9 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZNode *fromNode, ZNode
     );
 }
 
-KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(ZigPath *node)
+KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
-    return QualifiedIdentifier(node->value);
+    return QualifiedIdentifier(*node);
 }
 
 KDevelop::DUContext *ContextBuilder::newContext(const KDevelop::RangeInRevision &range)
@@ -165,13 +165,15 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
     return new ZigTopDUContext(document(), range, file);
 }
 
-ZVisitResult visitCallback(ZNode node, ZNode parent, void *data)
+VisitResult visitCallback(ZAst* ast, uint32_t node, uint32_t parent, void *data)
 {
     ContextBuilder *builder = static_cast<ContextBuilder *>(data);
     if (builder) {
-        return builder->visitNode(node, parent);
+        ZigNode childNode = {ast, node};
+        ZigNode parentNode = {ast, parent};
+        return builder->visitNode(childNode, parentNode);
     }
-    return ZVisitResult::Break;
+    return VisitResult::Break;
 
 }
 

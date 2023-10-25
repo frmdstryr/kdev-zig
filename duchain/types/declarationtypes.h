@@ -33,7 +33,7 @@
 namespace Zig
 {
 
-template <ZNodeKind Kind, class Enable = void>
+template <NodeKind Kind, class Enable = void>
 struct IdType;
 
 // template <ZNodeKind Kind>
@@ -42,58 +42,58 @@ struct IdType;
 //     typedef KDevelop::StructureType Type;
 // };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
 {
     typedef KDevelop::TypeAliasType Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == EnumDecl>::type>
 {
     typedef KDevelop::EnumerationType Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == ErrorDecl>::type>
 {
     typedef KDevelop::EnumerationType Type;
 };
 
-template <ZNodeKind Kind, class Enable = void>
+template <NodeKind Kind, class Enable = void>
 struct DeclType;
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<NodeTraits::isKDevDeclaration(Kind)>::type>
 {
     typedef KDevelop::Declaration Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == ContainerDecl>::type>
 {
     typedef KDevelop::ClassDeclaration Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
 {
     typedef KDevelop::AliasDeclaration Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == TemplateDecl>::type>
 {
    typedef KDevelop::ClassFunctionDeclaration Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == FunctionDecl>::type>
 {
     typedef KDevelop::FunctionDeclaration Type;
 };
 
-template <ZNodeKind Kind>
+template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == FieldDecl>::type>
 {
     typedef KDevelop::ClassMemberDeclaration Type;
