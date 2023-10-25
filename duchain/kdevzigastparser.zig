@@ -953,6 +953,7 @@ export fn ast_visit(node: ZNode, callback: CallbackFn , data: ?*anyopaque) void 
         .async_call_comma,
         .@"switch",
         .switch_comma,
+        .array_init,
         .struct_init,
         .struct_init_comma => {
             {
@@ -1096,12 +1097,63 @@ test "ast-visit" {
     //try testVisitTree("var a: u8 align(4) = 0;", .global_var_decl); ???
     try testVisitTree("test { var a align(4) = 0; }", .aligned_var_decl);
     try testVisitTree("test { var a = 0; errdefer {a = 1;} }", .@"errdefer");
-    try testVisitTree("test { var a = 0; a += 1; }", .assign_add);
-    try testVisitTree("test { var a = 0; a -= 1; }", .assign_sub);
-    try testVisitTree("test { var a = 0; a *= 1; }", .assign_mul);
-    try testVisitTree("test { var a = 0 < 1; }", .less_than);
-    try testVisitTree("test { var a = 0 > 1; }", .greater_than);
+    try testVisitTree("test { errdefer |err| { @panic(@errorName(err));} }", .@"errdefer");
+    try testVisitTree("test { var a = 0; defer { a = 1; } }", .@"defer");
+    try testVisitTree("test { foo() catch {}; }", .@"catch");
+    try testVisitTree("test { foo() catch |err| { @panic(@errorName(err)); }; }", .@"catch");
+    try testVisitTree("const A = {var a: u8 = 0;}; test { A.a = 1; }", .field_access);
+    try testVisitTree("test{ a.? = 0; }", .unwrap_optional);
     try testVisitTree("test { var a = 0 == 1; }", .equal_equal);
     try testVisitTree("test { var a = 0 != 1; }", .bang_equal);
+    try testVisitTree("test { var a = 0 < 1; }", .less_than);
+    try testVisitTree("test { var a = 0 <= 1; }", .less_or_equal);
+    try testVisitTree("test { var a = 0 >= 1; }", .greater_or_equal);
+    try testVisitTree("test { var a = 0 > 1; }", .greater_than);
+    try testVisitTree("test { var a = 0; a *= 1; }", .assign_mul);
+    try testVisitTree("test { var a = 0; a /= 1; }", .assign_div);
+    try testVisitTree("test { var a = 0; a %= 1; }", .assign_mod);
+    try testVisitTree("test { var a = 0; a += 1; }", .assign_add);
+    try testVisitTree("test { var a = 0; a -= 1; }", .assign_sub);
+    try testVisitTree("test { var a = 1; a <<= 1; }", .assign_shl);
+    try testVisitTree("test { var a = 1; a <<|= 1; }", .assign_shl_sat);
+    try testVisitTree("test { var a = 2; a >>= 1; }", .assign_shr);
+    try testVisitTree("test { var a = 2; a &= 3; }", .assign_bit_and);
+    try testVisitTree("test { var a = 2; a ^= 1; }", .assign_bit_xor);
+    try testVisitTree("test { var a = 2; a |= 1; }", .assign_bit_or);
+    try testVisitTree("test { var a = 2; a *%= 0xFF; }", .assign_mul_wrap);
+    try testVisitTree("test { var a = 2; a +%= 0xFF; }", .assign_add_wrap);
+    try testVisitTree("test { var a = 2; a -%= 0xFF; }", .assign_sub_wrap);
+    try testVisitTree("test { var a = 2; a = 1; }", .assign);
+    // TODO: assign_destructure
+    try testVisitTree("const E1 = error{E1}; const E2 = E1 || error{E3};", .merge_error_sets);
+    try testVisitTree("test { var a = 2; a = 2 * a; }", .mul);
+    try testVisitTree("test { var a = 2; a = a / 2; }", .div);
+    try testVisitTree("test { var a = 2; a = a % 2; }", .mod);
+    try testVisitTree("test { var a = [2]u8{1, 2} ** 2; }", .array_mult);
+    try testVisitTree("test { var a: u8 = 2 *% 0xFF;}", .mul_wrap);
+    try testVisitTree("test { var a: u8 = 2 *| 0xFF;}", .mul_sat);
+    try testVisitTree("test { var a: u8 = 2 + 0xF0;}", .add);
+    try testVisitTree("test { var a: u8 = 0xF0 - 0x2;}", .sub);
+    try testVisitTree("test { var a = [2]u8{1, 2} ++ [_]u8{3}; }", .array_cat);
+    try testVisitTree("test { var a: u8 = 2 +% 0xFF;}", .add_wrap);
+    try testVisitTree("test { var a: u8 = 2 -% 0xFF;}", .sub_wrap);
+    try testVisitTree("test { var a: u8 = 2 +| 0xFF;}", .add_sat);
+    try testVisitTree("test { var a: u8 = 2 -| 0xFF;}", .sub_sat);
+    try testVisitTree("test { var a: u8 = 2 << 1;}", .shl);
+    try testVisitTree("test { var a: u8 = 2 <<| 10;}", .shl_sat);
+    try testVisitTree("test { var a: u8 = 2 >> 1;}", .shr);
+    try testVisitTree("test { var a: u8 = 2 & 1;}", .bit_and);
+    try testVisitTree("test { var a: u8 = 2 ^ 1;}", .bit_xor);
+    try testVisitTree("test { var a: u8 = 2 | 1;}", .bit_or);
+    try testVisitTree("test { var a: u8 = null orelse 1;}", .@"orelse");
+    try testVisitTree("test { var a = true and true;}", .bool_and);
+    try testVisitTree("test { var a = true or false;}", .bool_or);
+    try testVisitTree("test { var a = !true; }", .bool_not);
+    try testVisitTree("test { var a = -foo(); }", .negation);
+    try testVisitTree("test { var a = ~0x4; }", .bit_not);
+    try testVisitTree("test { var a = -%foo(); }", .negation_wrap);
+    try testVisitTree("test { var a = 0; var b = &a; }", .address_of);
+    try testVisitTree("test { try foo(); }", .@"try");
+    try testVisitTree("test { await foo(); }", .@"await");
     try testVisitTree("test { if (true) { var a = 0; } }", .if_simple);
 }
