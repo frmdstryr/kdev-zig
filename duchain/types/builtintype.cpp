@@ -94,7 +94,11 @@ BuiltinType::~BuiltinType()
 
 QString BuiltinType::toString() const
 {
-    return QString::fromUtf8(d_func()->m_dataType, 15);
+    const auto n = std::min(
+        strlen(d_func()->m_dataType),
+        sizeof(d_func()->m_dataType)
+    );
+    return QString::fromUtf8(d_func()->m_dataType, n);
 }
 
 void BuiltinType::accept0(TypeVisitor* v) const
