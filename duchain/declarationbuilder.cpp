@@ -55,8 +55,6 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
         return buildDeclaration<TestDecl>(node, parent);
-    case Ident:
-        return updateDeclaration<Ident>(node, parent);
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -69,12 +67,11 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
 
     QString name = node.spellingName();
-
+    Declaration* parentDecl = currentDeclaration();
     createDeclaration<Kind>(node, name, hasContext);
-    // qDebug() << "Open decl" << name.value;
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
-    // qDebug() << "Close decl" << name.value;
+    updateParentDeclaration<Kind>(node, parent, parentDecl);
     closeDeclaration();
     return ret;
 }
@@ -98,11 +95,9 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString 
 
     auto type = createType<Kind>(node);
     openType(type);
-
     setDeclData<Kind>(decl);
     setType<Kind>(decl, type.data());
     closeType();
-
     return decl;
 }
 
@@ -123,15 +118,59 @@ StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
 template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
 FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
-    Q_UNUSED(node); // TODO determine method in struct or regular method
-    return FunctionType::Ptr(new FunctionType);
+    auto fn = FunctionType::Ptr(new FunctionType);
+
+    const auto n = node.paramCount();
+
+    if (n > 0) {
+        // TODO: Find a better way to do this
+        // params get visited more than once but there is also stuff like
+        // comptime, linksection, etc
+        QString name = node.spellingName();
+        openContext(&node, NodeTraits::contextType(Kind), &name);
+        for (uint32_t i=0; i < n; i++) {
+            ZigNode paramType = node.paramType(i);
+            Q_ASSERT(!paramType.isRoot());
+            QString paramName = node.paramName(i);
+            auto paramRange = node.paramNameRange(i);
+
+            DUChainWriteLocker lock;
+            Declaration *param = openDeclaration<DeclType<ParamDecl>::Type>(
+                Identifier(paramName), paramRange, NoFlags
+            );
+            auto type = createType<ParamDecl>(paramType);
+            openType(type);
+            setDeclData<ParamDecl>(param);
+            setType<ParamDecl>(param, type.data());
+            closeType();
+            fn->addArgument(type, i);
+        }
+        closeContext();
+    }
+
+    ZigNode typeNode = node.returnType();
+    Q_ASSERT(!typeNode.isRoot());
+    // Handle builtin return types...
+    if (auto builtinType = BuiltinType::newFromName(typeNode.spellingName())) {
+        fn->setReturnType(AbstractType::Ptr(builtinType));
+    }
+    // else TODO the rest
+    return fn;
 }
 
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
 AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
-    Q_UNUSED(node);
-    // TODO: Determine var type
+    if (Kind == VarDecl || Kind == ParamDecl) {
+        // Simple var types...
+        ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
+        if (!typeNode.isRoot()) {
+            if (auto builtinType = BuiltinType::newFromName(typeNode.spellingName())) {
+                return AbstractType::Ptr(builtinType);
+            }
+        }
+    }
+    // TODO: Determine var type for
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
 
@@ -158,6 +197,7 @@ template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 {
     type->setDeclaration(decl);
+    qDebug() << "Set type struct" << type->toString();
 }
 
 template<NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
@@ -194,31 +234,36 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
 }
 
 template<NodeKind Kind>
-VisitResult DeclarationBuilder::updateDeclaration(ZigNode &node, ZigNode &parent)
+void DeclarationBuilder::updateParentDeclaration(ZigNode &node, ZigNode &parent, KDevelop::Declaration* parentDecl)
 {
-    // ZNodeKind parentKind = ast_node_kind(parent);
-    if (Kind == Ident && lastType() && hasCurrentDeclaration()) {
-        auto type = lastType().dynamicCast<FunctionType>();
-        auto decl = dynamic_cast<FunctionDeclaration*>(currentDeclaration());
-        if (type && decl) {
-            QString name = node.spellingName();
+    if (parentDecl && Kind == ContainerDecl && parent.kind() == VarDecl) {
+        qDebug() << "Update last decl" << parentDecl->toString();
+        if (parentDecl && hasCurrentType()) {
             DUChainWriteLocker lock;
-            if (auto builtinType = BuiltinType::newFromName(name)) {
-                // qDebug() << "fn return type is" << returnType->toString();
-                type->setReturnType(AbstractType::Ptr(builtinType));
-                decl->setAbstractType(type);
-            } else {
-                QualifiedIdentifier typeName((Identifier(name)));
-                QList<Declaration*> declarations = findSimpleVar(typeName, currentContext());
-                if (!declarations.isEmpty()) {
-                    Declaration* decl = declarations.first();
-                    type->setReturnType(decl->abstractType());
-                    decl->setAbstractType(type);
-                } // else might not be defined yet
-            }
+            parentDecl->setIsTypeAlias(true);
+            parentDecl->setKind(Declaration::Type);
+            parentDecl->setType(currentAbstractType());
         }
+        // auto type = lastType().dynamicCast<FunctionType>();
+        // auto decl = dynamic_cast<FunctionDeclaration*>(currentDeclaration());
+        // if (type && decl) {
+        //     QString name = node.spellingName();
+        //     DUChainWriteLocker lock;
+        //     if (auto builtinType = BuiltinType::newFromName(name)) {
+        //         // qDebug() << "fn return type is" << returnType->toString();
+        //         type->setReturnType(AbstractType::Ptr(builtinType));
+        //         decl->setAbstractType(type);
+        //     } else {
+        //         QualifiedIdentifier typeName((Identifier(name)));
+        //         QList<Declaration*> declarations = findSimpleVar(typeName, currentContext());
+        //         if (!declarations.isEmpty()) {
+        //             Declaration* decl = declarations.first();
+        //             type->setReturnType(decl->abstractType());
+        //             decl->setAbstractType(type);
+        //         } // else might not be defined yet
+        //     }
+        // }
     }
-    return ContextBuilder::visitNode(node, parent);
 }
 
 

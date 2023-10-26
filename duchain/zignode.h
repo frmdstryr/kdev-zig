@@ -53,9 +53,21 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     uint32_t index;
 
     NodeKind kind();
+    NodeTag tag();
     ZigNode nextChild();
     SourceRange extent();
     QString spellingName();
+    // Get type node if kind is VarDecl or return root node
+    ZigNode varType();
+
+    // Get return node if kind is FuncDecl or return root node
+    ZigNode returnType();
+    uint32_t paramCount();
+    ZigNode paramType(uint32_t i);
+    QString paramName(uint32_t i);
+    KDevelop::RangeInRevision paramNameRange(uint32_t i);
+
+    inline bool isRoot() const { return index == 0; }
 };
 
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<const char, destroy_string>;

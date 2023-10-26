@@ -124,6 +124,8 @@ BuiltinType* BuiltinType::newFromName(const QString& name)
     static QRegularExpression floatPattern("f(16|32|64|80|128)");
     if (name == "void")
         return new BuiltinType("void");
+    if (name == "type")
+        return new BuiltinType("type");
     if (name == "bool")
         return new BuiltinType("bool");
     if (name == "isize")

@@ -58,7 +58,7 @@ private:
     VisitResult buildDeclaration(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind>
-    VisitResult updateDeclaration(ZigNode &node, ZigNode &parent);
+    void updateParentDeclaration(ZigNode &node, ZigNode &parent, KDevelop::Declaration* parentDecl);
 
     template <NodeKind Kind>
     KDevelop::Declaration *createDeclaration(ZigNode &node, const QString &name, bool hasContext);
@@ -101,8 +101,6 @@ private:
 
     template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
-
-
 };
 
 }

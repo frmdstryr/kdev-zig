@@ -59,7 +59,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
 
 constexpr bool isKDevDeclaration(NodeKind kind)
 {
-    return kind == ParmDecl
+    return kind == ParamDecl
         || kind == EnumDecl
         || kind == ErrorDecl
         || kind == VarDecl

@@ -234,3 +234,37 @@ void DUChainTest::testVarUsage_data()
         << "pub fn main() void {}\ntest {\n main();\n}" << QStringList { "main@2,1,2,5" };
 
 }
+
+
+
+void DUChainTest::testVarType()
+{
+    QFETCH(QString, code);
+    QFETCH(QString, var);
+    QFETCH(QString, type);
+    qDebug() << "Code:" << code;
+    ReferencedTopDUContext context = parseCode(code);
+    QVERIFY(context.data());
+
+    DUChainReadLocker lock;
+    auto decls = context->findDeclarations(Identifier(var));
+    QVERIFY(decls.size() ==  1);
+    const KDevelop::Declaration *decl = decls.first();
+    qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    QCOMPARE(decl->abstractType()->toString(), type);
+
+}
+
+void DUChainTest::testVarType_data()
+{
+    QTest::addColumn<QString>("code");
+    QTest::addColumn<QString>("var");
+    QTest::addColumn<QString>("type");
+
+    QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8";
+    QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "struct Foo";
+    QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()";
+    QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()";
+    QTest::newRow("fn u8") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)";
+
+}

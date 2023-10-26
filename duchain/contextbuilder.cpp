@@ -45,18 +45,6 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QSt
             range.end.column
         );
     return RangeInRevision::castFromSimpleRange(spellingRange);
-    // KTextEditor::Range incorrectRange = KTextEditor::Range(range.start.line - 1, range.start.column, INT_MAX, INT_MAX);
-    // IDocument *document = ICore::self()->documentController()
-    //         ->documentForUrl(topContext()->url().toUrl());
-    //
-    // QVector<KTextEditor::Range> ranges;
-    // if (document) {
-    //     ranges = document->textDocument()->searchText(incorrectRange, identifier);
-    // } else {
-    //     ranges = { KTextEditor::Range::invalid() };
-    // }
-    //
-    //return RangeInRevision::castFromSimpleRange(ranges.first());
 }
 
 VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
@@ -71,7 +59,7 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     BUILD_CONTEXT_FOR(TemplateDecl);
     BUILD_CONTEXT_FOR(FieldDecl);
     BUILD_CONTEXT_FOR(FunctionDecl);
-    BUILD_CONTEXT_FOR(ParmDecl);
+    BUILD_CONTEXT_FOR(ParamDecl);
     BUILD_CONTEXT_FOR(VarDecl);
     BUILD_CONTEXT_FOR(BlockDecl);
     BUILD_CONTEXT_FOR(ErrorDecl);

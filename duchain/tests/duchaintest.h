@@ -33,6 +33,9 @@ private Q_SLOTS:
     void testVarBindings_data();
     void testVarUsage();
     void testVarUsage_data();
+
+    void testVarType();
+    void testVarType_data();
 };
 
 #endif // DUCHAINTEST_H

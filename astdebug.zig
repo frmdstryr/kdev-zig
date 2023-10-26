@@ -77,13 +77,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     var ast = try std.zig.Ast.parse(
         allocator,
-        \\pub fn main(x: u8) void {
-        \\   switch (x) {
-        \\      0 => {
-        \\      },
-        \\      else => {},
-        \\   }
-        \\}
+        \\pub fn foo(x: u8) void {}
         , .zig
     );
     defer ast.deinit(allocator);

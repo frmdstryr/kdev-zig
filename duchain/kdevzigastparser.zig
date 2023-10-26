@@ -4,7 +4,7 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const assert = std.debug.assert;
 
-const TokenIndex = Ast.TokenIndex;
+const Index = Ast.Node.Index;
 const Tag = Ast.Node.Tag;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -124,7 +124,7 @@ pub fn dumpAstFlat(ast: *Ast, stream: anytype) !void {
     try stream.writeAll("\n");
 }
 
-pub fn dumpAstNodes(ast: *Ast, nodes: []TokenIndex, stream: anytype) !void {
+pub fn dumpAstNodes(ast: *Ast, nodes: []Index, stream: anytype) !void {
     const tags = ast.nodes.items(.tag);
     const node_data = ast.nodes.items(.data);
     const main_tokens = ast.nodes.items(.main_token);
@@ -247,7 +247,7 @@ export fn destroy_error(ptr: ?*ZError) void {
     }
 }
 
-export fn ast_node_spelling_range(ptr: ?*Ast, index: TokenIndex) SourceRange {
+export fn ast_node_spelling_range(ptr: ?*Ast, index: Index) SourceRange {
     if (ptr == null) {
         return SourceRange{};
     }
@@ -274,7 +274,9 @@ export fn ast_node_spelling_range(ptr: ?*Ast, index: TokenIndex) SourceRange {
     return SourceRange{};
 }
 
-export fn ast_node_extent(ptr: ?*Ast, index: TokenIndex) SourceRange {
+
+
+export fn ast_node_extent(ptr: ?*Ast, index: Index) SourceRange {
     if (ptr == null) {
         std.log.warn("zig: ast_node_extent ast null", .{});
         return SourceRange{};
@@ -304,7 +306,7 @@ export fn ast_node_extent(ptr: ?*Ast, index: TokenIndex) SourceRange {
 
 
 
-pub fn kindFromAstNode(ast: *Ast, index: TokenIndex) ?NodeKind {
+pub fn kindFromAstNode(ast: *Ast, index: Index) ?NodeKind {
     if (index >= ast.nodes.len) {
         return null;
     }
@@ -374,7 +376,7 @@ pub fn kindFromAstNode(ast: *Ast, index: TokenIndex) ?NodeKind {
     };
 }
 
-export fn ast_node_kind(ptr: ?*Ast, index: TokenIndex) NodeKind {
+export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
     if (ptr) |ast| {
         if (kindFromAstNode(ast, index)) |kind| {
             // std.log.debug("zig: ast_node_kind {} is {s}", .{index, @tagName(kind)});
@@ -384,17 +386,135 @@ export fn ast_node_kind(ptr: ?*Ast, index: TokenIndex) NodeKind {
     return .Unknown;
 }
 
-export fn ast_node_tag(ptr: ?*Ast, index: TokenIndex) Ast.Node.Tag {
+export fn ast_node_tag(ptr: ?*Ast, index: Index) Ast.Node.Tag {
     if (ptr) |ast| {
        if (index < ast.nodes.len) {
-            return ast.nodes.items(.tag)[index];
+            const tag =  ast.nodes.items(.tag)[index];
+            std.log.debug("zig: ast_node_tag {} is {s}", .{index, @tagName(tag)});
+            return tag;
         }
     }
     return .root; // Invalid unless index == 0
 }
 
+// Return var type or 0
+export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
+    if (ptr) |ast| {
+       if (index < ast.nodes.len) {
+            const tag =  ast.nodes.items(.tag)[index];
+            return switch (tag) {
+                .simple_var_decl => ast.simpleVarDecl(index).ast.type_node,
+                .aligned_var_decl => ast.alignedVarDecl(index).ast.type_node,
+                .global_var_decl => ast.globalVarDecl(index).ast.type_node,
+                .local_var_decl => ast.localVarDecl(index).ast.type_node,
+                else => 0,
+            };
+        }
+    }
+    return 0;
+}
+
+export fn ast_fn_return_type(ptr: ?*Ast, index: Index) Index {
+    if (ptr) |ast| {
+       if (index < ast.nodes.len) {
+            const data_items = ast.nodes.items(.data);
+            const tag =  ast.nodes.items(.tag)[index];
+            return switch (tag) {
+                .fn_decl => data_items[data_items[index].lhs].rhs,
+                else => 0,
+            };
+        }
+    }
+    return 0;
+}
+
+export fn ast_fn_param_count(ptr: ?*Ast, index: Index) u32 {
+    if (ptr) |ast| {
+       if (index < ast.nodes.len) {
+            var buffer: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buffer, index)) |proto| {
+                return @intCast(proto.ast.params.len);
+            }
+        }
+    }
+    return 0;
+}
+
+export fn ast_fn_param_at(ptr: ?*Ast, index: Index, i: u32) Index {
+    if (ptr) |ast| {
+       if (index < ast.nodes.len) {
+            var buffer: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buffer, index)) |proto| {
+                if (i < proto.ast.params.len) {
+                    return proto.ast.params[i];
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+fn fnParamNameToken(ast: *Ast, index: Index, i: u32) ?Ast.TokenIndex {
+    if (index < ast.nodes.len) {
+        var buffer: [1]Ast.Node.Index = undefined;
+        if (ast.fullFnProto(&buffer, index)) |proto| {
+            var j: usize = 0;
+            var it = proto.iterate(ast);
+            while (it.next()) |param| {
+                if (j == i) {
+                    return param.name_token;
+                }
+                j += 1;
+            }
+        }
+    }
+    return null;
+}
+
+export fn ast_fn_param_name(ptr: ?*Ast, index: Index, i: u32) ?[*]const u8 {
+    if (ptr) |ast| {
+       if (fnParamNameToken(ast, index, i)) |token| {
+           const name = ast.tokenSlice(token);
+           // std.log.debug("zig: param name {} {s} = '{s}' ({})", .{index, @tagName(tag), name, name.len});
+           const copy = gpa.allocator().dupeZ(u8, name) catch {
+               return null;
+           };
+           return copy.ptr;
+       }
+    }
+    return null;
+}
+
+
+export fn ast_fn_param_name_range(ptr: ?*Ast, index: Index, i: u32) SourceRange {
+    if (ptr == null) {
+        return SourceRange{};
+    }
+    const ast = ptr.?;
+    if (fnParamNameToken(ast, index, i)) |token| {
+        const loc = ast.tokenLocation(0, token);
+        const name = ast.tokenSlice(token);
+        // std.log.warn("zig: ast_node_spelling_range {} {s}", .{index, name});
+        //return r;
+        return SourceRange{
+            .start=SourceLocation{
+                .line=@intCast(loc.line),
+                .column=@intCast(loc.column),
+            },
+            .end=SourceLocation{
+                .line=@intCast(loc.line),
+                .column=@intCast(loc.column + name.len),
+            },
+        };
+    }
+//     std.log.warn("zig: ast_fn_param_name_range {} unknown {}", .{
+//         index, ast.nodes.items(.tag)[index]
+//     });
+    return SourceRange{};
+}
+
 // Lookup the token index that has the name/identifier for the given node
-fn findNodeIdentifier(ast: *Ast, index: TokenIndex) ?TokenIndex {
+fn findNodeIdentifier(ast: *Ast, index: Index) ?Index {
     if (index >= ast.nodes.len) {
         return null;
     }
@@ -442,7 +562,7 @@ fn findNodeIdentifier(ast: *Ast, index: TokenIndex) ?TokenIndex {
     };
 }
 
-fn indexOfNodeWithTag(ast: Ast, start_token: TokenIndex, tag: Tag) ?TokenIndex {
+fn indexOfNodeWithTag(ast: Ast, start_token: Index, tag: Tag) ?Index {
     if (start_token < ast.nodes.len) {
         const tags = ast.nodes.items(.tag);
         for (start_token..ast.nodes.len) |i| {
@@ -476,7 +596,7 @@ fn isTagVarDecl(tag: Tag) bool {
     };
 }
 
-fn isNodeConstVarDecl(ast: *Ast, index: TokenIndex) bool {
+fn isNodeConstVarDecl(ast: *Ast, index: Index) bool {
     if (index < ast.nodes.len and isTagVarDecl(ast.nodes.items(.tag)[index])) {
         const main_token = ast.nodes.items(.main_token)[index];
         return ast.tokens.items(.tag)[main_token] == .keyword_const;
@@ -582,7 +702,7 @@ test "spelling-range" {
 }
 
 // Caller must free with destroy_string
-export fn ast_node_new_spelling_name(ptr: ?*Ast, index: TokenIndex) ?[*]const u8 {
+export fn ast_node_new_spelling_name(ptr: ?*Ast, index: Index) ?[*]const u8 {
     if (ptr == null) {
         return null;
     }
@@ -640,11 +760,11 @@ export fn ast_format(
     return formatted.ptr;
 }
 
-fn visitOne(ptr: ?*Ast, node: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult {
+fn visitOne(ptr: ?*Ast, node: Index, parent: Index, data: ?*anyopaque) callconv(.C) VisitResult {
     _ = ptr;
     _ = parent;
     if (data) |index_ptr| {
-        const index: *TokenIndex = @ptrCast(@alignCast(index_ptr));
+        const index: *Index = @ptrCast(@alignCast(index_ptr));
         index.* = node;
     } else {
         std.log.warn("zig: visit one data is null", .{});
@@ -653,19 +773,19 @@ fn visitOne(ptr: ?*Ast, node: TokenIndex, parent: TokenIndex, data: ?*anyopaque)
 }
 
 // Visit one child
-export fn ast_visit_one_child(ptr: ?*Ast, node: TokenIndex) TokenIndex {
-    var result: TokenIndex = 0;
+export fn ast_visit_one_child(ptr: ?*Ast, node: Index) Index {
+    var result: Index = 0;
     ast_visit(ptr, node, visitOne, &result);
     return result;
 }
 
 
 
-fn visitAll(ptr: ?*Ast, child: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult {
+fn visitAll(ptr: ?*Ast, child: Index, parent: Index, data: ?*anyopaque) callconv(.C) VisitResult {
     _ = ptr;
     _ = parent;
     if (data) |nodes_ptr| {
-        const nodes: *std.ArrayList(TokenIndex) = @ptrCast(@alignCast(nodes_ptr));
+        const nodes: *std.ArrayList(Index) = @ptrCast(@alignCast(nodes_ptr));
         const remaining = nodes.unusedCapacitySlice();
         if (remaining.len > 0) {
             remaining[0] = child;
@@ -678,7 +798,7 @@ fn visitAll(ptr: ?*Ast, child: TokenIndex, parent: TokenIndex, data: ?*anyopaque
 }
 
 // Visit all nodes up to the capacity provided in the node list
-fn astVisitAll(ptr: ?*Ast, node: TokenIndex, nodes: *std.ArrayList(TokenIndex)) []TokenIndex {
+fn astVisitAll(ptr: ?*Ast, node: Index, nodes: *std.ArrayList(Index)) []Index {
     ast_visit(ptr, node, visitAll, @ptrCast(nodes));
     return nodes.items[0..nodes.items.len];
 }
@@ -711,7 +831,7 @@ test "child-node" {
 }
 
 
-pub fn assertNodeIndexValid(ptr:?*Ast, child: TokenIndex, parent: TokenIndex) void {
+pub fn assertNodeIndexValid(ptr:?*Ast, child: Index, parent: Index) void {
     if (ptr) |ast| {
         if (child == 0 or child > ast.nodes.len) {
             var stderr = std.io.getStdErr().writer();
@@ -725,10 +845,10 @@ pub fn assertNodeIndexValid(ptr:?*Ast, child: TokenIndex, parent: TokenIndex) vo
 }
 
 
-const CallbackFn = *const fn(ptr: ?*Ast, node: TokenIndex, parent: TokenIndex, data: ?*anyopaque) callconv(.C) VisitResult;
+const CallbackFn = *const fn(ptr: ?*Ast, node: Index, parent: Index, data: ?*anyopaque) callconv(.C) VisitResult;
 
 // Return whether to continue or not
-export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data: ?*anyopaque) void {
+export fn ast_visit(ptr: ?*Ast, parent: Index, callback: CallbackFn , data: ?*anyopaque) void {
     if (ptr == null) {
         std.log.warn("zig: ast_visit ast is null", .{});
         return;
@@ -1260,7 +1380,7 @@ fn testVisitTree(source: [:0]const u8, expectedTag: ?Tag) !void {
     try std.testing.expect(ast.errors.len == 0);
     try dumpAstFlat(&ast, stdout);
 
-    var nodes = try std.ArrayList(TokenIndex).initCapacity(allocator, ast.nodes.len+1);
+    var nodes = try std.ArrayList(Index).initCapacity(allocator, ast.nodes.len+1);
     nodes.appendAssumeCapacity(0); // Callback does not call on initial node
     defer nodes.deinit();
     try stdout.writeAll("Visited order\n");
@@ -1269,9 +1389,9 @@ fn testVisitTree(source: [:0]const u8, expectedTag: ?Tag) !void {
     try std.testing.expectEqual(ast.nodes.len, visited.len);
 
     // Sort visited nodes and make sure each was hit
-    std.mem.sort(TokenIndex, visited, {}, std.sort.asc(TokenIndex));
+    std.mem.sort(Index, visited, {}, std.sort.asc(Index));
     for (visited, 0..) |a, b| {
-        try std.testing.expectEqual(@as(TokenIndex, @intCast(b)), a);
+        try std.testing.expectEqual(@as(Index, @intCast(b)), a);
     }
 
     // If given, make sure the tag is actually used in the source parsed
