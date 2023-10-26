@@ -140,10 +140,11 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         return;
     }
 
-        ReferencedTopDUContext context;
+    ReferencedTopDUContext context;
     if (num_errors == 0) {
         ZigNode root = {session.ast(), 0};
         qCDebug(KDEV_ZIG) << "Parsing succeeded for: " << document().toUrl();
+
         DeclarationBuilder builder;
         builder.setParseSession(&session);
         context = builder.build(document(), &root, toUpdate);
@@ -181,21 +182,22 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         return;
     }
 
-    for (uint32_t i=0; i < num_errors; i++) {
-        ZigError error = ZigError(ast_error_at(session.ast(), i));
-        if(error.data() != nullptr) {
-            ProblemPointer p = ProblemPointer(new Problem());
-            p->setFinalLocation(DocumentRange(document(), KTextEditor::Range(
-                error.data()->range.start.line,
-                error.data()->range.start.column,
-                error.data()->range.end.line,
-                error.data()->range.end.column)));
-            p->setSource(IProblem::Parser);
-            p->setSeverity(static_cast<IProblem::Severity>(error.data()->severity));
-            p->setDescription(QString::fromUtf8(error.data()->message));
-
-            DUChainWriteLocker lock(DUChain::lock());
-            context->addProblem(p);
+    if (num_errors > 0) {
+        DUChainWriteLocker lock;
+        for (uint32_t i=0; i < num_errors; i++) {
+            ZigError error = ZigError(ast_error_at(session.ast(), i));
+            if(error.data() != nullptr) {
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(document(), KTextEditor::Range(
+                    error.data()->range.start.line,
+                    error.data()->range.start.column,
+                    error.data()->range.end.line,
+                    error.data()->range.end.column)));
+                p->setSource(IProblem::Parser);
+                p->setSeverity(static_cast<IProblem::Severity>(error.data()->severity));
+                p->setDescription(QString::fromUtf8(error.data()->message));
+                context->addProblem(p);
+            }
         }
     }
 

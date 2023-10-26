@@ -36,10 +36,7 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 
 VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    NodeKind kind = ast_node_kind(node.ast, node.index);
-    NodeKind parentKind = ast_node_kind(parent.ast, parent.index);
-
-    switch (kind){
+    switch (node.kind()){
         case Call:
             visitCall(node, parent);
             break;
@@ -92,8 +89,8 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
         // TODO: Find type of child or use generic expression parser?
         ZigNode owner = child.nextChild();
         if (node.kind() == Ident) {
-            QualifiedIdentifier ownerPath(Identifier(owner.spellingName()));
             DUChainReadLocker lock;
+            QualifiedIdentifier ownerPath(Identifier(owner.spellingName()));
             DUContext* context = topContext()->findContextAt(useRange.start);
             declarations = findSimpleVar(ownerPath, context);
             if (!declarations.isEmpty()) {

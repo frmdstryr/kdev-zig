@@ -9,6 +9,7 @@
 #include "language/duchain/types/typesystemdata.h"
 #include "language/duchain/types/typeregister.h"
 #include "language/duchain/types/typesystem.h"
+#include <QRegularExpression>
 
 #include "builtintype.h"
 
@@ -115,6 +116,42 @@ uint BuiltinType::hash() const
 {
     return KDevHash(AbstractType::hash()) << toString();
 }
+
+BuiltinType* BuiltinType::newFromName(const QString& name)
+{
+    static QRegularExpression unsignedIntPattern("u\\d+");
+    static QRegularExpression signedIntPattern("i\\d+");
+    static QRegularExpression floatPattern("f(16|32|64|80|128)");
+    if (name == "void")
+        return new BuiltinType("void");
+    if (name == "bool")
+        return new BuiltinType("bool");
+    if (name == "isize")
+        return new BuiltinType("isize");
+    if (name == "usize")
+        return new BuiltinType("usize");
+    if (name == "type")
+        return new BuiltinType("type");
+    if (name == "anyerror")
+        return new BuiltinType("anyerror");
+    if (name == "noreturn")
+        return new BuiltinType("noreturn");
+    if (name == "anyopaque")
+        return new BuiltinType("anyopaque");
+    if (name == "comptime_int")
+        return new BuiltinType("comptime_int");
+    if (name == "comptime_float")
+        return new BuiltinType("comptime_float");
+    if (unsignedIntPattern.match(name).hasMatch())
+        return new BuiltinType(name);
+    if (signedIntPattern.match(name).hasMatch())
+        return new BuiltinType(name);
+    if (floatPattern.match(name).hasMatch())
+        return new BuiltinType(name);
+    // TODO: c_ types
+    return nullptr;
+}
+
 
 
 }

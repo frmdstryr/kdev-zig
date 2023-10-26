@@ -53,9 +53,6 @@ public:
 protected:
     VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
 
-    // Returns nullptr if not a known builtin
-    BuiltinType* findBuiltinType(const QString& name) const;
-
 private:
     template <NodeKind Kind>
     VisitResult buildDeclaration(ZigNode &node, ZigNode &parent);

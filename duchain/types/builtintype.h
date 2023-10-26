@@ -45,6 +45,9 @@ public:
 
     using Data = BuiltinTypeData;
 
+    // Returns null if it is not a zig builtin type
+    static BuiltinType* newFromName(const QString &name);
+
     enum {
         Identity = 153
     };

@@ -70,7 +70,6 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 
     QString name = node.spellingName();
 
-    DUChainWriteLocker lock(DUChain::lock());
     createDeclaration<Kind>(node, name, hasContext);
     // qDebug() << "Open decl" << name.value;
     VisitResult ret = buildContext<Kind>(node, parent);
@@ -85,6 +84,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString 
 {
 
     auto range = editorFindSpellingRange(node, name);
+    DUChainWriteLocker lock;
 
     // qDebug()  << "Create decl node:" << node.index << " name:" << name->value << " range:" << range  << " kind:" << Kind;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
@@ -202,21 +202,16 @@ VisitResult DeclarationBuilder::updateDeclaration(ZigNode &node, ZigNode &parent
         auto decl = dynamic_cast<FunctionDeclaration*>(currentDeclaration());
         if (type && decl) {
             QString name = node.spellingName();
-            if (auto builtinType = findBuiltinType(name)) {
-                DUChainWriteLocker lock;
+            DUChainWriteLocker lock;
+            if (auto builtinType = BuiltinType::newFromName(name)) {
                 // qDebug() << "fn return type is" << returnType->toString();
                 type->setReturnType(AbstractType::Ptr(builtinType));
                 decl->setAbstractType(type);
             } else {
-                QList<Declaration*> declarations;
-                {
-                    DUChainReadLocker lock;
-                    QualifiedIdentifier typeName((Identifier(name)));
-                    declarations = findSimpleVar(typeName, currentContext());
-                }
+                QualifiedIdentifier typeName((Identifier(name)));
+                QList<Declaration*> declarations = findSimpleVar(typeName, currentContext());
                 if (!declarations.isEmpty()) {
                     Declaration* decl = declarations.first();
-                    DUChainWriteLocker lock;
                     type->setReturnType(decl->abstractType());
                     decl->setAbstractType(type);
                 } // else might not be defined yet
@@ -226,39 +221,6 @@ VisitResult DeclarationBuilder::updateDeclaration(ZigNode &node, ZigNode &parent
     return ContextBuilder::visitNode(node, parent);
 }
 
-BuiltinType* DeclarationBuilder::findBuiltinType(const QString &name) const
-{
-    static QRegularExpression unsignedIntPattern("u\\d+");
-    static QRegularExpression signedIntPattern("i\\d+");
-    static QRegularExpression floatPattern("f(16|32|64|80|128)");
-    if (name == "void")
-        return new BuiltinType("void");
-    if (name == "bool")
-        return new BuiltinType("bool");
-    if (name == "isize")
-        return new BuiltinType("isize");
-    if (name == "usize")
-        return new BuiltinType("usize");
-    if (name == "type")
-        return new BuiltinType("type");
-    if (name == "anyerror")
-        return new BuiltinType("anyerror");
-    if (name == "noreturn")
-        return new BuiltinType("noreturn");
-    if (name == "anyopaque")
-        return new BuiltinType("anyopaque");
-    if (name == "comptime_int")
-        return new BuiltinType("comptime_int");
-    if (name == "comptime_float")
-        return new BuiltinType("comptime_float");
-    if (unsignedIntPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    if (signedIntPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    if (floatPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    // TODO: c_ types
-    return nullptr;
-}
+
 
 } // namespace zig

@@ -20,7 +20,7 @@
 
 extern "C" {
 
-enum AstType {
+enum NodeTag {
     /// sub_list[lhs...rhs]
     AstType_root,
     /// `usingnamespace lhs;`. rhs unused. main_token is `usingnamespace`.
@@ -545,6 +545,7 @@ ZError *ast_error_at(ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
 NodeKind ast_node_kind(ZAst *tree, uint32_t node);
+NodeTag ast_node_tag(ZAst* tree, uint32_t node);
 uint32_t ast_visit_one_child(ZAst *tree, uint32_t node);
 
 const char *ast_node_new_spelling_name(ZAst *tree, uint32_t node);

@@ -384,6 +384,15 @@ export fn ast_node_kind(ptr: ?*Ast, index: TokenIndex) NodeKind {
     return .Unknown;
 }
 
+export fn ast_node_tag(ptr: ?*Ast, index: TokenIndex) Ast.Node.Tag {
+    if (ptr) |ast| {
+       if (index < ast.nodes.len) {
+            return ast.nodes.items(.tag)[index];
+        }
+    }
+    return .root; // Invalid unless index == 0
+}
+
 // Lookup the token index that has the name/identifier for the given node
 fn findNodeIdentifier(ast: *Ast, index: TokenIndex) ?TokenIndex {
     if (index >= ast.nodes.len) {
@@ -731,21 +740,27 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
     }
     const tag = ast.nodes.items(.tag)[parent];
     const d = ast.nodes.items(.data)[parent];
-    std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
-        @tagName(tag),
-        parent,
-        ast.tokenSlice(ast.nodes.items(.main_token)[parent])
-    });
+    if (@import("builtin").is_test) {
+        std.log.debug("zig: ast_visit {s} at {} '{s}'", .{
+            @tagName(tag),
+            parent,
+            ast.tokenSlice(ast.nodes.items(.main_token)[parent])
+        });
+    }
     switch (tag) {
-        .root => for (ast.rootDecls()) |child| {
-            // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
-                .Break => return,
-                .Continue => continue,
-                .Recurse => ast_visit(ast, child, callback, data),
-            }
-        },
+        // Leaf nodes have no children
+        .@"continue",
+        .string_literal,
+        .multiline_string_literal,
+        .char_literal,
+        .number_literal,
+        .enum_literal,
+        .anyframe_literal,
+        .unreachable_literal,
+        .error_value,
+        .error_set_decl,
+        .identifier => {},
+
         // Recurse to both lhs and rhs, neither are optional
         .for_simple,
         .if_simple,
@@ -827,6 +842,9 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
             }
         },
         // Only walk data lhs
+        .asm_simple,
+        .asm_output,
+        .asm_input,
         .bool_not,
         .negation,
         .bit_not,
@@ -892,6 +910,8 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
         .array_init_one,
         .array_init_dot_two,
         .array_init_dot_two_comma,
+        .tagged_union_two,
+        .tagged_union_two_trailing,
         .@"catch",
         .switch_case_one,
         .switch_case_inline_one,
@@ -925,6 +945,8 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
         .builtin_call_comma,
         .container_decl,
         .container_decl_trailing,
+        .tagged_union,
+        .tagged_union_trailing,
         .array_init_dot,
         .array_init_dot_comma,
         .block,
@@ -949,6 +971,8 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
         .async_call_comma,
         .container_decl_arg,
         .container_decl_arg_trailing,
+        .tagged_union_enum_tag,
+        .tagged_union_enum_tag_trailing,
         .@"switch",
         .switch_comma,
         .array_init,
@@ -1092,7 +1116,19 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
                 }
             }
         },
-
+        .global_var_decl => {
+            const var_data = ast.extraData(d.lhs, Ast.Node.GlobalVarDecl);
+            inline for (.{var_data.type_node, var_data.align_node, var_data.addrspace_node, var_data.section_node, d.rhs}) |child| {
+                if (child != 0 ) {
+                    assertNodeIndexValid(ast, child, parent);
+                    switch (callback(ast, child, parent, data)) {
+                        .Break => return,
+                        .Continue => {},
+                        .Recurse => ast_visit(ast, child, callback, data),
+                    }
+                }
+            }
+        },
         .local_var_decl => {
             const var_data = ast.extraData(d.lhs, Ast.Node.LocalVarDecl);
             inline for (.{var_data.type_node, var_data.align_node, d.rhs}) |child| {
@@ -1120,6 +1156,20 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
 
         },
 
+        .container_field => {
+            const field_data = ast.extraData(d.rhs, Ast.Node.ContainerField);
+            inline for (.{d.lhs, field_data.align_expr, field_data.value_expr}) |child| {
+                if (child != 0 ) {
+                    assertNodeIndexValid(ast, child, parent);
+                    switch (callback(ast, child, parent, data)) {
+                        .Break => return,
+                        .Continue => {},
+                        .Recurse => ast_visit(ast, child, callback, data),
+                    }
+                }
+            }
+        },
+
         .slice => {
             const slice_data = ast.extraData(d.rhs, Ast.Node.Slice);
             inline for (.{d.lhs, slice_data.start, slice_data.end}) |child| {
@@ -1145,22 +1195,52 @@ export fn ast_visit(ptr: ?*Ast, parent: TokenIndex, callback: CallbackFn , data:
 
         },
 
-        // Leaf nodes have no children
-        .@"continue",
-        .string_literal,
-        .multiline_string_literal,
-        .char_literal,
-        .number_literal,
-        .enum_literal,
-        .anyframe_literal,
-        .unreachable_literal,
-        .error_value,
-        .identifier => {},
-        else => {
-            if (@import("builtin").is_test) {
-                std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+        .@"asm" => {
+            {
+                const child = d.lhs;
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => {},
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
             }
-        }
+            const asm_data = ast.extraData(d.rhs, Ast.Node.Asm);
+            for (ast.extra_data[asm_data.items_start..asm_data.items_end]) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => ast_visit(ast, child, callback, data),
+                }
+            }
+        },
+        .root => for (ast.rootDecls()) |child| {
+            // std.log.warn("zig: ast_visit root_decl index={}", .{decl_index});
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
+                .Break => return,
+                .Continue => continue,
+                .Recurse => ast_visit(ast, child, callback, data),
+            }
+        },
+        .ptr_type => {
+            // TODO
+            std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+        },
+        .ptr_type_bit_range => {
+            // TODO
+            std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+        },
+        .assign_destructure => {
+            // TODO
+            std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+        },
+//         else => {
+//             if (@import("builtin").is_test) {
+//                 std.log.debug("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+//             }
+//         }
     }
     return;
 }
@@ -1208,7 +1288,7 @@ test "ast-visit" {
     try testVisitTree("test { }", .test_decl);
     try testVisitTree("test { var a = 0; }", .simple_var_decl);
     try testVisitTree("test { var a: u8 align(4) = 0; }", .local_var_decl);
-    //try testVisitTree("var a: u8 align(4) = 0;", .global_var_decl); ???
+    try testVisitTree("export const isr_vector linksection(\"isr_vector\") = [_]ISR{};", .global_var_decl);
     try testVisitTree("test { var a align(4) = 0; }", .aligned_var_decl);
     try testVisitTree("test { var a = 0; errdefer {a = 1;} }", .@"errdefer");
     try testVisitTree("test { errdefer |err| { @panic(@errorName(err));} }", .@"errdefer");
@@ -1348,4 +1428,52 @@ test "ast-visit" {
     try testVisitTree("test {var f: u8 = 0;}", .identifier);
     try testVisitTree("const A = enum {a, b, c}; test {var x: A = .a;}", .enum_literal);
     try testVisitTree("test {var x = \"abcd\";}", .string_literal);
+    try testVisitTree("test {var x = \\\\aba\n;}", .multiline_string_literal);
+    try testVisitTree("test {var x = (1 + 1);}", .grouped_expression);
+    try testVisitTree("test {var x = @min(1, 2);}", .builtin_call_two);
+    try testVisitTree("test {var x = @min(1, 2,);}", .builtin_call_two_comma);
+    try testVisitTree("test {var x = @min(1, 2, 3);}", .builtin_call);
+    try testVisitTree("test {var x = @min(1, 2, 3,);}", .builtin_call_comma);
+    try testVisitTree("const E = error{a, b};", .error_set_decl);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8};", .container_decl);
+    try testVisitTree("const A = struct {a: u8, b: u8, c: u8,};", .container_decl_trailing);
+    try testVisitTree("const A = struct {a: u8, b: u8};", .container_decl_two);
+    try testVisitTree("const A = struct {a: u8, b: u8, };", .container_decl_two_trailing);
+    try testVisitTree("const A = struct(u16) {a: u8, b: u8};", .container_decl_arg);
+    try testVisitTree("const A = struct(u16) {a: u8, b: u8,};", .container_decl_arg_trailing);
+
+    try testVisitTree("const V = union(enum) {int: i32, boolean: bool, none};", .tagged_union);
+    try testVisitTree("const V = union(enum) {int: i32, boolean: bool, none,};", .tagged_union_trailing);
+    try testVisitTree("const V = union(enum) {int: i32, boolean: bool};", .tagged_union_two);
+    try testVisitTree("const V = union(enum) {int: i32, boolean: bool,};", .tagged_union_two_trailing);
+    try testVisitTree("const V = union(enum(u8)) {int: i32, boolean: bool};", .tagged_union_enum_tag);
+    try testVisitTree("const V = union(enum(u8)) {int: i32, boolean: bool,};", .tagged_union_enum_tag_trailing);
+
+    try testVisitTree("const A = struct {a: u8 = 0};", .container_field_init);
+    try testVisitTree("const A = struct {a: u8 align(4)};", .container_field_align);
+    try testVisitTree("const A = struct {a: u8 align(4) = 0};", .container_field);
+    try testVisitTree("pub fn foo() u8 { return 1; } test { const x = comptime foo(); }", .@"comptime");
+    try testVisitTree("pub fn foo() u8 { return 1; } test { const x = nosuspend foo(); }", .@"nosuspend");
+    try testVisitTree("test {}", .block_two );
+    try testVisitTree("test {var a = 1;}", .block_two_semicolon );
+    try testVisitTree("test {if (1) {} if (2) {} if (3) {} }", .block );
+    try testVisitTree("test {var a = 1; var b = 2; var c = 3;}", .block_semicolon );
+    try testVisitTree("test { asm(\"nop\"); }", .asm_simple);
+    const asm_source =
+        \\pub fn syscall0(number: SYS) usize {
+        \\  return asm volatile ("svc #0"
+        \\    : [ret] "={x0}" (-> usize),
+        \\    : [number] "{x8}" (@intFromEnum(number)),
+        \\    : "memory", "cc"
+        \\  );
+        \\}
+    ;
+    try testVisitTree(asm_source, .@"asm");
+    try testVisitTree(asm_source, .asm_input);
+    try testVisitTree(asm_source, .asm_output);
+
+    try testVisitTree("const e = error.EndOfStream;", .error_value);
+    try testVisitTree("const e = error{a} ! error{b};", .error_union);
+
+
 }

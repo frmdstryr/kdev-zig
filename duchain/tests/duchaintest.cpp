@@ -62,7 +62,6 @@ ReferencedTopDUContext parseCode(QString code)
     declarationBuilder.setParseSession(&session);
     useBuilder.setParseSession(&session);
 
-    DUChainWriteLocker lock;
     ReferencedTopDUContext context = declarationBuilder.build(document, &root);
     useBuilder.buildUses(&root);
 
