@@ -121,7 +121,7 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
         declarations = findSimpleVar(currentPath, context, DUContext::OnlyFunctions);
     }
 
-    if (declarations.isEmpty() && show_error) {
+    if (declarations.isEmpty() && show_error && !functionName.startsWith("@")) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);

@@ -250,12 +250,32 @@ void DUChainTest::testVarType()
     QFETCH(QString, code);
     QFETCH(QString, var);
     QFETCH(QString, type);
+    QFETCH(QString, container);
+
     qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code);
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    auto decls = context->findDeclarations(Identifier(var));
+    DUContext *localContext;
+    if (container.isEmpty()) {
+        localContext = context;
+    } else {
+        auto containerDecls = context->findDeclarations(Identifier(container));
+        QCOMPARE(containerDecls.size(), 1);
+        QVERIFY(containerDecls.first());
+        localContext = containerDecls.first()->internalContext();
+        QVERIFY(localContext);
+    }
+
+    qDebug() << "Locals are:";
+    for (const KDevelop::Declaration *decl : localContext->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier();
+        if (decl->abstractType()) {
+            qDebug() << " type" << decl->abstractType()->toString();
+        }
+    }
+    auto decls = localContext->findDeclarations(Identifier(var));
     QVERIFY(decls.size() ==  1);
     const KDevelop::Declaration *decl = decls.first();
     qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
@@ -268,11 +288,13 @@ void DUChainTest::testVarType_data()
     QTest::addColumn<QString>("code");
     QTest::addColumn<QString>("var");
     QTest::addColumn<QString>("type");
+    QTest::addColumn<QString>("container");
 
-    QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8";
-    QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "struct Foo";
-    QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()";
-    QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()";
-    QTest::newRow("fn u8") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)";
+    QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8" << "";
+    QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "struct Foo" << "";
+    QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
+    QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";
+    QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
+    QTest::newRow("fn arg") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)"<< "";
 
 }

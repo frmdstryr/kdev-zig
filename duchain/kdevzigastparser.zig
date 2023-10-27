@@ -442,7 +442,7 @@ export fn ast_node_tag(ptr: ?*Ast, index: Index) Ast.Node.Tag {
     return .root; // Invalid unless index == 0
 }
 
-// Return var type or 0
+// Return var / field type or 0
 export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
     if (ptr) |ast| {
        if (index < ast.nodes.len) {
@@ -452,6 +452,10 @@ export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
                 .aligned_var_decl => ast.alignedVarDecl(index).ast.type_node,
                 .global_var_decl => ast.globalVarDecl(index).ast.type_node,
                 .local_var_decl => ast.localVarDecl(index).ast.type_node,
+                // All are data.lhs
+                .container_field,
+                .container_field_align,
+                .container_field_init => ast.nodes.items(.data)[index].lhs,
                 else => 0,
             };
         }

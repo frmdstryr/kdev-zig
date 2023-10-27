@@ -131,7 +131,7 @@ FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node)
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
 AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
-    if (Kind == VarDecl || Kind == ParamDecl) {
+    if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
         // Simple var types...
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
         if (!typeNode.isRoot()) {
@@ -240,6 +240,9 @@ void DeclarationBuilder::updateFunctionDeclaration(ZigNode &node)
             auto paramRange = node.paramNameRange(i);
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
             fn->addArgument(param->abstractType(), i);
+            VisitResult ret = buildContext<ParamDecl>(paramType, node);
+            eventuallyAssignInternalContext();
+            closeDeclaration();
         }
     }
 
