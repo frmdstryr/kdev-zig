@@ -200,12 +200,16 @@ void DUChainTest::testVarUsage()
     DUChainReadLocker lock;
     uint32_t i = 0;
     for (const QString &param : uses) {
-        QStringList parts = param.split("@");
+        QStringList parts = param.split("/");
         QString use = parts[0];
         RangeInRevision expectedRange = rangeFromString(parts[1]);
         qDebug() << "Checking for use of" << use;
-        auto localContext = context->findContextAt(cursor);
+        auto localContext = cursor.isValid() ? context->findContextAt(cursor) : context;
         //qDebug() << "Local decls at:" << cursor;
+        qDebug() << "Locals are:";
+        for (const KDevelop::Declaration *decl : localContext->localDeclarations()) {
+            qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+        }
 
         auto decls = localContext->findDeclarations(Identifier(use));
         for (const KDevelop::Declaration *decl : decls) {
@@ -229,9 +233,13 @@ void DUChainTest::testVarUsage_data()
     QTest::addColumn<QStringList>("uses");
 
     QTest::newRow("struct init") << CursorInRevision(3, 0)
-        << "const Foo = struct{};\ntest {\n var x = Foo{};\n}" << QStringList { "Foo@2,9,2,12" };
+        << "const Foo = struct{};\ntest {\n var x = Foo{};\n}" << QStringList { "Foo/2,9,2,12" };
     QTest::newRow("fn call") << CursorInRevision(3, 0)
-        << "pub fn main() void {}\ntest {\n main();\n}" << QStringList { "main@2,1,2,5" };
+        << "pub fn main() void {}\ntest {\n main();\n}" << QStringList { "main/2,1,2,5" };
+    QTest::newRow("fn arg") << CursorInRevision(2, 0)
+        << "pub fn main(a: u8) void {\nconst b=1; return a;\n}" << QStringList { "a/1,8,1,9" };
+    // QTest::newRow("builtin call") << CursorInRevision(-1, -1)
+    //     << "const a = @min(1, 2);\n" << QStringList { "@min/2,10,2,14" };
 
 }
 

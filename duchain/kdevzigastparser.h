@@ -567,6 +567,8 @@ void destroy_string(const char *str);
 
 void ast_visit(ZAst *tree, NodeIndex node, CallbackFn callback, void *data);
 
+bool is_zig_builtin_fn_name(const char *name);
+
 }
 
 #endif // ZIGAST_H

@@ -47,10 +47,10 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
     return
         kind == Module           ? DUContext::Namespace
         :  kind == ContainerDecl ? DUContext::Namespace
-        :  kind == TestDecl      ? DUContext::Other
         :  kind == EnumDecl      ? DUContext::Enum
-        :  kind == FunctionDecl  ? DUContext::Function
+        :  kind == FunctionDecl  ? DUContext::Function // Function is only for arguments
         :  kind == ErrorDecl     ? DUContext::Enum
+        :  kind == TestDecl      ? DUContext::Other
         :  kind == BlockDecl     ? DUContext::Other
         :  kind == VarDecl       ? DUContext::Other
         // TODO: Template decl?

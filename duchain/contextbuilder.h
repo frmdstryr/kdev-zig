@@ -48,7 +48,7 @@ protected:
     template<NodeKind Kind>
     KDevelop::DUContext *createContext(ZigNode *node, const KDevelop::QualifiedIdentifier& scopeId);
 
-    void visitChildren(ZigNode &node);
+    virtual void visitChildren(ZigNode &node);
 
     void startVisiting(ZigNode *node) override;
     void setContextOnNode(ZigNode *node, KDevelop::DUContext *context) override;

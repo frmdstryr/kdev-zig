@@ -20,6 +20,7 @@
 #include <language/duchain/parsingenvironment.h>
 #include <interfaces/icore.h>
 #include <interfaces/idocumentcontroller.h>
+#include <language/duchain/declaration.h>
 
 #include "zigducontext.h"
 #include "nodetraits.h"
@@ -89,14 +90,12 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
     Q_UNUSED(parent);
 
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
-    QString name = node.spellingName();
 
     if (hasContext) {
-        // qDebug() << "Open context node:" << node.index;
+        QString name = node.spellingName();
         openContext(&node, NodeTraits::contextType(Kind), &name);
         visitChildren(node);
         closeContext();
-        // qDebug() << "Close context node:" << node.index;
         return Continue;
     }
     return Recurse;
@@ -173,6 +172,13 @@ QList<Declaration*> ContextBuilder::findSimpleVar(
     QList<Declaration *> declarations;
     if (context) {
         DUContext* parentContext = context;
+        Identifier localIdent(ident.last());
+        declarations = context->findLocalDeclarations(
+                localIdent,
+                CursorInRevision::invalid(),
+                nullptr,
+                AbstractType::Ptr(),
+                flag);
         while (declarations.isEmpty() && parentContext) {
             declarations = parentContext->findDeclarations(
                 ident,

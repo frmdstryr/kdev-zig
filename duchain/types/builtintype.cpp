@@ -12,6 +12,7 @@
 #include <QRegularExpression>
 
 #include "builtintype.h"
+#include "../kdevzigastparser.h"
 
 namespace Zig {
 
@@ -33,14 +34,16 @@ void BuiltinTypeData::setData(const QString& name)
     if (data.size() > 0) {
         size_t len = std::min(static_cast<size_t>(data.size()), sizeof(m_dataType));
         Q_ASSERT(len <= sizeof(m_dataType));
-        memcpy(m_dataType, data, len);
+        m_dataTypeLen = len;
+        memcpy(m_dataType, data, m_dataTypeLen);
     }
 }
 
 BuiltinTypeData::BuiltinTypeData(const BuiltinTypeData& rhs)
     :AbstractTypeData(rhs)
 {
-    memcpy(m_dataType, rhs.m_dataType, sizeof(m_dataType));
+    m_dataTypeLen = std::min(static_cast<size_t>(rhs.m_dataTypeLen), sizeof(m_dataType));
+    memcpy(m_dataType, rhs.m_dataType, m_dataTypeLen);
 }
 
 REGISTER_TYPE(BuiltinType);
@@ -96,7 +99,7 @@ BuiltinType::~BuiltinType()
 QString BuiltinType::toString() const
 {
     const auto n = std::min(
-        strlen(d_func()->m_dataType),
+        static_cast<size_t>(d_func()->m_dataTypeLen),
         sizeof(d_func()->m_dataType)
     );
     return QString::fromUtf8(d_func()->m_dataType, n);
@@ -117,43 +120,54 @@ uint BuiltinType::hash() const
     return KDevHash(AbstractType::hash()) << toString();
 }
 
-BuiltinType* BuiltinType::newFromName(const QString& name)
+bool BuiltinType::isBuiltinFunc(const QString& name)
 {
+   return is_zig_builtin_fn_name(name.toUtf8());
+}
+
+bool BuiltinType::isBuiltinType(const QString& name)
+{
+    // TODO: Pull these from zig directly somehow
     static QRegularExpression unsignedIntPattern("u\\d+");
     static QRegularExpression signedIntPattern("i\\d+");
     static QRegularExpression floatPattern("f(16|32|64|80|128)");
-    if (name == "void")
-        return new BuiltinType("void");
-    if (name == "type")
-        return new BuiltinType("type");
-    if (name == "bool")
-        return new BuiltinType("bool");
-    if (name == "isize")
-        return new BuiltinType("isize");
-    if (name == "usize")
-        return new BuiltinType("usize");
-    if (name == "type")
-        return new BuiltinType("type");
-    if (name == "anyerror")
-        return new BuiltinType("anyerror");
-    if (name == "noreturn")
-        return new BuiltinType("noreturn");
-    if (name == "anyopaque")
-        return new BuiltinType("anyopaque");
-    if (name == "comptime_int")
-        return new BuiltinType("comptime_int");
-    if (name == "comptime_float")
-        return new BuiltinType("comptime_float");
-    if (unsignedIntPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    if (signedIntPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    if (floatPattern.match(name).hasMatch())
-        return new BuiltinType(name);
-    // TODO: c_ types
-    return nullptr;
+    return (
+        name == "void"
+        || name == "type"
+        || name == "bool"
+        || name == "isize"
+        || name == "usize"
+        || name == "anyerror"
+        || name == "anyframe"
+        || name == "noreturn"
+        || name == "anyopaque"
+        || name == "comptime_int"
+        || name == "comptime_float"
+        || name == "c_int"
+        || name == "c_long"
+        || unsignedIntPattern.match(name).hasMatch()
+        || signedIntPattern.match(name).hasMatch()
+        || floatPattern.match(name).hasMatch()
+    );
 }
 
+bool BuiltinType::isBuiltinVariable(const QString& name)
+{
+    // TODO: Pull these from zig directly somehow
+    return (
+        name == "null"
+        || name == "undefined"
+        || name == "true"
+        || name == "false"
+    );
+}
+
+BuiltinType* BuiltinType::newFromName(const QString& name)
+{
+    if (BuiltinType::isBuiltinType(name))
+        return new BuiltinType(name);
+    return nullptr;
+}
 
 
 }

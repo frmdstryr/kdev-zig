@@ -4,6 +4,7 @@
 #include "language/duchain/types/typesystemdata.h"
 #include <QString>
 
+
 namespace Zig
 {
 
@@ -22,6 +23,7 @@ public:
     void setData(const QString &name);
 
     char m_dataType[16];
+    uint8_t m_dataTypeLen = 0;
 };
 
 class KDEVPLATFORMLANGUAGE_EXPORT BuiltinType : public AbstractType
@@ -46,6 +48,9 @@ public:
     using Data = BuiltinTypeData;
 
     // Returns null if it is not a zig builtin type
+    static bool isBuiltinFunc(const QString &name);
+    static bool isBuiltinType(const QString &name);
+    static bool isBuiltinVariable(const QString &name);
     static BuiltinType* newFromName(const QString &name);
 
     enum {

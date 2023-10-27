@@ -52,16 +52,19 @@ public:
 
 protected:
     VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
+    void visitChildren(ZigNode &node) override;
 
 private:
     template <NodeKind Kind>
     VisitResult buildDeclaration(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind>
-    void updateParentDeclaration(ZigNode &node, ZigNode &parent, KDevelop::Declaration* parentDecl);
-
-    template <NodeKind Kind>
-    KDevelop::Declaration *createDeclaration(ZigNode &node, const QString &name, bool hasContext);
+    KDevelop::Declaration *createDeclaration(
+        ZigNode &node,
+        const QString &name,
+        bool hasContext,
+        KDevelop::RangeInRevision &range
+    );
 
     template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
     typename IdType<Kind>::Type::Ptr createType(ZigNode &node);
@@ -101,6 +104,9 @@ private:
 
     template <NodeKind Kind>
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
+
+    // Before children are visited
+    void updateFunctionDeclaration(ZigNode &node);
 };
 
 }

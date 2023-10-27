@@ -275,7 +275,6 @@ export fn ast_node_spelling_range(ptr: ?*Ast, index: Index) SourceRange {
 }
 
 
-
 export fn ast_node_extent(ptr: ?*Ast, index: Index) SourceRange {
     if (ptr == null) {
         std.log.warn("zig: ast_node_extent ast null", .{});
@@ -342,9 +341,11 @@ pub fn kindFromAstNode(ast: *Ast, index: Index) ?NodeKind {
         .struct_init_dot_two_comma,
         .struct_init_one,
         .struct_init_one_comma => .ContainerInit,
+
         .builtin_call,
         .builtin_call_comma,
-
+        .builtin_call_two,
+        .builtin_call_two_comma,
         .call,
         .call_comma,
         .call_one,
@@ -354,6 +355,48 @@ pub fn kindFromAstNode(ast: *Ast, index: Index) ?NodeKind {
         .async_call_one,
         .async_call_one_comma => .Call,
 
+        .equal_equal,
+        .bang_equal,
+        .less_than,
+        .greater_than,
+        .less_or_equal,
+        .greater_or_equal,
+        .mul,
+        .div,
+        .mod,
+        .mul_wrap,
+        .mul_sat,
+        .add,
+        .sub,
+        .add_wrap,
+        .sub_wrap,
+        .add_sat,
+        .sub_sat,
+        .shl,
+        .shl_sat,
+        .shr,
+        .bit_and,
+        .bit_xor,
+        .bit_or,
+        .bool_and,
+        .bool_or,
+        .assign_mul,
+        .assign_div,
+        .assign_mod,
+        .assign_add,
+        .assign_sub,
+        .assign_shl,
+        .assign_shl_sat,
+        .assign_shr,
+        .assign_bit_and,
+        .assign_bit_xor,
+        .assign_bit_or,
+        .assign_mul_wrap,
+        .assign_add_wrap,
+        .assign_sub_wrap,
+        .assign_mul_sat,
+        .assign_add_sat,
+        .assign_sub_sat,
         .assign,
         .assign_destructure => .VarAccess,
 
@@ -362,6 +405,8 @@ pub fn kindFromAstNode(ast: *Ast, index: Index) ?NodeKind {
         .unwrap_optional,
         .error_value,
         .field_access => .FieldAccess,
+        .array_mult,
+        .array_cat,
         .array_access => .ArrayAccess,
 
         .string_literal,
@@ -552,6 +597,10 @@ fn findNodeIdentifier(ast: *Ast, index: Index) ?Index {
         // Main token is identifier
         .identifier,
         .string_literal,
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
         .container_field,
         .container_field_init,
         .container_field_align => ast.nodes.items(.main_token)[index],
@@ -661,6 +710,7 @@ test "find-node-ident" {
     try testNodeIdent("pub fn main() void { async foo(1,2); }", .async_call, "foo");
     try testNodeIdent("pub fn main() void { foo(1,2,); }", .call_comma, "foo");
     try testNodeIdent("pub fn main() void { async foo(1,2,); }", .async_call_comma, "foo");
+    try testNodeIdent("pub fn main() u8 { return @min(1,2); }", .builtin_call_two, "@min");
 }
 
 fn testSpellingRange(source: [:0]const u8, tag: Tag, expected: SourceRange) !void {
@@ -699,6 +749,8 @@ test "spelling-range" {
         .start=.{.line=1, .column=10}, .end=.{.line=1, .column=13}});
     try testSpellingRange("var x = y.foo();", .call_one, .{
         .start=.{.line=0, .column=10}, .end=.{.line=0, .column=13}});
+    try testSpellingRange("var x = @min(1, 2);", .builtin_call_two, .{
+        .start=.{.line=0, .column=8}, .end=.{.line=0, .column=12}});
 }
 
 // Caller must free with destroy_string
@@ -1596,4 +1648,145 @@ test "ast-visit" {
     try testVisitTree("const e = error{a} ! error{b};", .error_union);
 
 
+}
+
+
+const BUILTIN_FN_NAMES = [_][:0]const u8{
+    "@addrSpaceCast",
+    "@addWithOverflow",
+    "@alignCast",
+    "@alignOf",
+    "@as",
+    "@atomicLoad",
+    "@atomicRmw",
+    "@atomicStore",
+    "@bitCast",
+    "@bitOffsetOf",
+    "@bitReverse",
+    "@bitSizeOf",
+    "@breakpoint",
+    "@byteSwap",
+    "@call",
+    "@cDefine",
+    "@ceil",
+    "@cImport",
+    "@cInclude",
+    "@clz",
+    "@cmpxchgStrong",
+    "@cmpxchgWeak",
+    "@compileError",
+    "@compileLog",
+    "@constCast",
+    "@cos",
+    "@ctz",
+    "@cUndef",
+    "@cVaArg",
+    "@cVaCopy",
+    "@cVaEnd",
+    "@cVaStart",
+    "@divExact",
+    "@divFloor",
+    "@divTrunc",
+    "@embedFile",
+    "@enumFromInt",
+    "@errorFromInt",
+    "@errorName",
+    "@errorReturnTrace",
+    "@errSetCast",
+    "@exp",
+    "@exp2",
+    "@export",
+    "@extern",
+    "@fabs",
+    "@fence",
+    "@field",
+    "@fieldParentPtr",
+    "@floatCast",
+    "@floatFromInt",
+    "@floor",
+    "@frameAddress",
+    "@hasDecl",
+    "@hasField",
+    "@import",
+    "@inComptime",
+    "@intCast",
+    "@intFromBool",
+    "@intFromEnum",
+    "@intFromError",
+    "@intFromFloat",
+    "@intFromPtr",
+    "@log",
+    "@log10",
+    "@log2",
+    "@max",
+    "@memcpy",
+    "@memset",
+    "@min",
+    "@mod",
+    "@mulAdd",
+    "@mulWithOverflow",
+    "@offsetOf",
+    "@panic",
+    "@popCount",
+    "@prefetch",
+    "@ptrCast",
+    "@ptrFromInt",
+    "@reduce",
+    "@rem",
+    "@returnAddress",
+    "@round",
+    "@select",
+    "@setAlignStack",
+    "@setCold",
+    "@setEvalBranchQuota",
+    "@setFloatMode",
+    "@setRuntimeSafety",
+    "@shlExact",
+    "@shlWithOverflow",
+    "@shrExact",
+    "@shuffle",
+    "@sin",
+    "@sizeOf",
+    "@splat",
+    "@sqrt",
+    "@src",
+    "@subWithOverflow",
+    "@tagName",
+    "@tan",
+    "@This",
+    "@trap",
+    "@trunc",
+    "@truncate",
+    "@Type",
+    "@typeInfo",
+    "@typeName",
+    "@TypeOf",
+    "@unionInit",
+    "@Vector",
+    "@volatileCast",
+    "@wasmMemoryGrow",
+    "@wasmMemorySize",
+    "@workGroupId",
+    "@workGroupSize",
+    "@workItemId",
+};
+
+export fn is_zig_builtin_fn_name(ptr: [*c]const u8) bool {
+    const len = strlen(ptr);
+    if (len > 0) {
+        // TODO: Pull from BuiltinFn.zig
+        const name = ptr[0..len];
+        for (BUILTIN_FN_NAMES) |n| {
+            if (std.mem.eql(u8, name, n)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+test "is_zig_builtin_fn_name" {
+    try std.testing.expectEqual(true, is_zig_builtin_fn_name("@min"));
+    try std.testing.expectEqual(false, is_zig_builtin_fn_name("@foo"));
+    try std.testing.expectEqual(false, is_zig_builtin_fn_name(""));
 }
