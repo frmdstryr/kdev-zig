@@ -498,7 +498,11 @@ enum NodeKind
     ArrayAccess,
     PtrAccess, // Deref
     Literal,
-    Ident
+    Ident,
+    If,
+    For,
+    While,
+    Switch
 };
 
 enum VisitResult
@@ -506,6 +510,12 @@ enum VisitResult
     Break = 0,
     Continue = 1,
     Recurse = 2
+};
+
+enum CaptureType
+{
+    Payload = 0,
+    Error
 };
 
 
@@ -536,6 +546,7 @@ struct ZError
 };
 
 typedef uint32_t NodeIndex;
+typedef uint32_t TokenIndex;
 typedef VisitResult (*CallbackFn)(ZAst* tree, NodeIndex node, NodeIndex parent, void *data);
 
 
@@ -554,16 +565,20 @@ NodeIndex ast_fn_return_type(ZAst *tree, NodeIndex node);
 uint32_t ast_fn_param_count(ZAst *tree, NodeIndex node);
 NodeIndex ast_fn_param_at(ZAst *tree, NodeIndex node, uint32_t i);
 
+
+TokenIndex ast_node_name_token(ZAst *tree, NodeIndex node);
+TokenIndex ast_node_capture_token(ZAst *tree, NodeIndex node, CaptureType capture);
+TokenIndex ast_fn_param_token(ZAst *tree, NodeIndex node, uint32_t i);
+
+
 // NOTE: The caller must free with destroy_string
-const char *ast_fn_param_name(ZAst *tree, NodeIndex node, uint32_t i);
-const char *ast_node_new_spelling_name(ZAst *tree, NodeIndex node);
+const char *ast_token_slice(ZAst *tree, TokenIndex token);
+void destroy_string(const char *str);
 
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
-SourceRange ast_node_spelling_range(ZAst *tree, NodeIndex node);
-SourceRange ast_fn_param_name_range(ZAst *tree, NodeIndex node, uint32_t i);
+SourceRange ast_token_range(ZAst *tree, TokenIndex token);
 SourceRange ast_node_extent(ZAst *tree, NodeIndex node);
 
-void destroy_string(const char *str);
 
 void ast_visit(ZAst *tree, NodeIndex node, CallbackFn callback, void *data);
 

@@ -58,14 +58,24 @@ ZigNode ZigNode::paramType(uint32_t i)
 
 QString ZigNode::paramName(uint32_t i)
 {
-    ZigString name = ZigString(ast_fn_param_name(ast, index, i));
-    QString result = (*name == nullptr) ? "" : QString::fromUtf8(*name);
-    return result;
+    TokenIndex tok = ast_fn_param_token(ast, index, i);
+    if (tok) {
+        ZigString name = ZigString(ast_token_slice(ast, tok));
+        return QString::fromUtf8(*name);
+    }
+    return "";
 }
 
-KDevelop::RangeInRevision ZigNode::paramNameRange(uint32_t i)
+KDevelop::RangeInRevision ZigNode::paramRange(uint32_t i)
 {
-    SourceRange range = ast_fn_param_name_range(ast, index, i);
+    TokenIndex tok = ast_fn_param_token(ast, index, i);
+    return tokenRange(tok);
+}
+
+
+KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
+{
+    SourceRange range = ast_token_range(ast, i);
     KTextEditor::Range r = range.isEmpty() ?
     KTextEditor::Range::invalid() : KTextEditor::Range(
             range.start.line,
@@ -82,11 +92,31 @@ SourceRange ZigNode::extent()
     return ast_node_extent(ast, index);
 }
 
+QString ZigNode::captureName(CaptureType capture)
+{
+    TokenIndex tok = ast_node_capture_token(ast, index, capture);
+    if (tok) {
+        ZigString name = ZigString(ast_token_slice(ast, tok));
+        return QString::fromUtf8(*name);
+    }
+    return "";
+}
+
+KDevelop::RangeInRevision ZigNode::captureRange(CaptureType capture)
+{
+    TokenIndex tok = ast_node_capture_token(ast, index, capture);
+    return tokenRange(tok);
+}
+
+
 QString ZigNode::spellingName()
 {
-    ZigString name = ZigString(ast_node_new_spelling_name(ast, index));
-    QString result = (*name == nullptr) ? "" : QString::fromUtf8(*name);
-    return result;
+    TokenIndex tok = ast_node_name_token(ast, index);
+    if (tok) {
+        ZigString name = ZigString(ast_token_slice(ast, tok));
+        return QString::fromUtf8(*name);
+    }
+    return "";
 }
 
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>

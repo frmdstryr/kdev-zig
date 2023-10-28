@@ -149,7 +149,17 @@ void DUChainTest::testVarBindings()
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    DUContext *internalContext = contextName.isEmpty() ? context : getInternalContext(context, contextName);
+    DUContext *internalContext;
+
+    if (contextName.contains(",")) {
+        auto parts = contextName.split(",");
+        CursorInRevision cursor(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
+        internalContext = context->findContextAt(cursor, true);
+    } else if (contextName.isEmpty()) {
+        internalContext = context;
+    } else {
+        internalContext = getInternalContext(context, contextName);
+    }
     QVERIFY(internalContext);
 
     qDebug() << "Decls are:";
@@ -183,6 +193,7 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
     QTest::newRow("struct field") << "Foo" << "const Foo = struct { a: u8, };" << QStringList { "a" };
     QTest::newRow("test decl") << "" << "test \"foo\" {  }" << QStringList { "foo" };
+    QTest::newRow("if capture") << "2,0" << "test {\n if (opt) |x| {\n _ = x;} }" << QStringList { "x" };
     // Interal context ?
     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
 
@@ -261,12 +272,9 @@ void DUChainTest::testVarType()
     if (container.isEmpty()) {
         localContext = context;
     } else {
-        auto containerDecls = context->findDeclarations(Identifier(container));
-        QCOMPARE(containerDecls.size(), 1);
-        QVERIFY(containerDecls.first());
-        localContext = containerDecls.first()->internalContext();
-        QVERIFY(localContext);
+        localContext = getInternalContext(context, container);
     }
+    QVERIFY(localContext);
 
     qDebug() << "Locals are:";
     for (const KDevelop::Declaration *decl : localContext->localDeclarations()) {

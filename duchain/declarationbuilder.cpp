@@ -61,13 +61,17 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 }
 
 // This is invoked within the nodes context
-void DeclarationBuilder::visitChildren(ZigNode &node)
+void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 {
+    // NodeTag ptag = parent.tag();
     NodeKind kind = node.kind();
     if (kind == FunctionDecl) {
-        updateFunctionDeclaration(node);
+        updateFunctionDecl(node);
     }
-    ContextBuilder::visitChildren(node);
+    else if (kind == If || kind == For || kind == While) {
+        maybeBuildCapture(node, parent);
+    }
+    ContextBuilder::visitChildren(node, parent);
 }
 
 template<NodeKind Kind>
@@ -134,9 +138,15 @@ AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
     if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
         // Simple var types...
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
+        // TODO: visit type node expression and return last type?
         if (!typeNode.isRoot()) {
-            if (auto builtinType = BuiltinType::newFromName(typeNode.spellingName())) {
+            QString typeName = typeNode.spellingName();
+            if (auto builtinType = BuiltinType::newFromName(typeName)) {
                 return AbstractType::Ptr(builtinType);
+            }
+
+            if (!typeName.isEmpty()) {
+
             }
         }
     }
@@ -219,7 +229,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
 //     }
 // }
 
-void DeclarationBuilder::updateFunctionDeclaration(ZigNode &node)
+void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
 {
     DUChainWriteLocker lock;
     Q_ASSERT(hasCurrentDeclaration());
@@ -237,7 +247,7 @@ void DeclarationBuilder::updateFunctionDeclaration(ZigNode &node)
             ZigNode paramType = node.paramType(i);
             Q_ASSERT(!paramType.isRoot());
             QString paramName = node.paramName(i);
-            auto paramRange = node.paramNameRange(i);
+            auto paramRange = node.paramRange(i);
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
             fn->addArgument(param->abstractType(), i);
             VisitResult ret = buildContext<ParamDecl>(paramType, node);
@@ -254,6 +264,17 @@ void DeclarationBuilder::updateFunctionDeclaration(ZigNode &node)
     }
     decl->setAbstractType(fn);
     // else TODO the rest
+}
+
+void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
+{
+    QString captureName = node.captureName(CaptureType::Payload);
+    if (!captureName.isEmpty()) {
+        auto range = node.captureRange(CaptureType::Payload);
+        // FIXME: Get type node of capture ???
+        auto *param = createDeclaration<VarDecl>(node, captureName, true, range);
+        closeDeclaration();
+    }
 }
 
 

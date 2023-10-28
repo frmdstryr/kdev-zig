@@ -38,6 +38,10 @@ constexpr bool hasContext(NodeKind kind)
         || kind == ErrorDecl
         || kind == VarDecl
         || kind == TestDecl
+        || kind == If
+        || kind == For
+        || kind == While
+        || kind == Switch
     ;
 }
 
@@ -46,13 +50,17 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
     using namespace KDevelop;
     return
         kind == Module           ? DUContext::Namespace
-        :  kind == ContainerDecl ? DUContext::Namespace
+        :  kind == ContainerDecl ? DUContext::Class
         :  kind == EnumDecl      ? DUContext::Enum
         :  kind == FunctionDecl  ? DUContext::Function // Function is only for arguments
         :  kind == ErrorDecl     ? DUContext::Enum
         :  kind == TestDecl      ? DUContext::Other
         :  kind == BlockDecl     ? DUContext::Other
         :  kind == VarDecl       ? DUContext::Other
+        :  kind == If            ? DUContext::Other
+        :  kind == For           ? DUContext::Other
+        :  kind == While         ? DUContext::Other
+        :  kind == Switch        ? DUContext::Other
         // TODO: Template decl?
         : static_cast<DUContext::ContextType>(-1);
 }

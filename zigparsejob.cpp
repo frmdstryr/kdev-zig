@@ -75,11 +75,8 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     qCDebug(KDEV_ZIG) << "Parse job starting for: " << document().toUrl();
 
     QReadLocker parseLock(languageSupport()->parseLock());
-
-    {
-        UrlParseLock urlLock(document());
-        readContents();
-    }
+    UrlParseLock urlLock(document());
+    readContents();
 
     if (abortRequested()) {
         return;

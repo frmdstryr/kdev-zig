@@ -143,8 +143,16 @@ bool BuiltinType::isBuiltinType(const QString& name)
         || name == "anyopaque"
         || name == "comptime_int"
         || name == "comptime_float"
+        || name == "c_char"
+        || name == "c_short"
+        || name == "c_ushort"
         || name == "c_int"
+        || name == "c_uint"
         || name == "c_long"
+        || name == "c_ulong"
+        || name == "c_longlong"
+        || name == "c_ulonglong"
+        || name == "c_longdouble"
         || unsignedIntPattern.match(name).hasMatch()
         || signedIntPattern.match(name).hasMatch()
         || floatPattern.match(name).hasMatch()

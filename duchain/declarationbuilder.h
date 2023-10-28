@@ -52,7 +52,7 @@ public:
 
 protected:
     VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
-    void visitChildren(ZigNode &node) override;
+    void visitChildren(ZigNode &node, ZigNode &parent) override;
 
 private:
     template <NodeKind Kind>
@@ -106,7 +106,9 @@ private:
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 
     // Before children are visited
-    void updateFunctionDeclaration(ZigNode &node);
+    void updateFunctionDecl(ZigNode &node);
+
+    void maybeBuildCapture(ZigNode &node, ZigNode &parent);
 };
 
 }

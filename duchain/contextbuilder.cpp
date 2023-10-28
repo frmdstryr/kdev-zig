@@ -37,7 +37,8 @@ void ContextBuilder::setParseSession(ParseSession *session)
 
 RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QString &identifier)
 {
-    SourceRange range = ast_node_spelling_range(node.ast, node.index);
+    TokenIndex tok = ast_node_name_token(node.ast, node.index);
+    SourceRange range = ast_token_range(node.ast, tok);
     KTextEditor::Range spellingRange = range.isEmpty() ?
         KTextEditor::Range::invalid() : KTextEditor::Range(
             range.start.line,
@@ -50,7 +51,7 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QSt
 
 VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    NodeKind kind = ast_node_kind(node.ast, node.index);
+    NodeKind kind = node.kind();
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
@@ -76,6 +77,11 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     BUILD_CONTEXT_FOR(Literal);
     BUILD_CONTEXT_FOR(Ident);
 
+    BUILD_CONTEXT_FOR(If);
+    BUILD_CONTEXT_FOR(For);
+    BUILD_CONTEXT_FOR(While);
+    BUILD_CONTEXT_FOR(Switch);
+
     BUILD_CONTEXT_FOR(Unknown);
 
     }
@@ -87,28 +93,26 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 template <NodeKind Kind>
 VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
 {
-    Q_UNUSED(parent);
-
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
-
     if (hasContext) {
         QString name = node.spellingName();
         openContext(&node, NodeTraits::contextType(Kind), &name);
-        visitChildren(node);
+        visitChildren(node, parent);
         closeContext();
         return Continue;
     }
     return Recurse;
 }
 
-void ContextBuilder::visitChildren(ZigNode &node)
+void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     ast_visit(node.ast, node.index, visitCallback, this);
 }
 
 void ContextBuilder::startVisiting(ZigNode *node)
 {
-    visitChildren(*node);
+    visitChildren(*node, *node);
 }
 
 void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
