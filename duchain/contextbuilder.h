@@ -21,6 +21,7 @@
 #include <QString>
 #include <language/duchain/builders/abstractcontextbuilder.h>
 
+#include "visitor.h"
 #include "parsesession.h"
 #include "zignode.h"
 
@@ -31,14 +32,17 @@ namespace Zig
 
 using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, QString>;
 
-class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
+class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase, public Visitor
 {
 public:
     ContextBuilder() = default;
     ~ContextBuilder() override = default;
 
     void setParseSession(ParseSession *session);
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent);
+
+    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
+    virtual void visitChildren(ZigNode &node, ZigNode &parent) override;
+
 protected:
     KDevelop::RangeInRevision editorFindSpellingRange(ZigNode &node, const QString &identifier);
 
@@ -47,9 +51,6 @@ protected:
 
     template<NodeKind Kind>
     KDevelop::DUContext *createContext(ZigNode *node, const KDevelop::QualifiedIdentifier& scopeId);
-
-    // For root node == parent
-    virtual void visitChildren(ZigNode &node, ZigNode &parent);
 
     void startVisiting(ZigNode *node) override;
     void setContextOnNode(ZigNode *node, KDevelop::DUContext *context) override;
@@ -70,8 +71,6 @@ protected:
 
 
 private:
-    friend VisitResult visitCallback(ZigNode *node, ZigNode *parent, void *data);
-
     ParseSession *session;
 };
 

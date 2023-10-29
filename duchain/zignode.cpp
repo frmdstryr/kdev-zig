@@ -89,7 +89,7 @@ KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
 
 SourceRange ZigNode::extent()
 {
-    return ast_node_extent(ast, index);
+    return ast_node_range(ast, index);
 }
 
 QString ZigNode::captureName(CaptureType capture)

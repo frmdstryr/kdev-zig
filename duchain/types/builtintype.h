@@ -36,6 +36,8 @@ public:
     explicit BuiltinType(BuiltinTypeData& data);
     ~BuiltinType();
 
+    BuiltinType& operator=(const BuiltinType& rhs) = delete;
+
     QString toString() const override;
     bool equals(const AbstractType* rhs) const override;
     uint hash() const override;
@@ -54,7 +56,7 @@ public:
     static BuiltinType* newFromName(const QString &name);
 
     enum {
-        Identity = 153
+        Identity = 154
     };
 
 protected:

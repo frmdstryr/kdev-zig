@@ -28,7 +28,7 @@
 namespace Zig
 {
 
-VisitResult visitCallback(ZAst* ast, uint32_t node, uint32_t parent, void *data);
+
 
 void ContextBuilder::setParseSession(ParseSession *session)
 {
@@ -52,6 +52,7 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QSt
 VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
     NodeKind kind = node.kind();
+    qDebug() << "ContextBuilder::visitNode" << node.index;
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
@@ -90,6 +91,11 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
+void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
+{
+    Visitor::visitChildren(node, parent);
+}
+
 template <NodeKind Kind>
 VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
 {
@@ -102,12 +108,6 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
         return Continue;
     }
     return Recurse;
-}
-
-void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
-{
-    Q_UNUSED(parent);
-    ast_visit(node.ast, node.index, visitCallback, this);
 }
 
 void ContextBuilder::startVisiting(ZigNode *node)
@@ -138,6 +138,7 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, Zig
 
 KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
+    // TODO: Walk parent contexts?
     return QualifiedIdentifier(*node);
 }
 
@@ -156,17 +157,7 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
     return new ZigTopDUContext(document(), range, file);
 }
 
-VisitResult visitCallback(ZAst* ast, uint32_t node, uint32_t parent, void *data)
-{
-    ContextBuilder *builder = static_cast<ContextBuilder *>(data);
-    if (builder) {
-        ZigNode childNode = {ast, node};
-        ZigNode parentNode = {ast, parent};
-        return builder->visitNode(childNode, parentNode);
-    }
-    return VisitResult::Break;
 
-}
 
 QList<Declaration*> ContextBuilder::findSimpleVar(
     QualifiedIdentifier &ident, DUContext* context,

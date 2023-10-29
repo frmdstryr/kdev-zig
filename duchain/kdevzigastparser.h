@@ -21,7 +21,6 @@
 extern "C" {
 
 enum NodeTag {
-    /// sub_list[lhs...rhs]
     NodeTag_root,
     /// `usingnamespace lhs;`. rhs unused. main_token is `usingnamespace`.
     NodeTag_usingnamespace,
@@ -75,7 +74,7 @@ enum NodeTag {
     NodeTag_assign_mul,
     /// `lhs /= rhs`. main_token is op.
     NodeTag_assign_div,
-    /// `lhs *= rhs`. main_token is op.
+    /// `lhs %= rhs`. main_token is op.
     NodeTag_assign_mod,
     /// `lhs += rhs`. main_token is op.
     NodeTag_assign_add,
@@ -107,6 +106,20 @@ enum NodeTag {
     NodeTag_assign_sub_sat,
     /// `lhs = rhs`. main_token is op.
     NodeTag_assign,
+    /// `a, b, ... = rhs`. main_token is op. lhs is index into `extra_data`
+    /// of an lhs elem count followed by an array of that many `Node.Index`,
+    /// with each node having one of the following types:
+    /// * `global_var_decl`
+    /// * `local_var_decl`
+    /// * `simple_var_decl`
+    /// * `aligned_var_decl`
+    /// * Any expression node
+    /// The first 3 types correspond to a `var` or `const` lhs node (note
+    /// that their `rhs` is always 0). An expression node corresponds to a
+    /// standard assignment LHS (which must be evaluated as an lvalue).
+    /// There may be a preceding `comptime` token, which does not create a
+    /// corresponding `comptime` node so must be manually detected.
+    NodeTag_assign_destructure,
     /// `lhs || rhs`. main_token is the `||`.
     NodeTag_merge_error_sets,
     /// `lhs * rhs`. main_token is the `*`.
@@ -203,7 +216,7 @@ enum NodeTag {
     /// `lhs[b..c]`. rhs is index into Slice
     /// main_token is the lbracket.
     NodeTag_slice,
-    /// `lhs[b..c :d]`. rhs is index into SliceSentinel
+    /// `lhs[b..c :d]`. rhs is index into SliceSentinel. Slice end "c" can be omitted.
     /// main_token is the lbracket.
     NodeTag_slice_sentinel,
     /// `lhs.*`. rhs is unused.
@@ -285,9 +298,13 @@ enum NodeTag {
     /// `lhs => rhs`. If lhs is omitted it means `else`.
     /// main_token is the `=>`
     NodeTag_switch_case_one,
+    /// Same ast `switch_case_one` but the case is inline
+    NodeTag_switch_case_inline_one,
     /// `a, b, c => rhs`. `SubRange[lhs]`.
     /// main_token is the `=>`
     NodeTag_switch_case,
+    /// Same ast `switch_case` but the case is inline
+    NodeTag_switch_case_inline,
     /// `lhs...rhs`.
     NodeTag_switch_range,
     /// `while (lhs) rhs`.
@@ -299,11 +316,14 @@ enum NodeTag {
     /// `while (lhs) : (a) b else c`. `While[rhs]`.
     /// `while (lhs) |x| : (a) b else c`. `While[rhs]`.
     /// `while (lhs) |x| : (a) b else |y| c`. `While[rhs]`.
+    /// The cont expression part `: (a)` may be omitted.
     NodeTag_while,
     /// `for (lhs) rhs`.
     NodeTag_for_simple,
-    /// `for (lhs) a else b`. `if_list[rhs]`.
+    /// `for (lhs[0..inputs]) lhs[inputs + 1] else lhs[inputs + 2]`. `For[rhs]`.
     NodeTag_for,
+    /// `lhs..rhs`. rhs can be omitted.
+    NodeTag_for_range,
     /// `if (lhs) rhs`.
     /// `if (lhs) |a| rhs`.
     NodeTag_if_simple,
@@ -322,23 +342,23 @@ enum NodeTag {
     NodeTag_break,
     /// `return lhs`. lhs can be omitted. rhs is unused.
     NodeTag_return,
-    /// `fn(a: lhs) rhs`. lhs can be omitted.
+    /// `fn (a: lhs) rhs`. lhs can be omitted.
     /// anytype and ... parameters are omitted from the AST tree.
     /// main_token is the `fn` keyword.
     /// extern function declarations use this tag.
     NodeTag_fn_proto_simple,
-    /// `fn(a: b, c: d) rhs`. `sub_range_list[lhs]`.
+    /// `fn (a: b, c: d) rhs`. `sub_range_list[lhs]`.
     /// anytype and ... parameters are omitted from the AST tree.
     /// main_token is the `fn` keyword.
     /// extern function declarations use this tag.
     NodeTag_fn_proto_multi,
-    /// `fn(a: b) rhs addrspace(e) linksection(f) callconv(g)`. `FnProtoOne[lhs]`.
+    /// `fn (a: b) rhs addrspace(e) linksection(f) callconv(g)`. `FnProtoOne[lhs]`.
     /// zero or one parameters.
     /// anytype and ... parameters are omitted from the AST tree.
     /// main_token is the `fn` keyword.
     /// extern function declarations use this tag.
     NodeTag_fn_proto_one,
-    /// `fn(a: b, c: d) rhs addrspace(e) linksection(f) callconv(g)`. `FnProto[lhs]`.
+    /// `fn (a: b, c: d) rhs addrspace(e) linksection(f) callconv(g)`. `FnProto[lhs]`.
     /// anytype and ... parameters are omitted from the AST tree.
     /// main_token is the `fn` keyword.
     /// extern function declarations use this tag.
@@ -355,9 +375,7 @@ enum NodeTag {
     /// Both lhs and rhs unused.
     NodeTag_char_literal,
     /// Both lhs and rhs unused.
-    NodeTag_integer_literal,
-    /// Both lhs and rhs unused.
-    NodeTag_float_literal,
+    NodeTag_number_literal,
     /// Both lhs and rhs unused.
     NodeTag_unreachable_literal,
     /// Both lhs and rhs unused.
@@ -403,7 +421,7 @@ enum NodeTag {
     /// Same as ContainerDeclTwo except there is known to be a trailing comma
     /// or semicolon before the rbrace.
     NodeTag_container_decl_two_trailing,
-    /// `union(lhs)` / `enum(lhs)`. `SubRange[rhs]`.
+    /// `struct(lhs)` / `union(lhs)` / `enum(lhs)`. `SubRange[rhs]`.
     NodeTag_container_decl_arg,
     /// Same as container_decl_arg but there is known to be a trailing
     /// comma or semicolon before the rbrace.
@@ -468,9 +486,6 @@ enum NodeTag {
     NodeTag_error_value,
     /// `lhs!rhs`. main_token is the `!`.
     NodeTag_error_union,
-
-
-
     NodeTag_invalid,
 };
 
@@ -547,7 +562,7 @@ struct ZError
 
 typedef uint32_t NodeIndex;
 typedef uint32_t TokenIndex;
-typedef VisitResult (*CallbackFn)(ZAst* tree, NodeIndex node, NodeIndex parent, void *data);
+typedef VisitResult (*VisitorCallbackFn)(ZAst* tree, NodeIndex node, NodeIndex parent, void *data);
 
 
 ZAst *parse_ast(const char *name, const char *source);
@@ -577,10 +592,10 @@ void destroy_string(const char *str);
 
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
 SourceRange ast_token_range(ZAst *tree, TokenIndex token);
-SourceRange ast_node_extent(ZAst *tree, NodeIndex node);
+SourceRange ast_node_range(ZAst *tree, NodeIndex node);
 
 
-void ast_visit(ZAst *tree, NodeIndex node, CallbackFn callback, void *data);
+void ast_visit(ZAst *tree, NodeIndex node, VisitorCallbackFn callback, void *data);
 
 bool is_zig_builtin_fn_name(const char *name);
 

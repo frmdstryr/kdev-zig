@@ -37,7 +37,7 @@ public:
     UseBuilder(const KDevelop::IndexedString &document);
     ~UseBuilder() override = default;
 
-    VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
+    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
 
 private:
     void visitCall(ZigNode &node, ZigNode &parent);

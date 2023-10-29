@@ -26,12 +26,13 @@
 #include <language/duchain/types/alltypes.h>
 
 #include "types/declarationtypes.h"
+#include "types/builtintype.h"
 #include "contextbuilder.h"
 #include "nodetraits.h"
 #include "zignode.h"
 
 #include "kdevzigduchain_export.h"
-#include "types/builtintype.h"
+
 
 namespace Zig
 {
@@ -50,9 +51,8 @@ public:
     DeclarationBuilder() = default;
     ~DeclarationBuilder() override = default;
 
-protected:
     VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
-    void visitChildren(ZigNode &node, ZigNode &parent) override;
+    virtual void visitChildren(ZigNode &node, ZigNode &parent) override;
 
 private:
     template <NodeKind Kind>

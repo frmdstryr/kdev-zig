@@ -48,11 +48,13 @@ BuiltinTypeData::BuiltinTypeData(const BuiltinTypeData& rhs)
 
 REGISTER_TYPE(BuiltinType);
 
-BuiltinType::BuiltinType(const BuiltinType& rhs) : AbstractType(copyData<BuiltinType>(*rhs.d_func()))
+BuiltinType::BuiltinType(const BuiltinType& rhs)
+    : AbstractType(copyData<BuiltinType>(*rhs.d_func()))
 {
 }
 
-BuiltinType::BuiltinType(BuiltinTypeData& data) : AbstractType(data)
+BuiltinType::BuiltinType(BuiltinTypeData& data)
+    : AbstractType(data)
 {
 }
 
@@ -174,6 +176,8 @@ BuiltinType* BuiltinType::newFromName(const QString& name)
 {
     if (BuiltinType::isBuiltinType(name))
         return new BuiltinType(name);
+    if (name == "true" || name == "false")
+        return new BuiltinType("bool");
     return nullptr;
 }
 

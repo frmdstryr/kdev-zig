@@ -1,6 +1,9 @@
 set(kdevzigduchain_SRC
+    visitor.cpp
+    helpers.cpp
     contextbuilder.cpp
     declarationbuilder.cpp
+    expressionvisitor.cpp
     usebuilder.cpp
     zignode.cpp
     zigducontext.cpp
@@ -8,6 +11,8 @@ set(kdevzigduchain_SRC
     kdevzigastparser.h
     nodetraits.h
     types/builtintype.cpp
+    types/pointertype.cpp
+    types/optionaltype.cpp
 )
 
 find_package(Zig MODULE REQUIRED)

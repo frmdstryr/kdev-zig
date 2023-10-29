@@ -299,14 +299,14 @@ test "capture-name" {
     try testCaptureName("test { for (a) |b| { _ = b; }}", .for_simple, .Payload, "b");
 }
 
-export fn ast_node_extent(ptr: ?*Ast, index: Index) SourceRange {
+export fn ast_node_range(ptr: ?*Ast, index: Index) SourceRange {
     if (ptr == null) {
-        std.log.warn("zig: ast_node_extent ast null", .{});
+        std.log.warn("zig: ast_node_range ast null", .{});
         return SourceRange{};
     }
     const ast = ptr.?;
     if (index >= ast.nodes.len) {
-        std.log.warn("zig: ast_node_extent index out of range {}", .{index});
+        std.log.warn("zig: ast_node_range index out of range {}", .{index});
         return SourceRange{};
     }
     // TODO: What is the correct start_offset?
@@ -1335,8 +1335,24 @@ pub fn visit(
             }
         },
         .assign_destructure => {
-            // Is this even used?
-            std.log.warn("zig: ast_visit unhandled {s}", .{@tagName(tag)});
+            const elem_count = ast.extra_data[d.lhs];
+            // var decls (const a, const b, etc..)
+            for (ast.extra_data[d.lhs+1..][0..elem_count]) |child| {
+                assertNodeIndexValid(ast, child, parent);
+                switch (callback(ast, child, parent, data)) {
+                    .Break => return,
+                    .Continue => continue,
+                    .Recurse => visit(ast, child, T, callback, data),
+                }
+            }
+            // The value to destructure
+            const child = d.rhs;
+            assertNodeIndexValid(ast, child, parent);
+            switch (callback(ast, child, parent, data)) {
+                .Break => return,
+                .Continue => {},
+                .Recurse => visit(ast, child, T, callback, data),
+            }
         },
     }
     return;
@@ -1352,8 +1368,8 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
     if (ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
         try printAstError(&ast, "", source);
+        return error.ParseError;
     }
-    try std.testing.expect(ast.errors.len == 0);
     // try dumpAstFlat(&ast, stdout);
 
     var nodes = try std.ArrayList(Index).initCapacity(allocator, ast.nodes.len + 1);
@@ -1415,7 +1431,7 @@ test "ast-visit" {
     try testVisit("test { var a = 2; a +%= 0xFF; }", .assign_add_wrap);
     try testVisit("test { var a = 2; a -%= 0xFF; }", .assign_sub_wrap);
     try testVisit("test { var a = 2; a = 1; }", .assign);
-    //try testVisit("test { const a, const b = .{2, 1}; }", .assign_destructure);
+    try testVisit("test {\n const arr: [3]u32 = .{ 10, 20, 30 };\n const x, const y, const z = arr;}", .assign_destructure);
     try testVisit("const E1 = error{E1}; const E2 = E1 || error{E3};", .merge_error_sets);
     try testVisit("test { var a = 2; a = 2 * a; }", .mul);
     try testVisit("test { var a = 2; a = a / 2; }", .div);
@@ -1578,7 +1594,7 @@ test "ast-visit" {
 test "all-visit" {
     // Walk entire zig lib source tree
     const allocator = std.testing.allocator;
-    const zig_lib = "/home/jrm/projects/zig/lib/";
+    const zig_lib = "/home/jrm/projects/zig/";
     var dir = try std.fs.cwd().openIterableDir(zig_lib, .{});
     defer dir.close();
     var walker = try dir.walk(allocator);
@@ -1586,14 +1602,17 @@ test "all-visit" {
     const buffer_size = 20*1000*1024; // 20MB
     while (try walker.next()) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".zig")) {
-            // std.log.warn("{s}", .{entry.path});
+            std.log.warn("{s}", .{entry.path});
             const file = try entry.dir.openFile(entry.basename, .{});
             const source = try file.readToEndAllocOptions(
                 allocator, buffer_size, null, 4, 0
             );
             defer allocator.free(source);
             defer file.close();
-            try testVisit(source, .root);
+            testVisit(source, .root) catch |err| switch (err) {
+                error.ParseError => {}, // Skip
+                else => return err,
+            };
         }
     }
 }

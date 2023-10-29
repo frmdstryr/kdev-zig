@@ -22,6 +22,7 @@
 
 #include <language/duchain/duchainlock.h>
 
+#include "expressionvisitor.h"
 #include "types/builtintype.h"
 #include "types/declarationtypes.h"
 #include "nodetraits.h"
@@ -34,6 +35,7 @@ using namespace KDevelop;
 
 VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
+    qDebug() << "DeclarationBuilder::visitNode" << node.index;
     switch (node.kind()) {
     case Module:
         return buildDeclaration<Module>(node, parent);
@@ -136,21 +138,11 @@ template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind !
 AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
-        // Simple var types...
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
-        // TODO: visit type node expression and return last type?
-        if (!typeNode.isRoot()) {
-            QString typeName = typeNode.spellingName();
-            if (auto builtinType = BuiltinType::newFromName(typeName)) {
-                return AbstractType::Ptr(builtinType);
-            }
-
-            if (!typeName.isEmpty()) {
-
-            }
-        }
+        ExpressionVisitor v(currentContext());
+        v.visitNode(typeNode, node);
+        return v.lastType();
     }
-    // TODO: Determine var type for
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
 
@@ -249,21 +241,25 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             QString paramName = node.paramName(i);
             auto paramRange = node.paramRange(i);
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
-            fn->addArgument(param->abstractType(), i);
+
+            ExpressionVisitor v(currentContext());
+            v.visitNode(paramType, node);
+            fn->addArgument(v.lastType(), i);
+
             VisitResult ret = buildContext<ParamDecl>(paramType, node);
             eventuallyAssignInternalContext();
             closeDeclaration();
         }
     }
 
-    ZigNode typeNode = node.returnType();
-    Q_ASSERT(!typeNode.isRoot());
-    // Handle builtin return types...
-    if (auto builtinType = BuiltinType::newFromName(typeNode.spellingName())) {
-        fn->setReturnType(AbstractType::Ptr(builtinType));
+    {
+        ZigNode typeNode = node.returnType();
+        Q_ASSERT(!typeNode.isRoot());
+        ExpressionVisitor v(currentContext());
+        v.visitNode(typeNode, node);
+        fn->setReturnType(v.lastType());
+        decl->setAbstractType(fn);
     }
-    decl->setAbstractType(fn);
-    // else TODO the rest
 }
 
 void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
