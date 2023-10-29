@@ -12,13 +12,13 @@
 #include <language/duchain/types/integraltype.h>
 #include <language/duchain/ducontext.h>
 
-#include "visitor.h"
+#include "zignode.h"
 
 namespace Zig
 {
 
 
-class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor, public Visitor
+class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor
 {
 public:
     explicit ExpressionVisitor(KDevelop::DUContext* context);
@@ -27,7 +27,9 @@ public:
     ExpressionVisitor(Zig::ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext=nullptr);
     ~ExpressionVisitor() override = default;
 
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
+    VisitResult visitNode(ZigNode &node, ZigNode &parent);
+    void visitChildren(ZigNode &node, ZigNode &parent);
+
     VisitResult visitPointerType(ZigNode &node);
     VisitResult visitOptionalType(ZigNode &node);
     VisitResult visitStringLiteral(ZigNode &node);

@@ -8,9 +8,18 @@ namespace Zig
 {
 
 //QHash<QString, KDevelop::AbstractType::Ptr> ExpressionVisitor::m_defaultTypes;
+static VisitResult expressionVistorCallback(ZAst* ast, NodeIndex node, NodeIndex parent, void *data)
+{
+    ExpressionVisitor *visitor = static_cast<ExpressionVisitor *>(data);
+    Q_ASSERT(visitor);
+    ZigNode childNode = {ast, node};
+    ZigNode parentNode = {ast, parent};
+    return visitor->visitNode(childNode, parentNode);
+}
+
 
 ExpressionVisitor::ExpressionVisitor(KDevelop::DUContext* context)
-    : DynamicLanguageExpressionVisitor(context), Visitor()
+    : DynamicLanguageExpressionVisitor(context)
 {
     // if ( m_defaultTypes.isEmpty() ) {
     //     m_defaultTypes.insert("void", AbstractType::Ptr(new BuiltinType("void")));
@@ -23,12 +32,18 @@ ExpressionVisitor::ExpressionVisitor(KDevelop::DUContext* context)
 }
 
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
-    : DynamicLanguageExpressionVisitor(parent), Visitor()
+    : DynamicLanguageExpressionVisitor(parent)
 {
     if ( overrideContext ) {
         m_context = overrideContext;
     }
     Q_ASSERT(context());
+}
+
+void ExpressionVisitor::visitChildren(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ast_visit(node.ast, node.index, expressionVistorCallback, this);
 }
 
 VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)

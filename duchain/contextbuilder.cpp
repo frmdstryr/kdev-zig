@@ -28,7 +28,14 @@
 namespace Zig
 {
 
-
+VisitResult contextBuilderVisitorCallback(ZAst* ast, NodeIndex node, NodeIndex parent, void *data)
+{
+    ContextBuilder *visitor = static_cast<ContextBuilder *>(data);
+    Q_ASSERT(visitor);
+    ZigNode childNode = {ast, node};
+    ZigNode parentNode = {ast, parent};
+    return visitor->visitNode(childNode, parentNode);
+}
 
 void ContextBuilder::setParseSession(ParseSession *session)
 {
@@ -93,7 +100,8 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 
 void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 {
-    Visitor::visitChildren(node, parent);
+    Q_UNUSED(parent);
+    ast_visit(node.ast, node.index, contextBuilderVisitorCallback, this);
 }
 
 template <NodeKind Kind>

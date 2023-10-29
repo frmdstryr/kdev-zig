@@ -21,7 +21,6 @@
 #include <QString>
 #include <language/duchain/builders/abstractcontextbuilder.h>
 
-#include "visitor.h"
 #include "parsesession.h"
 #include "zignode.h"
 
@@ -32,7 +31,7 @@ namespace Zig
 
 using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, QString>;
 
-class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase, public Visitor
+class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase // , public Visitor
 {
 public:
     ContextBuilder() = default;
@@ -40,8 +39,8 @@ public:
 
     void setParseSession(ParseSession *session);
 
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
-    virtual void visitChildren(ZigNode &node, ZigNode &parent) override;
+    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent); // override;
+    virtual void visitChildren(ZigNode &node, ZigNode &parent); // override;
 
 protected:
     KDevelop::RangeInRevision editorFindSpellingRange(ZigNode &node, const QString &identifier);

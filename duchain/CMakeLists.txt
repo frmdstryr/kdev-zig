@@ -1,5 +1,4 @@
 set(kdevzigduchain_SRC
-    visitor.cpp
     helpers.cpp
     contextbuilder.cpp
     declarationbuilder.cpp
