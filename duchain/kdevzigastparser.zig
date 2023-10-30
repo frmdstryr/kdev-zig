@@ -61,6 +61,8 @@ const NodeKind = enum(u8) {
     For,
     While,
     Switch,
+    Defer,
+    Catch
 };
 
 // std.mem.len does not check for null
@@ -168,13 +170,15 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
         printAstError(ast, name, source) catch |err| {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
-    } else if (@import("builtin").is_test) {
-        std.log.debug("Source ----------------\n{s}\n------------------------\n", .{source});
-        var stdout = std.io.getStdOut().writer();
-        dumpAstFlat(ast, stdout) catch |err| {
-            std.log.debug("zig: failed to dump ast {}", .{err});
-        };
     }
+//     else if (true) {//@import("builtin").is_test) {
+//         var stdout = std.io.getStdOut().writer();
+//         stdout.print("Source ----------------\n{s}\n------------------------\n", .{source}) catch {};
+//         //var stdout = std.io.getStdOut().writer();
+//         dumpAstFlat(ast, stdout) catch |err| {
+//             std.log.debug("zig: failed to dump ast {}", .{err});
+//         };
+//     }
     return ast;
 }
 
@@ -244,6 +248,9 @@ export fn destroy_error(ptr: ?*ZError) void {
 
 export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType) Index {
     if (ptr) |ast| {
+        if (index >= ast.nodes.len) {
+            return 0;
+        }
         if (ast.fullIf(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token orelse 0,
@@ -260,6 +267,20 @@ export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType)
         if (ast.fullFor(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token,
+                .Error => 0,
+            };
+        }
+
+        const tag = ast.nodes.items(.tag)[index];
+        if (tag == .@"errdefer") {
+            return switch (capture) {
+                .Payload => ast.nodes.items(.data)[index].lhs,
+                .Error => 0,
+            };
+        }
+        if (tag == .@"catch") {
+            return switch (capture) {
+                .Payload => ast.nodes.items(.main_token)[index] + 1,
                 .Error => 0,
             };
         }
@@ -371,7 +392,8 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
         .for_range, .for_simple, .@"for" => .For,
         .while_cont, .while_simple, .@"while" => .While,
         .switch_comma, .@"switch" => .Switch,
-
+        .@"defer", .@"errdefer" => .Defer,
+        .@"catch" => .Catch,
         // TODO
         else => .Unknown,
     };
@@ -454,6 +476,40 @@ export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
     return 0;
 }
 
+export fn ast_var_value(ptr: ?*Ast, index: Index) Index {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            const tag = ast.nodes.items(.tag)[index];
+            return switch (tag) {
+                .simple_var_decl,
+                .aligned_var_decl,
+                .global_var_decl,
+                .local_var_decl => ast.nodes.items(.data)[index].rhs,
+                // All are data.lhs
+                .container_field, .container_field_align, .container_field_init => ast.nodes.items(.data)[index].lhs,
+                else => 0,
+            };
+        }
+    }
+    return 0;
+}
+
+
+export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: Index) bool {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            var buf: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buf, index)) |proto| {
+                // Zig doesn't use error union if error type is omitted
+                const token_tags = ast.tokens.items(.tag);
+                const maybe_bang = ast.firstToken(proto.ast.return_type) - 1;
+                return token_tags[maybe_bang] == .bang;
+            }
+        }
+    }
+    return false;
+}
+
 export fn ast_fn_return_type(ptr: ?*Ast, index: Index) Index {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
@@ -513,6 +569,15 @@ export fn ast_fn_param_token(ptr: ?*Ast, index: Index, i: u32) Index {
                     j += 1;
                 }
             }
+        }
+    }
+    return 0;
+}
+
+export fn ast_node_main_token(ptr: ?*Ast, index: Index) Index {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            return ast.nodes.items(.main_token)[index];
         }
     }
     return 0;
@@ -735,6 +800,23 @@ export fn ast_format(
     return formatted.ptr;
 }
 
+const NodeData = extern struct {
+    lhs: Index = 0,
+    rhs: Index = 0,
+};
+
+// Visit one child
+export fn ast_node_data(ptr: ?*Ast, node: Index) NodeData {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            const data = ast.nodes.items(.data)[node];
+            return NodeData{.lhs = data.lhs, .rhs = data.rhs};
+        }
+    }
+    return NodeData{};
+}
+
+
 fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
     _ = ast;
     _ = parent;
@@ -825,7 +907,8 @@ export fn ast_visit(ptr: ?*Ast, parent: Index, callback: CallbackFn, data: ?*any
     }
     const tag = ast.nodes.items(.tag)[parent];
     if (@import("builtin").is_test) {
-        std.log.debug("zig: ast_visit {s} at {} '{s}'", .{ @tagName(tag), parent, ast.tokenSlice(ast.nodes.items(.main_token)[parent]) });
+        var stdout = std.io.getStdOut().writer();
+        stdout.print("zig: ast_visit {s} at {} '{s}'\n", .{ @tagName(tag), parent, ast.tokenSlice(ast.nodes.items(.main_token)[parent]) }) catch {};
     }
     const visitor = ExternVisitor{
         .delegate = callback,

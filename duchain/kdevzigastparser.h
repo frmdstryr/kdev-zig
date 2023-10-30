@@ -517,7 +517,9 @@ enum NodeKind
     If,
     For,
     While,
-    Switch
+    Switch,
+    Defer,
+    Catch
 };
 
 enum VisitResult
@@ -553,6 +555,12 @@ struct SourceRange
     }
 };
 
+struct NodeData
+{
+    uint32_t lhs;
+    uint32_t rhs;
+};
+
 struct ZError
 {
     int severity;
@@ -574,14 +582,18 @@ void destroy_error(ZError *err);
 
 NodeKind ast_node_kind(ZAst *tree, NodeIndex node);
 NodeTag ast_node_tag(ZAst* tree, NodeIndex node);
+NodeData ast_node_data(ZAst *tree, NodeIndex node);
 NodeIndex ast_visit_one_child(ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(ZAst *tree, NodeIndex node);
+NodeIndex ast_var_value(ZAst *tree, NodeIndex node);
 NodeIndex ast_fn_return_type(ZAst *tree, NodeIndex node);
+bool ast_fn_returns_inferred_error(ZAst *tree, NodeIndex node);
 uint32_t ast_fn_param_count(ZAst *tree, NodeIndex node);
 NodeIndex ast_fn_param_at(ZAst *tree, NodeIndex node, uint32_t i);
 
 
 TokenIndex ast_node_name_token(ZAst *tree, NodeIndex node);
+TokenIndex ast_node_main_token(ZAst *tree, NodeIndex node);
 TokenIndex ast_node_capture_token(ZAst *tree, NodeIndex node, CaptureType capture);
 TokenIndex ast_fn_param_token(ZAst *tree, NodeIndex node, uint32_t i);
 

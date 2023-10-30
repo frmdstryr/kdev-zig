@@ -12,6 +12,7 @@ set(kdevzigduchain_SRC
     types/builtintype.cpp
     types/pointertype.cpp
     types/optionaltype.cpp
+    types/errortype.cpp
 )
 
 find_package(Zig MODULE REQUIRED)

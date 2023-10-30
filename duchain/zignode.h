@@ -54,9 +54,12 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
 
     NodeKind kind();
     NodeTag tag();
+    NodeData data();
     ZigNode nextChild();
     SourceRange extent();
     QString spellingName();
+    QString mainToken();
+    QString containerName();
 
     // Capture name in case of if/while/for etc
     QString captureName(CaptureType capture);
@@ -64,14 +67,17 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
 
     // Get type node if kind is VarDecl or return root node
     ZigNode varType();
+    ZigNode varValue();
 
     // Get return node if kind is FuncDecl or return root node
     ZigNode returnType();
+    bool returnsInferredError();
     uint32_t paramCount();
     ZigNode paramType(uint32_t i);
     QString paramName(uint32_t i);
     KDevelop::RangeInRevision paramRange(TokenIndex i);
     KDevelop::RangeInRevision tokenRange(TokenIndex i);
+    KDevelop::RangeInRevision range();
 
     inline bool isRoot() const { return index == 0; }
 };

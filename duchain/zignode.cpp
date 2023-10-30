@@ -31,6 +31,12 @@ NodeTag ZigNode::tag()
     return ast_node_tag(ast, index);
 }
 
+NodeData ZigNode::data()
+{
+    return ast_node_data(ast, index);
+}
+
+
 ZigNode ZigNode::nextChild()
 {
     return ZigNode{ast, ast_visit_one_child(ast, index)};
@@ -41,9 +47,19 @@ ZigNode ZigNode::varType()
     return ZigNode{ast, ast_var_type(ast, index)};
 }
 
+ZigNode ZigNode::varValue()
+{
+    return ZigNode{ast, ast_var_value(ast, index)};
+}
+
 ZigNode ZigNode::returnType()
 {
     return ZigNode{ast, ast_fn_return_type(ast, index)};
+}
+
+bool ZigNode::returnsInferredError()
+{
+    return ast_fn_returns_inferred_error(ast, index);
 }
 
 uint32_t ZigNode::paramCount()
@@ -86,6 +102,18 @@ KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
     return KDevelop::RangeInRevision::castFromSimpleRange(r);
 }
 
+KDevelop::RangeInRevision ZigNode::range()
+{
+    SourceRange range = ast_node_range(ast, index);
+    KTextEditor::Range r = range.isEmpty() ?
+    KTextEditor::Range::invalid() : KTextEditor::Range(
+            range.start.line,
+            range.start.column,
+            range.end.line,
+            range.end.column
+        );
+    return KDevelop::RangeInRevision::castFromSimpleRange(r);
+}
 
 SourceRange ZigNode::extent()
 {
@@ -114,7 +142,32 @@ QString ZigNode::spellingName()
     TokenIndex tok = ast_node_name_token(ast, index);
     if (tok) {
         ZigString name = ZigString(ast_token_slice(ast, tok));
+        const char *str = name.data();
+        const auto n = strlen(str);
+        if (n > 2 && str[0] == '"' && str[n-1] == '"') {
+            str++; // Skip start "
+            return QString::fromUtf8(str, n-2); // Trim end "
+        }
+        return QString::fromUtf8(str);
+    }
+    return "";
+}
+
+QString ZigNode::mainToken()
+{
+    TokenIndex tok = ast_node_main_token(ast, index);
+    if (tok) {
+        ZigString name = ZigString(ast_token_slice(ast, tok));
         return QString::fromUtf8(*name);
+    }
+    return "";
+}
+
+
+QString ZigNode::containerName()
+{
+    if (kind() == ContainerDecl) {
+        return QString("%1_anon_%2").arg(mainToken()).arg(index);
     }
     return "";
 }

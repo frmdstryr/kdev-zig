@@ -42,6 +42,7 @@ constexpr bool hasContext(NodeKind kind)
         || kind == For
         || kind == While
         || kind == Switch
+        || kind == Defer
     ;
 }
 
@@ -61,6 +62,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == For           ? DUContext::Other
         :  kind == While         ? DUContext::Other
         :  kind == Switch        ? DUContext::Other
+        :  kind == Defer        ? DUContext::Other
         // TODO: Template decl?
         : static_cast<DUContext::ContextType>(-1);
 }
@@ -82,8 +84,17 @@ constexpr bool isTypeDeclaration(NodeKind kind)
         || kind == ContainerDecl;
 }
 
+constexpr bool canHaveCapture(NodeKind kind)
+{
+    return  kind == If
+        || kind == For
+        || kind == While
+        || kind == Defer
+        || kind == Catch;
 }
 
-}
+} // nodetraits
+
+} // zig
 
 #endif // NODETRAITS_H

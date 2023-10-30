@@ -59,7 +59,7 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QSt
 VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
     NodeKind kind = node.kind();
-    qDebug() << "ContextBuilder::visitNode" << node.index;
+    // qDebug() << "ContextBuilder::visitNode" << node.index;
 
 #define BUILD_CONTEXT_FOR(K) case K: return buildContext<K>(node, parent);
     switch (kind) {
@@ -89,6 +89,8 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     BUILD_CONTEXT_FOR(For);
     BUILD_CONTEXT_FOR(While);
     BUILD_CONTEXT_FOR(Switch);
+    BUILD_CONTEXT_FOR(Defer);
+    BUILD_CONTEXT_FOR(Catch);
 
     BUILD_CONTEXT_FOR(Unknown);
 
@@ -96,6 +98,15 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 #undef BUILD_CONTEXT_FOR
 
     return Recurse;
+}
+
+bool ContextBuilder::shouldSkipNode(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    return (
+        node.kind() == VarDecl
+        && node.nextChild().kind() == ContainerDecl
+    );
 }
 
 void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
@@ -107,9 +118,15 @@ void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 template <NodeKind Kind>
 VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
 {
+    if (shouldSkipNode(node, parent)) {
+        return Recurse; // Skip this case
+    }
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
     if (hasContext) {
-        QString name = node.spellingName();
+        bool overwrite = (
+            Kind == ContainerDecl && parent.kind() == VarDecl
+        );
+        QString name = overwrite ? parent.spellingName() : node.spellingName();
         openContext(&node, NodeTraits::contextType(Kind), &name);
         visitChildren(node, parent);
         closeContext();

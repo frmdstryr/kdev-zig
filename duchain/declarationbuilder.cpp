@@ -24,6 +24,7 @@
 
 #include "expressionvisitor.h"
 #include "types/builtintype.h"
+#include "types/errortype.h"
 #include "types/declarationtypes.h"
 #include "nodetraits.h"
 #include "zigdebug.h"
@@ -35,12 +36,18 @@ using namespace KDevelop;
 
 VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    qDebug() << "DeclarationBuilder::visitNode" << node.index;
-    switch (node.kind()) {
+    NodeKind kind = node.kind();
+    // qDebug() << "DeclarationBuilder::visitNode" << node.index << "kind" << kind;
+    switch (kind) {
     case Module:
         return buildDeclaration<Module>(node, parent);
-    case ContainerDecl:
+    case ContainerDecl: {
+        QString tok = node.mainToken();
+        if (tok == "enum") {
+            return buildDeclaration<EnumDecl>(node, parent);
+        }
         return buildDeclaration<ContainerDecl>(node, parent);
+    }
     case EnumDecl:
         return buildDeclaration<EnumDecl>(node, parent);
     case TemplateDecl:
@@ -65,12 +72,12 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 // This is invoked within the nodes context
 void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 {
-    // NodeTag ptag = parent.tag();
+    // qDebug() << "DeclarationBuilder::visitChildren" << node.index;
     NodeKind kind = node.kind();
     if (kind == FunctionDecl) {
         updateFunctionDecl(node);
     }
-    else if (kind == If || kind == For || kind == While) {
+    else if (NodeTraits::canHaveCapture(kind)) {
         maybeBuildCapture(node, parent);
     }
     ContextBuilder::visitChildren(node, parent);
@@ -79,11 +86,17 @@ void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 template<NodeKind Kind>
 VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 {
+    if (shouldSkipNode(node, parent)) {
+        return Recurse; // Skip this case
+    }
     Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
+    bool overwrite = (
+        Kind == ContainerDecl && parent.kind() == VarDecl
+    );
 
-    QString name = node.spellingName();
-    auto range = editorFindSpellingRange(node, name);
+    QString name = overwrite ? parent.spellingName() : node.spellingName();
+    auto range = editorFindSpellingRange(overwrite ? parent : node, name);
     createDeclaration<Kind>(node, name, hasContext, range);
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) eventuallyAssignInternalContext();
@@ -125,6 +138,7 @@ template <NodeKind Kind, EnableIf<Kind == ContainerDecl>>
 StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node); // TODO: Determine container type (struct, union)
+    // QString mainToken = node.mainToken();
     return StructureType::Ptr(new StructureType);
 }
 
@@ -139,9 +153,18 @@ AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
-        ExpressionVisitor v(currentContext());
-        v.visitNode(typeNode, node);
-        return v.lastType();
+        if (!typeNode.isRoot()) {
+            ExpressionVisitor v(currentContext());
+            v.startVisiting(typeNode, node);
+            return v.lastType();
+        } else {
+            ZigNode valueNode = node.varValue();
+            if (!valueNode.isRoot()) {
+                ExpressionVisitor v(currentContext());
+                v.startVisiting(valueNode, node);
+                return v.lastType();
+            }
+        }
     }
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
@@ -169,6 +192,7 @@ template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 {
     type->setDeclaration(decl);
+    decl->setAbstractType(AbstractType::Ptr(type));
     // qDebug() << "Set type struct" << type->toString();
 }
 
@@ -242,22 +266,36 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             auto paramRange = node.paramRange(i);
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
 
+            lock.unlock();
             ExpressionVisitor v(currentContext());
-            v.visitNode(paramType, node);
+            v.startVisiting(paramType, node);
+            lock.lock();
             fn->addArgument(v.lastType(), i);
 
             VisitResult ret = buildContext<ParamDecl>(paramType, node);
             eventuallyAssignInternalContext();
             closeDeclaration();
+            lock.unlock();
         }
     }
 
     {
         ZigNode typeNode = node.returnType();
         Q_ASSERT(!typeNode.isRoot());
+        lock.unlock();
         ExpressionVisitor v(currentContext());
-        v.visitNode(typeNode, node);
-        fn->setReturnType(v.lastType());
+        v.startVisiting(typeNode, node);
+
+        // Zig does not use error_union for inferred return types...
+        auto returnType = v.lastType();
+        if (node.returnsInferredError()) {
+            auto *errType = new ErrorType();
+            errType->setBaseType(returnType);
+            returnType = AbstractType::Ptr(errType);
+        }
+
+        lock.lock();
+        fn->setReturnType(returnType);
         decl->setAbstractType(fn);
     }
 }
@@ -268,6 +306,7 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
     if (!captureName.isEmpty()) {
         auto range = node.captureRange(CaptureType::Payload);
         // FIXME: Get type node of capture ???
+        DUChainWriteLocker lock;
         auto *param = createDeclaration<VarDecl>(node, captureName, true, range);
         closeDeclaration();
     }

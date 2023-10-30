@@ -27,14 +27,19 @@ public:
     ExpressionVisitor(Zig::ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext=nullptr);
     ~ExpressionVisitor() override = default;
 
+    // Visit the nodes children and finally the node
+    void startVisiting(ZigNode &node, ZigNode &parent);
+
     VisitResult visitNode(ZigNode &node, ZigNode &parent);
     void visitChildren(ZigNode &node, ZigNode &parent);
 
-    VisitResult visitPointerType(ZigNode &node);
-    VisitResult visitOptionalType(ZigNode &node);
-    VisitResult visitStringLiteral(ZigNode &node);
-    VisitResult visitNumberLiteral(ZigNode &node);
-    VisitResult visitIdentifier(ZigNode &node);
+    VisitResult visitContainerDecl(ZigNode &node, ZigNode &parent);
+    VisitResult visitPointerType(ZigNode &node, ZigNode &parent);
+    VisitResult visitOptionalType(ZigNode &node, ZigNode &parent);
+    VisitResult visitStringLiteral(ZigNode &node, ZigNode &parent);
+    VisitResult visitNumberLiteral(ZigNode &node, ZigNode &parent);
+    VisitResult visitIdentifier(ZigNode &node, ZigNode &parent);
+    VisitResult visitErrorUnion(ZigNode &node, ZigNode &parent);
 
 //private:
 //    static QHash<QString, KDevelop::AbstractType::Ptr> m_defaultTypes;

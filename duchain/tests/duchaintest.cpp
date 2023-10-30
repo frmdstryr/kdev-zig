@@ -69,7 +69,7 @@ ReferencedTopDUContext parseCode(QString code)
 }
 
 
-DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name)
+DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, bool firstChildContext=false)
 {
     if (!topContext) {
         return nullptr;
@@ -87,16 +87,11 @@ DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name)
         qDebug() << "No internal context for " << name;
         return nullptr;
     }
-    auto n = internalContext->childContexts().size();
-    if (n != 1 || !internalContext->childContexts().first()) {
-        if (n < 1) {
-            qDebug() << "No child contexts for " << name;
-        } else if (n > 1) {
-            qDebug() << "Multiple child contexts for " << name;
-        }
-        return nullptr;
-    }
 
+    if (!firstChildContext) {
+        return internalContext;
+    }
+    Q_ASSERT(internalContext->childContexts().size() == 1);
     return internalContext->childContexts().first();
 }
 
@@ -118,6 +113,7 @@ void DUChainTest::sanityCheckFn()
     Declaration *funcDeclaration = decls.first();
     QVERIFY(funcDeclaration);
     QCOMPARE(funcDeclaration->identifier().toString(), QString("main"));
+    QCOMPARE(funcDeclaration->abstractType()->toString(), QString("function void ()"));
 }
 
 void DUChainTest::sanityCheckVar()
@@ -132,6 +128,7 @@ void DUChainTest::sanityCheckVar()
     Declaration *varDeclaration = decls.first();
     QVERIFY(varDeclaration);
     QCOMPARE(varDeclaration->identifier().toString(), QString("X"));
+    QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int"));
 }
 
 void DUChainTest::cleanupTestCase()
@@ -169,7 +166,6 @@ void DUChainTest::testVarBindings()
 
     QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
     for (const QString &binding : bindings) {
-        qDebug() << "Checking name " << binding;
         QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
     }
 }
@@ -185,9 +181,9 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("simple var typed") << "" << "var y: u8 = 2;" << QStringList { "y" };
     QTest::newRow("multiple vars") << "" << "var x = 1;\nvar y = 2;" << QStringList { "x", "y" };
     QTest::newRow("fn and var") << "" << "var x = 1;\npub fn foo() void {}" << QStringList { "x", "foo" };
-    QTest::newRow("fn var") << "main" << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << QStringList { "y" };
+    QTest::newRow("fn var") << "1,0" << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << QStringList { "y" };
     QTest::newRow("struct decl") << "" << "const Foo = struct {};" << QStringList { "Foo" };
-    QTest::newRow("fn multiple vars") << "main" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
+    QTest::newRow("fn multiple vars") << "1,0" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
     QTest::newRow("struct fn") << "Foo" << "const Foo = struct { pub fn bar() void {}};" << QStringList { "bar" };
     QTest::newRow("struct var") << "Foo" << "const Foo = struct { var x = 1; };" << QStringList { "x" };
     QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
@@ -299,13 +295,18 @@ void DUChainTest::testVarType_data()
     QTest::addColumn<QString>("container");
 
     QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8" << "";
+    QTest::newRow("const bool") << "const x = true;" << "x" << "bool" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
-    QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "struct Foo" << "";
+    QTest::newRow("enum") << "const Day = enum{Mon, Tue};" << "Day" << "Day" << "";
+    QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
     QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";
+    QTest::newRow("fn !void") << "pub fn main() !void {}" << "main" << "function !void ()"<< "";
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
     QTest::newRow("fn arg") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)"<< "";
+    QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
+
 
 }

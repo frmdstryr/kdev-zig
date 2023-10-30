@@ -16,55 +16,68 @@ namespace Zig
 
 using namespace KDevelop;
 
-class KDEVPLATFORMLANGUAGE_EXPORT OptionalTypeData
+class KDEVPLATFORMLANGUAGE_EXPORT ErrorTypeData
     : public AbstractTypeData
 {
 public:
     /// Constructor
-    OptionalTypeData();
+    ErrorTypeData();
     /// Copy constructor. \param rhs data to copy
-    OptionalTypeData(const OptionalTypeData& rhs);
-    ~OptionalTypeData() = default;
-    OptionalTypeData& operator=(const OptionalTypeData& rhs) = delete;
+    ErrorTypeData(const ErrorTypeData& rhs);
+    ~ErrorTypeData() = default;
+    ErrorTypeData& operator=(const ErrorTypeData& rhs) = delete;
     /// Type of data if the value is not null
     IndexedType m_baseType;
+    IndexedType m_errorType;
 };
 
 /**
  * \short A type representing optional types.
  *
- * OptionalType is used to represent types which hold a can be null.
+ * ErrorType is used to represent types which hold a can be null.
  */
-class KDEVPLATFORMLANGUAGE_EXPORT OptionalType
+class KDEVPLATFORMLANGUAGE_EXPORT ErrorType
     : public AbstractType
 {
 public:
-    using Ptr = TypePtr<OptionalType>;
+    using Ptr = TypePtr<ErrorType>;
 
     /// Default constructor
-    OptionalType ();
+    ErrorType ();
     /// Copy constructor. \param rhs type to copy
-    OptionalType(const OptionalType& rhs);
+    ErrorType(const ErrorType& rhs);
     /// Constructor using raw data. \param data internal data.
-    explicit OptionalType(OptionalTypeData& data);
+    explicit ErrorType(ErrorTypeData& data);
     /// Destructor
-    ~OptionalType() override;
+    ~ErrorType() override;
 
-    OptionalType& operator=(const OptionalType& rhs) = delete;
+    ErrorType& operator=(const ErrorType& rhs) = delete;
 
     /**
-     * Sets the base type of the of the optional value
+     * Sets the base type of the value.
      *
      * \param type the base type.
      */
     void setBaseType(const AbstractType::Ptr& type);
+    /**
+     * Sets the error type of the value.
+     *
+     * \param type the base type.
+     */
+    void setErrorType(const AbstractType::Ptr& type);
 
     /**
-     * Retrieve the base type of the optional value
+     * Retrieve the base type of the value
      *
      * \returns the base type.
      */
     AbstractType::Ptr baseType () const;
+    /**
+     * Retrieve the error type of the value.
+     *
+     * \returns the base type.
+     */
+    AbstractType::Ptr errorType () const;
 
     QString toString() const override;
 
@@ -76,18 +89,18 @@ public:
 
     bool equals(const AbstractType* rhs) const override;
 
-    void exchangeTypes(TypeExchanger* exchanger) override;
+    // void exchangeTypes(TypeExchanger* exchanger) override;
 
     enum {
-        Identity = 155
+        Identity = 157
     };
 
-    using Data = OptionalTypeData;
+    using Data = ErrorTypeData;
 
 protected:
     void accept0 (TypeVisitor* v) const override;
 
-    TYPE_DECLARE_DATA(OptionalType)
+    TYPE_DECLARE_DATA(ErrorType)
 };
 
 

@@ -31,7 +31,7 @@ namespace Zig
 
 using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, QString>;
 
-class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase // , public Visitor
+class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
 {
 public:
     ContextBuilder() = default;
@@ -39,8 +39,8 @@ public:
 
     void setParseSession(ParseSession *session);
 
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent); // override;
-    virtual void visitChildren(ZigNode &node, ZigNode &parent); // override;
+    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent);
+    virtual void visitChildren(ZigNode &node, ZigNode &parent);
 
 protected:
     KDevelop::RangeInRevision editorFindSpellingRange(ZigNode &node, const QString &identifier);
@@ -68,6 +68,7 @@ protected:
         KDevelop::DUContext::SearchFlag flag = KDevelop::DUContext::SearchFlag::NoSearchFlags
     );
 
+    bool shouldSkipNode(ZigNode &node, ZigNode &parent);
 
 private:
     ParseSession *session;
