@@ -1,3 +1,4 @@
+#include <language/duchain/types/functiontype.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -62,6 +63,8 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     switch (node.tag()) {
     case NodeTag_identifier:
         return visitIdentifier(node, parent);
+    case NodeTag_field_access:
+        return visitFieldAccess(node, parent);
     case NodeTag_optional_type:
         return visitOptionalType(node, parent);
     case NodeTag_string_literal:
@@ -80,6 +83,34 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
         return visitContainerDecl(node, parent);
     case NodeTag_error_union:
         return visitErrorUnion(node, parent);
+    case NodeTag_builtin_call:
+    case NodeTag_builtin_call_comma:
+    case NodeTag_builtin_call_two:
+    case NodeTag_builtin_call_two_comma:
+    case NodeTag_call:
+    case NodeTag_call_comma:
+    case NodeTag_call_one:
+    case NodeTag_call_one_comma:
+    case NodeTag_async_call:
+    case NodeTag_async_call_comma:
+    case NodeTag_async_call_one:
+    case NodeTag_async_call_one_comma:
+        return visitCall(node, parent);
+    case NodeTag_address_of:
+        return visitAddressOf(node, parent);
+    case NodeTag_deref:
+        return visitDeref(node, parent);
+    case NodeTag_unwrap_optional:
+        return visitUnwrapOptional(node, parent);
+    case NodeTag_equal_equal:
+    case NodeTag_bang_equal:
+    case NodeTag_less_or_equal:
+    case NodeTag_less_than:
+    case NodeTag_greater_than:
+    case NodeTag_greater_or_equal:
+        return visitBoolExpr(node, parent);
+    case NodeTag_try:
+        return visitTry(node, parent);
     default:
         break;
     }
@@ -100,6 +131,36 @@ VisitResult ExpressionVisitor::visitPointerType(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
+VisitResult ExpressionVisitor::visitAddressOf(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    // qDebug() << "visit address of";
+    ExpressionVisitor v(this);
+    ZigNode value = node.nextChild();
+    v.visitNode(value, node);
+    auto ptrType = new PointerType();
+    Q_ASSERT(ptrType);
+    ptrType->setBaseType(v.lastType());
+    encounter(AbstractType::Ptr(ptrType));
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitDeref(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    // qDebug() << "visit deref";
+    ExpressionVisitor v(this);
+    ZigNode value = node.nextChild();
+    v.visitNode(value, node);
+    if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
+        encounter(AbstractType::Ptr(ptr->baseType()));
+    } else {
+        encounterUnknown(); // TODO: Set error?
+    }
+    return Recurse;
+}
+
+
 VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
 {
     // qDebug() << "visit optional";
@@ -112,6 +173,22 @@ VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
     optionalType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(optionalType));
     return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    // qDebug() << "visit unwrap optional";
+    ExpressionVisitor v(this);
+    ZigNode value = node.nextChild();
+    v.visitNode(value, node);
+    if (auto optional = v.lastType().dynamicCast<OptionalType>()) {
+        encounter(AbstractType::Ptr(optional->baseType()));
+    } else {
+        encounterUnknown(); // TODO: Set error?
+    }
+    return Recurse;
+
 }
 
 VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent)
@@ -181,6 +258,39 @@ VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent
     return Recurse;
 }
 
+VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
+{
+    ExpressionVisitor v(this);
+    ZigNode next = node.nextChild();
+    v.visitNode(next, node);
+    if (auto func = v.lastType().dynamicCast<FunctionType>()) {
+        encounter(func->returnType());
+    } else {
+        // TODO: Handle builtins?
+        encounterUnknown();
+    }
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
+{
+    ExpressionVisitor v(this);
+    ZigNode owner = node.nextChild();
+    v.visitNode(owner, node);
+    QString attr = node.tokenSlice(node.data().rhs);
+    if (auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext())) {
+        if (auto ptr = decl->abstractType().dynamicCast<PointerType>()) {
+            // Pointers are automtically accessed
+            encounter(ptr->baseType(), DeclarationPointer(decl));
+        } else {
+            encounter(decl->abstractType(), DeclarationPointer(decl));
+        }
+    } else {
+        encounterUnknown();
+    }
+    return Recurse;
+}
+
 VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
@@ -197,6 +307,26 @@ VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
     errType->setBaseType(typeVisitor.lastType());
     errType->setErrorType(errorVisitor.lastType());
     encounter(AbstractType::Ptr(errType));
+    return Recurse;
+}
+
+
+VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
+{
+    encounter(AbstractType::Ptr(new BuiltinType("bool")));
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
+{
+    ExpressionVisitor v(this);
+    ZigNode next = node.nextChild();
+    v.visitNode(next, node);
+    if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
+        encounter(errorType->baseType());
+    } else {
+        encounterUnknown(); // TODO: Show error?
+    }
     return Recurse;
 }
 

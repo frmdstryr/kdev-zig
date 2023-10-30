@@ -24,6 +24,7 @@
 #include <language/duchain/types/alltypes.h>
 #include <language/duchain/classdeclaration.h>
 #include <language/duchain/functiondeclaration.h>
+#include <language/duchain/classfunctiondeclaration.h>
 #include <language/duchain/classmemberdeclaration.h>
 #include <language/duchain/aliasdeclaration.h>
 

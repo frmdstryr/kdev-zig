@@ -5,11 +5,35 @@
 */
 #include "helpers.h"
 #include <language/duchain/duchainlock.h>
+#include "types/declarationtypes.h"
 
 namespace Zig
 {
 
 using namespace KDevelop;
+
+
+Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
+                                     const IndexedIdentifier& attribute,
+                                     const TopDUContext* topContext)
+{
+    if ( ! accessed ) {
+        return nullptr;
+    }
+
+    if (auto s = accessed.dynamicCast<StructureType>()) {
+        if (auto ctx = s->internalContext(topContext)) {
+            auto decls = ctx->findDeclarations(
+                attribute, CursorInRevision::invalid(),
+                topContext, DUContext::DontSearchInParent);
+            if (!decls.isEmpty()) {
+                return decls.first();
+            }
+        }
+    }
+
+    return nullptr;
+}
 
 
 Declaration* Helper::declarationForName(

@@ -88,6 +88,11 @@ KDevelop::RangeInRevision ZigNode::paramRange(uint32_t i)
     return tokenRange(tok);
 }
 
+QString ZigNode::tokenSlice(TokenIndex i)
+{
+    ZigString name = ZigString(ast_token_slice(ast, i));
+    return QString::fromUtf8(*name);
+}
 
 KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
 {

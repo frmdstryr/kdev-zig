@@ -34,12 +34,19 @@ public:
     void visitChildren(ZigNode &node, ZigNode &parent);
 
     VisitResult visitContainerDecl(ZigNode &node, ZigNode &parent);
+    VisitResult visitAddressOf(ZigNode &node, ZigNode &parent);
+    VisitResult visitDeref(ZigNode &node, ZigNode &parent);
     VisitResult visitPointerType(ZigNode &node, ZigNode &parent);
     VisitResult visitOptionalType(ZigNode &node, ZigNode &parent);
+    VisitResult visitUnwrapOptional(ZigNode &node, ZigNode &parent);
     VisitResult visitStringLiteral(ZigNode &node, ZigNode &parent);
     VisitResult visitNumberLiteral(ZigNode &node, ZigNode &parent);
     VisitResult visitIdentifier(ZigNode &node, ZigNode &parent);
     VisitResult visitErrorUnion(ZigNode &node, ZigNode &parent);
+    VisitResult visitCall(ZigNode &node, ZigNode &parent);
+    VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
+    VisitResult visitBoolExpr(ZigNode &node, ZigNode &parent);
+    VisitResult visitTry(ZigNode &node, ZigNode &parent);
 
 //private:
 //    static QHash<QString, KDevelop::AbstractType::Ptr> m_defaultTypes;

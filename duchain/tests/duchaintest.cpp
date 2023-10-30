@@ -75,6 +75,16 @@ DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, b
         return nullptr;
     }
 
+    if (name.isEmpty()) {
+        return topContext;
+    }
+
+    if (name.contains(",")) {
+        auto parts = name.split(",");
+        CursorInRevision cursor(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
+        return topContext->findContextAt(cursor, true);
+    }
+
     QList<Declaration *> declaration = topContext->findDeclarations(QualifiedIdentifier(name));
 
     if (declaration.size() != 1 || !declaration.first()) {
@@ -146,17 +156,7 @@ void DUChainTest::testVarBindings()
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    DUContext *internalContext;
-
-    if (contextName.contains(",")) {
-        auto parts = contextName.split(",");
-        CursorInRevision cursor(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
-        internalContext = context->findContextAt(cursor, true);
-    } else if (contextName.isEmpty()) {
-        internalContext = context;
-    } else {
-        internalContext = getInternalContext(context, contextName);
-    }
+    DUContext *internalContext = getInternalContext(context, contextName);
     QVERIFY(internalContext);
 
     qDebug() << "Decls are:";
@@ -264,23 +264,18 @@ void DUChainTest::testVarType()
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    DUContext *localContext;
-    if (container.isEmpty()) {
-        localContext = context;
-    } else {
-        localContext = getInternalContext(context, container);
-    }
-    QVERIFY(localContext);
+    DUContext *internalContext = getInternalContext(context, container);
+    QVERIFY(internalContext);
 
     qDebug() << "Locals are:";
-    for (const KDevelop::Declaration *decl : localContext->localDeclarations()) {
+    for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
         qDebug() << "  name" << decl->identifier();
         if (decl->abstractType()) {
             qDebug() << " type" << decl->abstractType()->toString();
         }
     }
-    auto decls = localContext->findDeclarations(Identifier(var));
-    QVERIFY(decls.size() ==  1);
+    auto decls = internalContext->findDeclarations(Identifier(var));
+    QCOMPARE(decls.size(),  1);
     const KDevelop::Declaration *decl = decls.first();
     qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     QCOMPARE(decl->abstractType()->toString(), type);
@@ -307,6 +302,18 @@ void DUChainTest::testVarType_data()
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
     QTest::newRow("fn arg") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)"<< "";
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
-
+    QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
+    QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
+    QTest::newRow("fn call") << "pub fn foo() f32 { return 0.0; }\ntest {\nvar f = foo();\n}" << "f" << "f32" << "3,0";
+    QTest::newRow("var addr of") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{}; var x = &f;\n}" << "x" << "*Foo" << "3,0";
+    QTest::newRow("ptr deref") << "test {\nvar buf: *u8 = undefined; var x = buf.*;\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("unwrap optional") << "var x: ?u8 = 0; const y = x.?;" << "y" << "u8" << "";
+    QTest::newRow("bool >") << "var x = 1 > 2;" << "x" << "bool" << "";
+    QTest::newRow("bool >=") << "var x = 1 >= 2;" << "x" << "bool" << "";
+    QTest::newRow("bool <") << "var x = 1 < 2;" << "x" << "bool" << "";
+    QTest::newRow("bool <=") << "var x = 1 <= 2;" << "x" << "bool" << "";
+    QTest::newRow("bool ==") << "var x = 1 == 2;" << "x" << "bool" << "";
+    QTest::newRow("bool !=") << "var x = 1 != 2;" << "x" << "bool" << "";
+    QTest::newRow("try") << "pub fn main() !f32 {return 1;}\ntest{\nvar x = try main(); \n}" << "x" << "f32"<< "3,0";
 
 }

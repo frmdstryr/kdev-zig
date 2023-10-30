@@ -23,8 +23,9 @@
 #include <language/editor/documentrange.h>
 
 #include "types/builtintype.h"
-
+#include "expressionvisitor.h"
 #include "zigdebug.h"
+#include "helpers.h"
 
 namespace Zig
 {
@@ -199,28 +200,14 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
     RangeInRevision useRange = editorFindSpellingRange(node, attr);
 
     QualifiedIdentifier identifier((Identifier(attr)));
-
-    QList<Declaration *> declarations;
     ZigNode owner = node.nextChild(); // access lhs
-    NodeKind ownerKind = owner.kind();
-    if (ownerKind == Ident || ownerKind == FieldAccess) {
-        ident = owner.spellingName();
-        QualifiedIdentifier ownerPath((Identifier(ident)));
-        DUChainReadLocker lock;
-        DUContext* context = topContext()->findContextAt(useRange.start);
-        declarations = findSimpleVar(ownerPath, context);
-        if (!declarations.isEmpty()) {
-            DUContext* ownerContext = declarations.first()->internalContext();
-            if (!ownerContext) {
-                return;
-            }
-            declarations = ownerContext->findDeclarations(identifier);
-        }
-    } else {
-        return; // TODO: owner type
-    }
+    DUChainReadLocker lock;
+    ExpressionVisitor v(currentContext());
+    v.startVisiting(owner, node);
+    auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext());
+    lock.unlock();
 
-    if (declarations.isEmpty()) {
+    if (!decl) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -228,15 +215,10 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
         p->setDescription(i18n("No field %1 on %2", attr, ident));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
-    } else {
-        for (Declaration *declaration : declarations) {
-            // TODO: Check if a struct or alias of struct
-            if (declaration->range() != useRange) {
-                // qDebug() << "Create use:" << node.index << " name:" << attr << " range:" << useRange;
-                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-                break;
-            }
-        }
+    }
+    else if (decl->range() != useRange) {
+        // qDebug() << "Create use:" << node.index << " name:" << attr << " range:" << useRange;
+        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
     }
 }
 

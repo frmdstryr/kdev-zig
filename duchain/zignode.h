@@ -60,6 +60,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     QString spellingName();
     QString mainToken();
     QString containerName();
+    QString tokenSlice(TokenIndex i);
 
     // Capture name in case of if/while/for etc
     QString captureName(CaptureType capture);
