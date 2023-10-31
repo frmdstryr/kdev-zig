@@ -48,6 +48,11 @@ public:
     VisitResult visitBoolExpr(ZigNode &node, ZigNode &parent);
     VisitResult visitTry(ZigNode &node, ZigNode &parent);
 
+    VisitResult visitPointerTypeAligned(ZigNode &node, ZigNode &parent);
+    VisitResult visitArrayType(ZigNode &node, ZigNode &parent);
+    VisitResult visitArrayTypeSentinel(ZigNode &node, ZigNode &parent);
+
+
 //private:
 //    static QHash<QString, KDevelop::AbstractType::Ptr> m_defaultTypes;
 };

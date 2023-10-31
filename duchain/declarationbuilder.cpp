@@ -266,16 +266,16 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             auto paramRange = node.paramRange(i);
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
 
-            lock.unlock();
+            //lock.unlock();
             ExpressionVisitor v(currentContext());
             v.startVisiting(paramType, node);
-            lock.lock();
+            //lock.lock();
             fn->addArgument(v.lastType(), i);
 
             VisitResult ret = buildContext<ParamDecl>(paramType, node);
             eventuallyAssignInternalContext();
             closeDeclaration();
-            lock.unlock();
+            //lock.unlock();
         }
     }
 

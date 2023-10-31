@@ -1,9 +1,10 @@
 #include <language/duchain/types/functiontype.h>
+#include <language/duchain/duchainlock.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
 #include "types/errortype.h"
-#include "types/errortype.h"
+#include "types/slicetype.h"
 #include "expressionvisitor.h"
 #include "helpers.h"
 
@@ -72,8 +73,6 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_number_literal:
         return visitNumberLiteral(node, parent);
     case NodeTag_ptr_type:
-    case NodeTag_ptr_type_aligned:
-    case NodeTag_ptr_type_sentinel:
     case NodeTag_ptr_type_bit_range:
         return visitPointerType(node, parent);
     case NodeTag_container_decl:
@@ -111,6 +110,13 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
         return visitBoolExpr(node, parent);
     case NodeTag_try:
         return visitTry(node, parent);
+    case NodeTag_array_type:
+        return visitArrayType(node, parent);
+    case NodeTag_array_type_sentinel:
+        return visitArrayTypeSentinel(node, parent);
+    case NodeTag_ptr_type_aligned:
+        return visitPointerTypeAligned(node, parent);
+    //case NodeTag_ptr_type_sentinel:
     default:
         break;
     }
@@ -278,6 +284,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     ZigNode owner = node.nextChild();
     v.visitNode(owner, node);
     QString attr = node.tokenSlice(node.data().rhs);
+    DUChainReadLocker lock;
     if (auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext())) {
         if (auto ptr = decl->abstractType().dynamicCast<PointerType>()) {
             // Pointers are automtically accessed
@@ -313,12 +320,14 @@ VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     encounter(AbstractType::Ptr(new BuiltinType("bool")));
     return Recurse;
 }
 
 VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
@@ -327,6 +336,111 @@ VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
     } else {
         encounterUnknown(); // TODO: Show error?
     }
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor typeVisitor(this);
+    typeVisitor.visitNode(rhs, node);
+
+    auto sliceType = new SliceType();
+    Q_ASSERT(sliceType);
+    sliceType->setElementType(typeVisitor.lastType());
+
+    if (lhs.tag() == NodeTag_number_literal) {
+        bool ok;
+        QString value = lhs.mainToken();
+        int size = value.toInt(&ok, 0);
+        if (ok) {
+            sliceType->setDimension(size);
+        }
+    }
+
+    encounter(AbstractType::Ptr(sliceType));
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitArrayTypeSentinel(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    auto sentinel = ast_array_type_sentinel(node.ast, node.index);
+    ZigNode elemType = {node.ast, sentinel.elem_type};
+
+
+    ExpressionVisitor typeVisitor(this);
+    typeVisitor.visitNode(elemType, node);
+
+    auto sliceType = new SliceType();
+    Q_ASSERT(sliceType);
+    sliceType->setElementType(typeVisitor.lastType());
+
+    ZigNode sentinelType = {node.ast, sentinel.sentinel};
+    if (sentinelType.tag() == NodeTag_number_literal) {
+        bool ok;
+        QString value = sentinelType.mainToken();
+        int size = value.toInt(&ok, 0);
+        if (ok) {
+            sliceType->setSentinel(size);
+        }
+    }
+
+    if (lhs.tag() == NodeTag_number_literal) {
+        bool ok;
+        QString value = lhs.mainToken();
+        int size = value.toInt(&ok, 0);
+        if (ok) {
+            sliceType->setDimension(size);
+        }
+    }
+
+    encounter(AbstractType::Ptr(sliceType));
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitPointerTypeAligned(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+
+    QString mainToken = node.mainToken();
+
+    bool ok;
+    int align = -1;
+    if (lhs.tag() == NodeTag_number_literal) {
+        QString value = lhs.mainToken();
+        align = value.toInt(&ok, 0);
+    }
+
+    ExpressionVisitor typeVisitor(this);
+    typeVisitor.visitNode(rhs, node);
+    if (mainToken == "[") {
+        // TODO: slice alignment
+        auto sliceType = new SliceType();
+        Q_ASSERT(sliceType);
+        sliceType->setElementType(typeVisitor.lastType());
+        encounter(AbstractType::Ptr(sliceType));
+    } else if (mainToken == "*") {
+        auto ptrType = new PointerType();
+        Q_ASSERT(ptrType);
+        ptrType->setBaseType(typeVisitor.lastType());
+        if (ok) {
+            ptrType->setAlignOf(align);
+        }
+        encounter(AbstractType::Ptr(ptrType));
+    } else {
+        encounterUnknown();
+    }
+
+
     return Recurse;
 }
 

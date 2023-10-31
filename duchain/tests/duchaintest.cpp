@@ -315,5 +315,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("bool ==") << "var x = 1 == 2;" << "x" << "bool" << "";
     QTest::newRow("bool !=") << "var x = 1 != 2;" << "x" << "bool" << "";
     QTest::newRow("try") << "pub fn main() !f32 {return 1;}\ntest{\nvar x = try main(); \n}" << "x" << "f32"<< "3,0";
-
+    QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
+    QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
+    QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
+    QTest::newRow("ptr type aligned ptr") << "var x: *align(4)u8 = undefined;" << "x" << "*u8" << "";
 }

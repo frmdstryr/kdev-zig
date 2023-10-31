@@ -561,6 +561,7 @@ struct NodeData
     uint32_t rhs;
 };
 
+
 struct ZError
 {
     int severity;
@@ -573,6 +574,12 @@ typedef uint32_t TokenIndex;
 typedef VisitResult (*VisitorCallbackFn)(ZAst* tree, NodeIndex node, NodeIndex parent, void *data);
 
 
+struct ArrayTypeSentinel
+{
+    NodeIndex sentinel;
+    NodeIndex elem_type;
+};
+
 ZAst *parse_ast(const char *name, const char *source);
 uint32_t ast_error_count(ZAst *tree);
 void destroy_ast(ZAst *tree);
@@ -583,6 +590,7 @@ void destroy_error(ZError *err);
 NodeKind ast_node_kind(ZAst *tree, NodeIndex node);
 NodeTag ast_node_tag(ZAst* tree, NodeIndex node);
 NodeData ast_node_data(ZAst *tree, NodeIndex node);
+ArrayTypeSentinel ast_array_type_sentinel(ZAst *tree, NodeIndex node);
 NodeIndex ast_visit_one_child(ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(ZAst *tree, NodeIndex node);

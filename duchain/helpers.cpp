@@ -17,7 +17,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
                                      const IndexedIdentifier& attribute,
                                      const TopDUContext* topContext)
 {
-    if ( ! accessed ) {
+    if ( ! accessed || !topContext ) {
         return nullptr;
     }
 

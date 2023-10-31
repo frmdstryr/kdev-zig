@@ -816,6 +816,28 @@ export fn ast_node_data(ptr: ?*Ast, node: Index) NodeData {
     return NodeData{};
 }
 
+const ArrayTypeSentinel = extern struct {
+    sentinel: Index = 0,
+    elem_type: Index = 0,
+};
+
+export fn ast_array_type_sentinel(ptr: ?*Ast, node: Index) ArrayTypeSentinel {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            const tag = ast.nodes.items(.tag)[node];
+            if (tag == .array_type_sentinel) {
+                const d = ast.nodes.items(.data)[node];
+                const array_data = ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
+                return ArrayTypeSentinel{
+                    .sentinel = array_data.sentinel,
+                    .elem_type = array_data.elem_type
+                };
+            }
+        }
+    }
+    return ArrayTypeSentinel{};
+}
+
 
 fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
     _ = ast;
