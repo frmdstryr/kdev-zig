@@ -6,19 +6,23 @@
 #include "helpers.h"
 #include <language/duchain/duchainlock.h>
 #include "types/declarationtypes.h"
+#include "types/pointertype.h"
 
 namespace Zig
 {
 
-using namespace KDevelop;
-
 
 Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
-                                     const IndexedIdentifier& attribute,
-                                     const TopDUContext* topContext)
+                                     const KDevelop::IndexedIdentifier& attribute,
+                                     const KDevelop::TopDUContext* topContext)
 {
     if ( ! accessed || !topContext ) {
         return nullptr;
+    }
+
+    if (auto ptr = accessed.dynamicCast<Zig::PointerType>()) {
+        // Zig automatically walks pointers
+        return accessAttribute(ptr->baseType(), attribute, topContext);
     }
 
     if (auto s = accessed.dynamicCast<StructureType>()) {
@@ -81,6 +85,29 @@ Declaration* Helper::declarationForName(
     } while ((currentContext = currentContext->parentContext()));
 
     return nullptr;
+}
+
+
+KDevelop::DUContext* Helper::thisContext(
+        const KDevelop::CursorInRevision& location,
+        const KDevelop::TopDUContext* topContext)
+{
+    if (!location.isValid()) {
+        return nullptr;
+    }
+    DUContext* currentContext = topContext->findContextAt(location);
+    while (currentContext) {
+        auto contextType = currentContext->type();
+        if (contextType == DUContext::Class
+            || contextType == DUContext::Namespace
+            || contextType == DUContext::Enum
+        ) {
+            return currentContext;
+        }
+        currentContext = currentContext->parentContext();
+    }
+    return nullptr;
+
 }
 
 

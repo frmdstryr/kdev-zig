@@ -42,6 +42,14 @@ public:
         return accessAttribute(accessed, KDevelop::IndexedIdentifier(KDevelop::Identifier(attribute)), topContext);
     }
 
+
+    /**
+     * Follows the context up to the closest container. Eg the builtin @This();
+     * Return nullptr if no class or namespace parent context is found.
+     **/
+    static KDevelop::DUContext* thisContext(
+        const KDevelop::CursorInRevision& location,
+        const KDevelop::TopDUContext* topContext);
 };
 
 }

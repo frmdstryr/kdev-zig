@@ -74,6 +74,12 @@ void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 {
     // qDebug() << "DeclarationBuilder::visitChildren" << node.index;
     NodeKind kind = node.kind();
+
+    if (NodeTraits::shouldSetContextOwner(kind)) {
+        DUChainWriteLocker lock;
+        currentContext()->setOwner(currentDeclaration());
+    }
+
     if (kind == FunctionDecl) {
         updateFunctionDecl(node);
     }
@@ -91,10 +97,7 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     }
     Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
-    bool overwrite = (
-        Kind == ContainerDecl && parent.kind() == VarDecl
-    );
-
+    bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
     createDeclaration<Kind>(node, name, hasContext, range);
@@ -151,8 +154,11 @@ FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node)
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
 AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
+
     if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
+        const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
+
         if (!typeNode.isRoot()) {
             ExpressionVisitor v(currentContext());
             v.startVisiting(typeNode, node);

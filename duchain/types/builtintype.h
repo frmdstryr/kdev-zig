@@ -8,6 +8,8 @@
 namespace Zig
 {
 
+const quint32 ComptimeModifier = 1 << 14;
+
 using namespace KDevelop;
 
 class KDEVPLATFORMLANGUAGE_EXPORT BuiltinTypeData
@@ -34,7 +36,7 @@ public:
     BuiltinType(QString name);
     BuiltinType(const BuiltinType &rhs);
     explicit BuiltinType(BuiltinTypeData& data);
-    ~BuiltinType();
+    ~BuiltinType() override = default;
 
     BuiltinType& operator=(const BuiltinType& rhs) = delete;
 

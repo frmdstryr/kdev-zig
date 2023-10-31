@@ -50,7 +50,7 @@ public:
     /// Constructor using raw data. \param data internal data.
     explicit SliceType(SliceTypeData& data);
     /// Destructor
-    ~SliceType() override;
+    ~SliceType() override = default;
 
     SliceType& operator=(const SliceType& rhs) = delete;
 

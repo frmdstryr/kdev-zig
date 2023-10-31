@@ -304,6 +304,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
     QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
     QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
+    QTest::newRow("field ptr") << "const Foo = struct {a: u8=0};\ntest {\nvar f = &Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
     QTest::newRow("fn call") << "pub fn foo() f32 { return 0.0; }\ntest {\nvar f = foo();\n}" << "f" << "f32" << "3,0";
     QTest::newRow("var addr of") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{}; var x = &f;\n}" << "x" << "*Foo" << "3,0";
     QTest::newRow("ptr deref") << "test {\nvar buf: *u8 = undefined; var x = buf.*;\n}" << "x" << "u8" << "2,0";
@@ -316,7 +317,18 @@ void DUChainTest::testVarType_data()
     QTest::newRow("bool !=") << "var x = 1 != 2;" << "x" << "bool" << "";
     QTest::newRow("try") << "pub fn main() !f32 {return 1;}\ntest{\nvar x = try main(); \n}" << "x" << "f32"<< "3,0";
     QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
+    QTest::newRow("array access") << "var x: [2]u8 = undefined; var y = x[0];" << "y" << "u8" << "";
+    QTest::newRow("array len") << "var x: [2]u8 = undefined; var y = x.len;" << "y" << "usize" << "";
+    QTest::newRow("array slice") << "var x: [2]u8 = undefined; var y = x[0..];" << "y" << "[]u8" << "";
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
     QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
     QTest::newRow("ptr type aligned ptr") << "var x: *align(4)u8 = undefined;" << "x" << "*u8" << "";
+
+    // Builtin calls
+    QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";
+    QTest::newRow("@sizeOf()") << "const Foo = struct { a: u8, }; test {var x = @sizeOf(Foo);\n}" << "x" << "comptime_int" << "1,0";
+    QTest::newRow("@as()") << "test{var x = @as(u8, 1);\n}" << "x" << "u8" << "1,0";
+    QTest::newRow("@min()") << "test{var x: u32 = 1; var y = @min(x, 1);\n}" << "x" << "u32" << "1,0";
+    // TODO: constness
+    QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
 }

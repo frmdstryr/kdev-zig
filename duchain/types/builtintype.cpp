@@ -94,10 +94,6 @@ BuiltinType::BuiltinType(QString name)
     setDataType(name);
 }
 
-BuiltinType::~BuiltinType()
-{
-}
-
 QString BuiltinType::toString() const
 {
     const auto n = std::min(

@@ -1,5 +1,7 @@
+#include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
 #include <language/duchain/duchainlock.h>
+#include <language/duchain/duchainutils.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -80,12 +82,13 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_container_decl_two:
     case NodeTag_container_decl_two_trailing:
         return visitContainerDecl(node, parent);
+    case NodeTag_struct_init:
+    case NodeTag_struct_init_comma:
+    case NodeTag_struct_init_one:
+    case NodeTag_struct_init_one_comma:
+        return visitStructInit(node, parent);
     case NodeTag_error_union:
         return visitErrorUnion(node, parent);
-    case NodeTag_builtin_call:
-    case NodeTag_builtin_call_comma:
-    case NodeTag_builtin_call_two:
-    case NodeTag_builtin_call_two_comma:
     case NodeTag_call:
     case NodeTag_call_comma:
     case NodeTag_call_one:
@@ -95,6 +98,11 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_async_call_one:
     case NodeTag_async_call_one_comma:
         return visitCall(node, parent);
+    case NodeTag_builtin_call:
+    case NodeTag_builtin_call_comma:
+    case NodeTag_builtin_call_two:
+    case NodeTag_builtin_call_two_comma:
+        return visitBuiltinCall(node, parent);
     case NodeTag_address_of:
         return visitAddressOf(node, parent);
     case NodeTag_deref:
@@ -112,6 +120,12 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
         return visitTry(node, parent);
     case NodeTag_array_type:
         return visitArrayType(node, parent);
+    case NodeTag_array_access:
+        return visitArrayAccess(node, parent);
+    case NodeTag_slice:
+    case NodeTag_slice_open:
+    case NodeTag_slice_sentinel:
+        return visitSlice(node, parent);
     case NodeTag_array_type_sentinel:
         return visitArrayTypeSentinel(node, parent);
     case NodeTag_ptr_type_aligned:
@@ -175,7 +189,6 @@ VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
     auto optionalType = new OptionalType();
-    Q_ASSERT(optionalType);
     optionalType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(optionalType));
     return Recurse;
@@ -242,6 +255,20 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
+VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)
+{
+    ExpressionVisitor v(this);
+    ZigNode child = node.nextChild();
+    v.startVisiting(child, node);
+    if (auto s = v.lastType().dynamicCast<StructureType>()) {
+        encounter(s);
+    } else {
+        encounterUnknown();
+    }
+    return Recurse;
+}
+
+
 VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent)
 {
     NodeKind kind = parent.kind();
@@ -261,6 +288,116 @@ VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent
     } else {
         encounterUnknown();
     }
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
+{
+    QString name = node.mainToken();
+    if (name == "@This") {
+        return callBuiltinThis(node);
+    } else if (name == "@import") {
+        return callBuiltinImport(node);
+    // todo @Type
+    } else if (
+        // These return the type of the first argument
+        name == "@as"
+        || name == "@sqrt"
+        || name == "@sin"
+        || name == "@cos"
+        || name == "@tan"
+        || name == "@exp"
+        || name == "@exp2"
+        || name == "@log"
+        || name == "@log2"
+        || name == "@log10"
+        || name == "@floor"
+        || name == "@ceil"
+        || name == "@trunc"
+        || name == "@round"
+        || name == "@min"
+        || name == "@max"
+        || name == "@mod"
+        || name == "@rem"
+        || name == "@shlExact"
+        || name == "@shrExact"
+        || name == "@mulAdd"
+    ) {
+        ZigNode typeNode = node.nextChild();
+        if (typeNode.isRoot()) {
+            encounterUnknown();
+        } else {
+            ExpressionVisitor v(this);
+            v.startVisiting(typeNode, node);
+            encounter(v.lastType());
+        }
+    } else if (
+        name == "@errorName"
+        || name == "@tagName"
+        || name == "@typeName"
+        || name == "@embedFile"
+    ) {
+        auto slice = new SliceType();
+        slice->setSentinel(0);
+        auto elemType = new BuiltinType("u8");
+        elemType->setModifiers(BuiltinType::CommonModifiers::ConstModifier);
+        slice->setElementType(AbstractType::Ptr(elemType));
+        encounter(AbstractType::Ptr(slice));
+    } else if (
+        name == "@intFromPtr"
+        || name == "@returnAddress"
+    ) {
+        encounter(AbstractType::Ptr(new BuiltinType("usize")));
+    } else if (
+        name == "@memcpy"
+        || name == "@memset"
+        || name == "@setCold"
+        || name == "@setAlignStack"
+        || name == "@setEvalBranchQuota"
+        || name == "@setFloatMode"
+        || name == "@setRuntimeSafety"
+    ) {
+        encounter(AbstractType::Ptr(new BuiltinType("void")));
+    } else if (
+        name == "@alignOf"
+        || name == "@sizeOf"
+        || name == "@bitOffsetOf"
+        || name == "@bitSizeOf"
+        || name == "@offsetOf"
+    ) {
+        encounter(AbstractType::Ptr(new BuiltinType("comptime_int")));
+    } else {
+        encounterUnknown();
+    }
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::callBuiltinThis(ZigNode &node)
+{
+    // TODO: Report problem if arguments ?
+    auto range = node.range();
+    if (auto thisCtx = Helper::thisContext(range.start, topContext())) {
+        if (auto owner = thisCtx->owner()) {
+            encounter(owner->abstractType(), DeclarationPointer(owner));
+            return Recurse;
+        }
+    }
+    encounterUnknown();
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
+{
+    // TODO: Report problem if invalid argument or file does not exist
+    ZigNode strNode = node.nextChild();
+    if (strNode.tag() != NodeTag_string_literal) {
+        encounterUnknown();
+    }
+    QString path = strNode.mainToken();
+    // TODO: How do I import from another file???
+    //DUChainReadLocker lock;
+    //ReferencedTopDUContext imported = DUChainUtils::standardContextForUrl(path);
+    encounterUnknown();
     return Recurse;
 }
 
@@ -285,14 +422,23 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     v.visitNode(owner, node);
     QString attr = node.tokenSlice(node.data().rhs);
     DUChainReadLocker lock;
-    if (auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext())) {
-        if (auto ptr = decl->abstractType().dynamicCast<PointerType>()) {
-            // Pointers are automtically accessed
-            encounter(ptr->baseType(), DeclarationPointer(decl));
+    if (auto s = v.lastType().dynamicCast<SliceType>()) {
+        // Slices have builtin len / ptr types
+        if (attr == "len") {
+            encounter(AbstractType::Ptr(new BuiltinType("usize")));
+        } else if (attr == "ptr") {
+            auto ptr = new PointerType();
+            ptr->setModifiers(s->modifiers());
+            ptr->setBaseType(s->elementType());
+            encounter(AbstractType::Ptr(ptr));
         } else {
-            encounter(decl->abstractType(), DeclarationPointer(decl));
+            encounterUnknown();
         }
-    } else {
+    }
+    else if (auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext())) {
+        encounter(decl->abstractType(), DeclarationPointer(decl));
+    }
+    else {
         encounterUnknown();
     }
     return Recurse;
@@ -362,6 +508,44 @@ VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
     }
 
     encounter(AbstractType::Ptr(sliceType));
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor v(this);
+    v.startVisiting(lhs, node);
+
+    if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+        encounter(slice->elementType());
+    } else {
+        encounterUnknown();
+    }
+    return Recurse;
+}
+
+VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor v(this);
+    v.startVisiting(lhs, node);
+
+    if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+        auto newSlice = new SliceType();
+        Q_ASSERT(newSlice);
+        newSlice->setElementType(slice->elementType());
+        // TODO: Size try to detect size?
+        encounter(AbstractType::Ptr(newSlice)); // New slice
+    } else {
+        encounterUnknown();
+    }
     return Recurse;
 }
 

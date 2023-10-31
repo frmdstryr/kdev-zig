@@ -33,6 +33,7 @@ public:
     VisitResult visitNode(ZigNode &node, ZigNode &parent);
     void visitChildren(ZigNode &node, ZigNode &parent);
 
+    VisitResult visitStructInit(ZigNode &node, ZigNode &parent);
     VisitResult visitContainerDecl(ZigNode &node, ZigNode &parent);
     VisitResult visitAddressOf(ZigNode &node, ZigNode &parent);
     VisitResult visitDeref(ZigNode &node, ZigNode &parent);
@@ -44,14 +45,19 @@ public:
     VisitResult visitIdentifier(ZigNode &node, ZigNode &parent);
     VisitResult visitErrorUnion(ZigNode &node, ZigNode &parent);
     VisitResult visitCall(ZigNode &node, ZigNode &parent);
+    VisitResult visitBuiltinCall(ZigNode &node, ZigNode &parent);
     VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
     VisitResult visitBoolExpr(ZigNode &node, ZigNode &parent);
     VisitResult visitTry(ZigNode &node, ZigNode &parent);
 
     VisitResult visitPointerTypeAligned(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayType(ZigNode &node, ZigNode &parent);
+    VisitResult visitSlice(ZigNode &node, ZigNode &parent);
+    VisitResult visitArrayAccess(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayTypeSentinel(ZigNode &node, ZigNode &parent);
 
+    VisitResult callBuiltinThis(ZigNode &node);
+    VisitResult callBuiltinImport(ZigNode &node);
 
 //private:
 //    static QHash<QString, KDevelop::AbstractType::Ptr> m_defaultTypes;

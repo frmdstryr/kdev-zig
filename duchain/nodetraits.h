@@ -84,6 +84,15 @@ constexpr bool isTypeDeclaration(NodeKind kind)
         || kind == ContainerDecl;
 }
 
+// Set the owner context. Decls that can be returned by @This();
+constexpr bool shouldSetContextOwner(NodeKind kind)
+{
+    return (kind == Module
+        || kind == ContainerDecl
+        || kind == EnumDecl
+    );
+}
+
 constexpr bool canHaveCapture(NodeKind kind)
 {
     return  kind == If
@@ -92,6 +101,17 @@ constexpr bool canHaveCapture(NodeKind kind)
         || kind == Defer
         || kind == Catch;
 }
+
+constexpr bool shouldUseParentName(NodeKind kind, NodeKind parentKind)
+{
+    return parentKind == VarDecl && (
+        kind == ContainerDecl
+        || kind == EnumDecl
+        || kind == ErrorDecl
+    );
+}
+
+
 
 } // nodetraits
 

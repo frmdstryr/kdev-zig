@@ -67,10 +67,6 @@ SliceType::SliceType()
 {
 }
 
-SliceType::~SliceType()
-{
-}
-
 int SliceType::dimension() const
 {
     return d_func()->m_dimension;
@@ -101,13 +97,15 @@ void SliceType::setElementType(const AbstractType::Ptr& type)
 
 QString SliceType::toString() const
 {
-    const auto s = d_func()->m_sentinel;
-    QString z = (s >= 0) ? QStringLiteral(":%1").arg(s) : "";
-    QString type = elementType() ? elementType()->toString() : QStringLiteral("<notype>");
+    const auto T = elementType();
+    const auto isConst = T ? T->modifiers() & ConstModifier : false;
+    QString c = isConst ? "const " : "";
+    QString s = (sentinel() >= 0) ? QStringLiteral(":%1").arg(sentinel()) : "";
+    QString type = T ? (c + T->toString()) : QStringLiteral("<notype>");
     if (d_func()->m_dimension == 0) {
-        return QStringLiteral("[%1]%2").arg(z).arg(type);
+        return QStringLiteral("[%1]%2").arg(s).arg(type);
     }
-    return QStringLiteral("[%1%2]%3").arg(d_func()->m_dimension).arg(z).arg(type);
+    return QStringLiteral("[%1%2]%3").arg(d_func()->m_dimension).arg(s).arg(type);
 }
 
 void SliceType::accept0(TypeVisitor* v) const

@@ -103,10 +103,19 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
 bool ContextBuilder::shouldSkipNode(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    return (
-        node.kind() == VarDecl
-        && node.nextChild().kind() == ContainerDecl
-    );
+    if (node.kind() == VarDecl) {
+        // When we get a var decl followed by a container or error
+        // decl, skip making a separate declaration/context for the
+        // variable and just use the name.
+        // Eg const Foo = struct {}
+        NodeKind childKind = node.nextChild().kind();
+        return (
+            childKind == ContainerDecl
+            || childKind == ErrorDecl
+            || childKind == EnumDecl
+        );
+    }
+    return false;
 }
 
 void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
@@ -123,9 +132,7 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
     }
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
     if (hasContext) {
-        bool overwrite = (
-            Kind == ContainerDecl && parent.kind() == VarDecl
-        );
+        bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
         QString name = overwrite ? parent.spellingName() : node.spellingName();
         openContext(&node, NodeTraits::contextType(Kind), &name);
         visitChildren(node, parent);

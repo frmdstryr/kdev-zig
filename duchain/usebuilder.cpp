@@ -26,6 +26,7 @@
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
+#include "types/slicetype.h"
 
 namespace Zig
 {
@@ -204,6 +205,13 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
     DUChainReadLocker lock;
     ExpressionVisitor v(currentContext());
     v.startVisiting(owner, node);
+
+    if (auto s = v.lastType().dynamicCast<SliceType>()) {
+        if (attr == "len" || attr == "ptr") {
+            return; // Builtins
+        }
+    }
+
     auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext());
     lock.unlock();
 
