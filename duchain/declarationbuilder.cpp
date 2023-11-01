@@ -42,13 +42,8 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
     switch (kind) {
     case Module:
        return buildDeclaration<Module>(node, parent);
-    case ContainerDecl: {
-        QString tok = node.mainToken();
-        if (tok == "enum") {
-            return buildDeclaration<EnumDecl>(node, parent);
-        }
+    case ContainerDecl:
         return buildDeclaration<ContainerDecl>(node, parent);
-    }
     case EnumDecl:
         return buildDeclaration<EnumDecl>(node, parent);
     case TemplateDecl:
@@ -94,6 +89,8 @@ void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
         maybeBuildCapture(node, parent);
     }
     ContextBuilder::visitChildren(node, parent);
+
+
 }
 
 template<NodeKind Kind>
@@ -107,7 +104,7 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
-    createDeclaration<Kind>(node, name, hasContext, range);
+    createDeclaration<Kind>(node, parent, name, hasContext, range);
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) {
         eventuallyAssignInternalContext();
@@ -117,7 +114,7 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 }
 
 template <NodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
+Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &parent, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
 {
     DUChainWriteLocker lock;
     Identifier identifier(name);
@@ -136,7 +133,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString 
         decl->setKind(Declaration::Type);
     }
 
-    auto type = createType<Kind>(node);
+    auto type = createType<Kind>(node, parent);
     openType(type);
     setDeclData<Kind>(decl);
     setType<Kind>(decl, type.data());
@@ -146,17 +143,18 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString 
 }
 
 template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
-typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node)
+typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(node);
+    Q_UNUSED(parent);
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
 template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl>>
-StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
+StructureType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
 {
-    Q_UNUSED(node); // TODO: Determine container type (struct, union)
-    // QString mainToken = node.mainToken();
+    Q_UNUSED(node);
+    Q_UNUSED(parent)
     auto structType = new StructureType();
     Q_ASSERT(structType);
     if (Kind == Module) {
@@ -166,17 +164,30 @@ StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
 }
 
 template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
-FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node)
+FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
     return FunctionType::Ptr(new FunctionType);
 }
 
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
-AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
+AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
 {
-
-    if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
-        const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
+    NodeTag parentTag = parent.tag();
+    if (
+        Kind == FieldDecl
+        && parent.kind() == EnumDecl
+        && (parentTag == NodeTag_container_decl_arg || parentTag == NodeTag_container_decl_arg_trailing)
+    ) {
+        // enum(arg)
+        ZigNode arg = parent.nextChild();
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(arg, parent);
+        return v.lastType();
+    }
+    else if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
+        // const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
 
         if (!typeNode.isRoot()) {
@@ -219,7 +230,6 @@ void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 {
     type->setDeclaration(decl);
     decl->setAbstractType(AbstractType::Ptr(type));
-    // qDebug() << "Set type struct" << type->toString();
 }
 
 template<NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
@@ -293,7 +303,7 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             Q_ASSERT(!paramType.isRoot());
             QString paramName = node.paramName(i);
             auto paramRange = node.paramRange(i);
-            auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
+            createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
 
             //lock.unlock();
             ExpressionVisitor v(session, currentContext());
@@ -301,7 +311,7 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             //lock.lock();
             fn->addArgument(v.lastType(), i);
 
-            VisitResult ret = buildContext<ParamDecl>(paramType, node);
+            buildContext<ParamDecl>(paramType, node);
             eventuallyAssignInternalContext();
             closeDeclaration();
             //lock.unlock();
@@ -334,7 +344,7 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
         auto range = node.captureRange(CaptureType::Payload);
         // FIXME: Get type node of capture ???
         DUChainWriteLocker lock;
-        auto *param = createDeclaration<VarDecl>(node, captureName, true, range);
+        createDeclaration<VarDecl>(node, parent, captureName, true, range);
         closeDeclaration();
     }
 }
@@ -350,7 +360,7 @@ void DeclarationBuilder::buildImportDecl(ZigNode &node, ZigNode &parent)
     QUrl importPath = Helper::importPath(name, session->document().str());
     auto *moduleContext = DUChain::self()->chainForDocument(importPath);
     //auto alias = new AliasDeclaration(range, currentContext());
-    auto decl = createDeclaration<AliasDecl>(node, name, false, range);
+    auto decl = createDeclaration<AliasDecl>(node, parent, name, false, range);
     if (moduleContext) {
         auto alias = dynamic_cast<AliasDeclaration*>(decl);
         Q_ASSERT(alias);

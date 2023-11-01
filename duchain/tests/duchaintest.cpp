@@ -325,6 +325,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
     QTest::newRow("enum") << "const Day = enum{Mon, Tue};" << "Day" << "Day" << "";
+    QTest::newRow("enum arg") << "const Day = enum(u8){Mon, Tue}; const mon = Day.Mon;" << "mon" << "u8" << "";
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
     QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";

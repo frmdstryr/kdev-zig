@@ -61,22 +61,23 @@ private:
     template <NodeKind Kind>
     KDevelop::Declaration *createDeclaration(
         ZigNode &node,
+        ZigNode &parent,
         const QString &name,
         bool hasContext,
         KDevelop::RangeInRevision &range
     );
 
     template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
-    typename IdType<Kind>::Type::Ptr createType(ZigNode &node);
+    typename IdType<Kind>::Type::Ptr createType(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
-    KDevelop::FunctionType::Ptr createType(ZigNode &node);
+    KDevelop::FunctionType::Ptr createType(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl> = dummy>
-    KDevelop::StructureType::Ptr createType(ZigNode &node);
+    KDevelop::StructureType::Ptr createType(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
-    KDevelop::AbstractType::Ptr createType(ZigNode &node);
+    KDevelop::AbstractType::Ptr createType(ZigNode &node, ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);

@@ -427,7 +427,7 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     auto *importedModule = DUChain::self()->chainForDocument(importPath);
     if (importedModule) {
         if (auto mod = importedModule->owner()) {
-            qDebug() << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
+            // qDebug() << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
             encounterLvalue(DeclarationPointer(mod));
             return Recurse;
         }
@@ -443,6 +443,7 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
 
 VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
@@ -457,6 +458,7 @@ VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode owner = node.nextChild();
     v.visitNode(owner, node);
@@ -513,6 +515,7 @@ VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(node);
     Q_UNUSED(parent);
     encounter(AbstractType::Ptr(new BuiltinType("bool")));
     return Recurse;
@@ -580,7 +583,7 @@ VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
     Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
-    ZigNode rhs = {node.ast, data.rhs};
+    // ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(this);
     v.startVisiting(lhs, node);
 

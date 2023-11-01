@@ -353,7 +353,6 @@ fn isTokenSliceEql(ast: *Ast, token: Index, value: []const u8) bool {
     return std.mem.eql(u8, ast.tokenSlice(token), value);
 }
 
-
 export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
     if (ptr == null) {
         return .Unknown;
@@ -362,13 +361,17 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
     if (index >= ast.nodes.len) {
         return .Unknown;
     }
+    const main_tokens = ast.nodes.items(.main_token);
     return switch (ast.nodes.items(.tag)[index]) {
         .root => .Module,
         .fn_decl => .FunctionDecl,
         .test_decl => .TestDecl,
         .simple_var_decl, .local_var_decl, .aligned_var_decl, .global_var_decl => .VarDecl,
-        .container_decl, .container_decl_trailing, .container_decl_two, .container_decl_two_trailing, .container_decl_arg, .container_decl_arg_trailing => .ContainerDecl,
-
+        .container_decl, .container_decl_trailing, .container_decl_two, .container_decl_two_trailing, .container_decl_arg, .container_decl_arg_trailing =>
+            if (isTokenSliceEql(ast, main_tokens[index], "enum"))
+                .EnumDecl
+            else
+                .ContainerDecl,
         .block, .block_semicolon, .block_two, .block_two_semicolon => .BlockDecl,
         .container_field_init, .container_field_align, .container_field => .FieldDecl,
         .error_set_decl => .ErrorDecl,

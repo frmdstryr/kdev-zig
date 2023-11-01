@@ -66,9 +66,21 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     if (auto s = accessed.dynamicCast<StructureType>()) {
         const auto isModule = s->modifiers() & ModuleModifier;
         // Lookup in the original declaration's module context
-        const auto moduleContext = (isModule) ?
-            s->declaration(nullptr)->topContext() : topContext;
+        const auto moduleContext = (isModule) ? s->declaration(nullptr)->topContext() : topContext;
         if (auto ctx = s->internalContext(moduleContext)) {
+            auto decls = ctx->findDeclarations(
+                attribute, CursorInRevision::invalid(),
+                topContext,
+                DUContext::DontSearchInParent
+            );
+            if (!decls.isEmpty()) {
+                return decls.first();
+            }
+        }
+    }
+
+    if (auto s = accessed.dynamicCast<EnumerationType>()) {
+        if (auto ctx = s->internalContext(topContext)) {
             auto decls = ctx->findDeclarations(
                 attribute, CursorInRevision::invalid(),
                 topContext,

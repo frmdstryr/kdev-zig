@@ -215,7 +215,7 @@ void UseBuilder::visitVarAccess(ZigNode &node, ZigNode &parent)
 
 void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
 {
-    QString ident;
+
     QString attr = node.spellingName();
     if (attr.isEmpty()) {
         return;
@@ -227,14 +227,16 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
     DUChainReadLocker lock;
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
+    const auto T = v.lastType();
+    QString ident = T ? T->toString() : "unknown";
 
-    if (auto s = v.lastType().dynamicCast<SliceType>()) {
+    if (auto s = T.dynamicCast<SliceType>()) {
         if (attr == "len" || attr == "ptr") {
             return; // Builtins
         }
     }
 
-    auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext());
+    auto *decl = Helper::accessAttribute(T, attr, topContext());
     lock.unlock();
 
     if (!decl) {
