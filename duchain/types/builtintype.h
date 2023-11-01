@@ -8,7 +8,10 @@
 namespace Zig
 {
 
+// If value is comptime known
 const quint32 ComptimeModifier = 1 << 14;
+// If struct is a module / file
+const quint32 ModuleModifier = 1 << 15;
 
 using namespace KDevelop;
 

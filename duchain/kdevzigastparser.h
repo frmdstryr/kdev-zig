@@ -21,7 +21,7 @@
 extern "C" {
 
 enum NodeTag {
-    NodeTag_root,
+    NodeTag_root = 0,
     /// `usingnamespace lhs;`. rhs unused. main_token is `usingnamespace`.
     NodeTag_usingnamespace,
     /// lhs is test name token (must be string literal or identifier), if any.

@@ -40,7 +40,9 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 
 VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    switch (node.kind()){
+    NodeKind kind = node.kind();
+    // qDebug() << "UseBuilder::visitNode" << node.index << "kind" << kind;
+    switch (kind){
         case Call:
             visitCall(node, parent);
             break;
@@ -95,8 +97,28 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
         topContext()->addProblem(p);
         return;
     }
-
     ZigNode child = node.nextChild();
+
+    if (functionName == "@import") {
+        ExpressionVisitor v(session ,currentContext());
+        v.startVisiting(node, parent);
+        auto mod = v.lastDeclaration();
+        if (mod) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(mod));
+        } else {
+            QString importName = child.spellingName();
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Hint);
+            p->setDescription(i18n("Import missing or unresolved %1", importName));
+            DUChainWriteLocker lock;
+            topContext()->addProblem(p);
+        }
+        return;
+    }
+
+
 
     QList<Declaration *> declarations;
     bool show_error = true;
@@ -203,7 +225,7 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
     QualifiedIdentifier identifier((Identifier(attr)));
     ZigNode owner = node.nextChild(); // access lhs
     DUChainReadLocker lock;
-    ExpressionVisitor v(currentContext());
+    ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
 
     if (auto s = v.lastType().dynamicCast<SliceType>()) {

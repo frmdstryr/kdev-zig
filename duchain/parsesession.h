@@ -37,7 +37,8 @@ public:
     typedef QExplicitlySharedDataPointer<ParseSessionData> Ptr;
 
     ParseSessionData(const KDevelop::IndexedString &document,
-                     const QByteArray &contents);
+                     const QByteArray &contents,
+                     int priority = 0);
 
     ~ParseSessionData() override;
 
@@ -49,7 +50,9 @@ private:
     KDevelop::IndexedString m_document;
     QByteArray m_contents;
     ZAst *m_ast;
+    int m_jobPriority;
     QMap<uint32_t, KDevelop::DUContext *> m_nodeContextMap;
+
 };
 
 class KDEVZIGDUCHAIN_EXPORT ParseSession
@@ -65,6 +68,8 @@ public:
 
     KDevelop::IndexedString document() const;
     ZAst *ast() const;
+    void setPriority(int priority);
+    int jobPriority() const;
 
     void setContextOnNode(const ZigNode &node, KDevelop::DUContext *context);
     KDevelop::DUContext *contextFromNode(const ZigNode &node);

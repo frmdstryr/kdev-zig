@@ -2,6 +2,7 @@
 #include <language/duchain/types/functiontype.h>
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/duchainutils.h>
+#include <language/duchain/duchain.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -24,9 +25,11 @@ static VisitResult expressionVistorCallback(ZAst* ast, NodeIndex node, NodeIndex
 }
 
 
-ExpressionVisitor::ExpressionVisitor(KDevelop::DUContext* context)
+ExpressionVisitor::ExpressionVisitor(ParseSession* session, KDevelop::DUContext* context)
     : DynamicLanguageExpressionVisitor(context)
+    , m_session(session)
 {
+    Q_ASSERT(m_session);
     // if ( m_defaultTypes.isEmpty() ) {
     //     m_defaultTypes.insert("void", AbstractType::Ptr(new BuiltinType("void")));
     //     m_defaultTypes.insert("true", AbstractType::Ptr(new BuiltinType("bool")));
@@ -39,12 +42,15 @@ ExpressionVisitor::ExpressionVisitor(KDevelop::DUContext* context)
 
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
     : DynamicLanguageExpressionVisitor(parent)
+    , m_session(parent->session())
 {
     if ( overrideContext ) {
         m_context = overrideContext;
     }
     Q_ASSERT(context());
+    Q_ASSERT(session());
 }
+
 
 void ExpressionVisitor::visitChildren(ZigNode &node, ZigNode &parent)
 {
@@ -61,9 +67,10 @@ void ExpressionVisitor::startVisiting(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
 {
-    // qDebug() << "ExpressionVisitor::visitNode" << node.index;
+    NodeTag tag = node.tag();
+    // qDebug() << "ExpressionVisitor::visitNode" << node.index << "tag" << tag;
 
-    switch (node.tag()) {
+    switch (tag) {
     case NodeTag_identifier:
         return visitIdentifier(node, parent);
     case NodeTag_field_access:
@@ -213,8 +220,19 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(ZigNode &node, ZigNode &paren
 VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // TODO: Should it create a new type *const [len:0]u8 for each??
-    encounter(AbstractType::Ptr(new BuiltinType("*const [:0]u8")));
+    QString value = node.mainToken();
+
+    auto sliceType = new SliceType();
+    Q_ASSERT(sliceType);
+    sliceType->setSentinel(0);
+    sliceType->setDimension(value.size());
+    sliceType->setElementType(AbstractType::Ptr(new BuiltinType("u8")));
+    sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
+
+    auto ptrType = new PointerType();
+    Q_ASSERT(ptrType);
+    ptrType->setBaseType(AbstractType::Ptr(sliceType));
+    encounter(AbstractType::Ptr(ptrType));
     return Recurse;
 }
 
@@ -257,6 +275,7 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode child = node.nextChild();
     v.startVisiting(child, node);
@@ -297,7 +316,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
     if (name == "@This") {
         return callBuiltinThis(node);
     } else if (name == "@import") {
-        return callBuiltinImport(node);
+       return callBuiltinImport(node);
     // todo @Type
     } else if (
         // These return the type of the first argument
@@ -376,6 +395,7 @@ VisitResult ExpressionVisitor::callBuiltinThis(ZigNode &node)
 {
     // TODO: Report problem if arguments ?
     auto range = node.range();
+    DUChainReadLocker lock;
     if (auto thisCtx = Helper::thisContext(range.start, topContext())) {
         if (auto owner = thisCtx->owner()) {
             encounter(owner->abstractType(), DeclarationPointer(owner));
@@ -392,11 +412,31 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     ZigNode strNode = node.nextChild();
     if (strNode.tag() != NodeTag_string_literal) {
         encounterUnknown();
+        return Recurse;
     }
-    QString path = strNode.mainToken();
+    QString importName = strNode.spellingName();
+
+    QUrl importPath = Helper::importPath(importName, session()->document().str());
+    if (importPath.isEmpty()) {
+        encounterUnknown();
+        return Recurse;
+    }
+
     // TODO: How do I import from another file???
-    //DUChainReadLocker lock;
-    //ReferencedTopDUContext imported = DUChainUtils::standardContextForUrl(path);
+    DUChainReadLocker lock;
+    auto *importedModule = DUChain::self()->chainForDocument(importPath);
+    if (importedModule) {
+        if (auto mod = importedModule->owner()) {
+            qDebug() << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
+            encounterLvalue(DeclarationPointer(mod));
+            return Recurse;
+        }
+        // qDebug() << "No owner!";
+    } else {
+        // TODO: Create import error?
+        Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
+        // qDebug() << "No module!";
+    }
     encounterUnknown();
     return Recurse;
 }
@@ -422,7 +462,12 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     v.visitNode(owner, node);
     QString attr = node.tokenSlice(node.data().rhs);
     DUChainReadLocker lock;
-    if (auto s = v.lastType().dynamicCast<SliceType>()) {
+    const auto T = v.lastType();
+    // Root modules have a ModuleModifier set
+    // const auto isModule = T->modifiers() & ModuleModifier;
+    // qDebug() << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
+
+    if (auto s = T.dynamicCast<SliceType>()) {
         // Slices have builtin len / ptr types
         if (attr == "len") {
             encounter(AbstractType::Ptr(new BuiltinType("usize")));
@@ -435,10 +480,12 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
             encounterUnknown();
         }
     }
-    else if (auto *decl = Helper::accessAttribute(v.lastType(), attr, topContext())) {
-        encounter(decl->abstractType(), DeclarationPointer(decl));
+    else if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
+        // qDebug() << " result " << decl->abstractType()->toString();
+        encounterLvalue(DeclarationPointer(decl));
     }
     else {
+        // qDebug() << " no result ";
         encounterUnknown();
     }
     return Recurse;

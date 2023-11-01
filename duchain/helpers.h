@@ -6,6 +6,10 @@
 #pragma once
 
 #include <QString>
+#include <QMap>
+#include <QVector>
+#include <QUrl>
+#include <interfaces/iproject.h>
 #include <language/duchain/types/unsuretype.h>
 #include <language/duchain/declaration.h>
 #include <language/duchain/ducontext.h>
@@ -18,6 +22,22 @@ namespace Zig
 
 class KDEVZIGDUCHAIN_EXPORT Helper {
 public:
+
+    static QMutex cacheMutex;
+    static QMap<KDevelop::IProject*, QVector<QUrl>> cachedCustomIncludes;
+    static QMap<KDevelop::IProject*, QVector<QUrl>> cachedSearchPaths;
+    static QMutex projectPathLock;
+    static QVector<QUrl> projectSearchPaths;
+    static QMap<QString, QString> projectPackages;
+
+    static QString zigExecutablePath(KDevelop::IProject* project);
+    static QString stdLibPath(KDevelop::IProject* project);
+    static QUrl importPath(const QString& importName, const QString& currentFile);
+    static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
+
+    static void scheduleDependency(
+        const KDevelop::IndexedString& dependency, int betterThanPriority);
+
     static KDevelop::Declaration* declarationForName(
         const QString& name,
         const KDevelop::CursorInRevision& location,
@@ -46,10 +66,13 @@ public:
     /**
      * Follows the context up to the closest container. Eg the builtin @This();
      * Return nullptr if no class or namespace parent context is found.
+     * NOTE: Caller must hold at least a DUCHain read lock
      **/
     static KDevelop::DUContext* thisContext(
         const KDevelop::CursorInRevision& location,
         const KDevelop::TopDUContext* topContext);
+
+
 };
 
 }

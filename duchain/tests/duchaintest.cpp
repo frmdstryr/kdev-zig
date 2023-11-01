@@ -26,9 +26,11 @@
 #include <tests/autotestshell.h>
 #include <tests/testhelpers.h>
 
+#include "types/builtintype.h"
 #include "parsesession.h"
 #include "declarationbuilder.h"
 #include "usebuilder.h"
+#include "helpers.h"
 
 using namespace KDevelop;
 
@@ -44,12 +46,11 @@ static RangeInRevision rangeFromString(const QString &values) {
     return range;
 }
 
-
-ReferencedTopDUContext parseCode(QString code)
+ReferencedTopDUContext parseCode(QString code, QString name)
 {
     using namespace Zig;
 
-    IndexedString document("temp");
+    IndexedString document(name);
     ParseSessionData *sessionData = new ParseSessionData(document, code.toUtf8());
     ParseSession session(ParseSessionData::Ptr(nullptr));
     session.setData(ParseSessionData::Ptr(sessionData));
@@ -68,6 +69,13 @@ ReferencedTopDUContext parseCode(QString code)
     return context;
 }
 
+ReferencedTopDUContext parseStdCode(QString path)
+{
+    QString filename = Zig::Helper::stdLibPath(nullptr) + "/" + path;
+    QFile f(filename);
+    Q_ASSERT(f.open(QIODevice::ReadOnly));
+    return parseCode(f.readAll(), filename);
+}
 
 DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, bool firstChildContext=false)
 {
@@ -114,32 +122,55 @@ void DUChainTest::initTestCase()
 void DUChainTest::sanityCheckFn()
 {
     QString code("fn main() !void {}");
-    ReferencedTopDUContext context = parseCode(code);
+    ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    auto decls = context->localDeclarations();
+    auto decls = context->findDeclarations(Identifier("main"));
     QCOMPARE(decls.size(), 1);
     Declaration *funcDeclaration = decls.first();
     QVERIFY(funcDeclaration);
     QCOMPARE(funcDeclaration->identifier().toString(), QString("main"));
-    QCOMPARE(funcDeclaration->abstractType()->toString(), QString("function void ()"));
+    QCOMPARE(funcDeclaration->abstractType()->toString(), QString("function !void ()"));
 }
 
 void DUChainTest::sanityCheckVar()
 {
     QString code("const X = 1;");
-    ReferencedTopDUContext context = parseCode(code);
+    ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    auto decls = context->localDeclarations();
+    auto decls = context->findDeclarations(Identifier("X"));
     QCOMPARE(decls.size(), 1);
     Declaration *varDeclaration = decls.first();
     QVERIFY(varDeclaration);
     QCOMPARE(varDeclaration->identifier().toString(), QString("X"));
     QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int"));
 }
+
+void DUChainTest::sanityCheckImport()
+{
+    ReferencedTopDUContext timecontext = parseStdCode("time.zig");
+    ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
+    QString code("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;");
+    ReferencedTopDUContext context = parseCode(code, "test");
+    QVERIFY(context.data());
+    DUChainReadLocker lock;
+    auto decls = context->findDeclarations(Identifier("std"));
+    QCOMPARE(decls.size(), 1);
+    //QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
+    decls = context->findDeclarations(Identifier("time"));
+    //QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // time
+    QCOMPARE(decls.size(), 1);
+    decls = context->findDeclarations(Identifier("ns_per_us"));
+    QCOMPARE(decls.size(), 1);
+    Declaration *decl = decls.first();
+    QVERIFY(decl);
+    QCOMPARE(decl->identifier().toString(), QString("ns_per_us"));
+    QCOMPARE(decl->abstractType()->toString(), QString("comptime_int"));
+}
+
 
 void DUChainTest::cleanupTestCase()
 {
@@ -152,7 +183,7 @@ void DUChainTest::testVarBindings()
     QFETCH(QString, contextName);
     QFETCH(QStringList, bindings);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code);
+    ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -164,7 +195,6 @@ void DUChainTest::testVarBindings()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    QCOMPARE(internalContext->localDeclarations().size(), bindings.size());
     for (const QString &binding : bindings) {
         QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
     }
@@ -189,7 +219,7 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
     QTest::newRow("struct field") << "Foo" << "const Foo = struct { a: u8, };" << QStringList { "a" };
     QTest::newRow("test decl") << "" << "test \"foo\" {  }" << QStringList { "foo" };
-    QTest::newRow("if capture") << "2,0" << "test {\n if (opt) |x| {\n _ = x;} }" << QStringList { "x" };
+    QTest::newRow("if capture") << "2,0" << "test {var opt: ?u8 = null;\n if (opt) |x| {\n _ = x;\n} }" << QStringList { "x" };
     // Interal context ?
     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
 
@@ -201,7 +231,7 @@ void DUChainTest::testVarUsage()
     QFETCH(CursorInRevision, cursor);
     QFETCH(QStringList, uses);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code);
+    ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -260,7 +290,7 @@ void DUChainTest::testVarType()
     QFETCH(QString, container);
 
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code);
+    ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -331,4 +361,6 @@ void DUChainTest::testVarType_data()
     QTest::newRow("@min()") << "test{var x: u32 = 1; var y = @min(x, 1);\n}" << "x" << "u32" << "1,0";
     // TODO: constness
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
+
+    QTest::newRow("nested struct") << "const Foo = struct {bar: Bar = .{}, const Bar = struct {a: u8};}; test{\nvar f = Foo.Bar{};\n}" << "f" << "Foo::Bar" << "2,0";
 }

@@ -19,6 +19,8 @@
 
 #include <serialization/indexedstring.h>
 #include <interfaces/icore.h>
+#include <interfaces/iproject.h>
+#include <interfaces/iprojectcontroller.h>
 #include <interfaces/ilanguagecontroller.h>
 #include <language/interfaces/ilanguagesupport.h>
 #include <language/backgroundparser/backgroundparser.h>
@@ -27,6 +29,8 @@
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/duchainutils.h>
 #include <language/duchain/duchaindumper.h>
+#include <project/projectmodel.h>
+#include <util/path.h>
 
 #include <QReadLocker>
 
@@ -37,6 +41,7 @@
 
 #include "ziglanguagesupport.h"
 #include "zigdebug.h"
+#include <helpers.h>
 
 using namespace KDevelop;
 
@@ -68,11 +73,20 @@ ParseSessionData::Ptr ParseJob::findParseSessionData(const IndexedString &url)
 
 void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 {
+    Q_UNUSED(self);
+    Q_UNUSED(thread);
     if (abortRequested() || ICore::self()->shuttingDown()) {
         return abortJob();
     }
 
     qCDebug(KDEV_ZIG) << "Parse job starting for: " << document().toUrl();
+    {
+        QMutexLocker l(&Helper::projectPathLock);
+        Helper::projectSearchPaths.clear();
+        foreach  (KDevelop::IProject* project, ICore::self()->projectController()->projects() ) {
+            Helper::projectSearchPaths.append(QUrl::fromLocalFile(project->path().path()));
+        }
+    }
 
     QReadLocker parseLock(languageSupport()->parseLock());
     UrlParseLock urlLock(document());
@@ -110,7 +124,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     ParseSession session(findParseSessionData(document()));
 
     if (!session.data()) {
-        session.setData(ParseSessionData::Ptr(new ParseSessionData(document(), contents().contents)));
+        session.setData(ParseSessionData::Ptr(
+            new ParseSessionData(document(), contents().contents, parsePriority())
+        ));
     }
 
     if (abortRequested()) {
@@ -131,12 +147,11 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     }
 
     session.parse();
-    const auto num_errors = ast_error_count(session.ast());
 
     if (abortRequested()) {
         return;
     }
-
+    const auto num_errors = ast_error_count(session.ast());
     ReferencedTopDUContext context;
     if (num_errors == 0) {
         ZigNode root = {session.ast(), 0};
@@ -166,7 +181,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
             context->clearProblems();
         } else {
             ParsingEnvironmentFile *file = new ParsingEnvironmentFile(document());
-            file->setLanguage(IndexedString("Zig"));
+            file->setLanguage(IndexedString(LanguageSupport::self()->name()));
 
             context = new TopDUContext(document(), RangeInRevision(0, 0, INT_MAX, INT_MAX), file);
             DUChain::self()->addDocumentChain(context);

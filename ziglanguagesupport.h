@@ -42,7 +42,7 @@ class LanguageSupport
 public:
     LanguageSupport(QObject *parent, const QVariantList &args = QVariantList());
     ~LanguageSupport() override;
-
+    static LanguageSupport* self() { return m_self; }
     QString name() const override;
     KDevelop::ParseJob *createParseJob(const KDevelop::IndexedString &url) override;
 
@@ -50,8 +50,12 @@ public:
 
     KDevelop::SourceFormatterItemList sourceFormatterItems() const override;
 
+    int perProjectConfigPages() const override;
+    KDevelop::ConfigPage* perProjectConfigPage(int number, const KDevelop::ProjectConfigOptions& options, QWidget* parent) override;
+
 private:
     Highlighting *m_highlighting;
+    static LanguageSupport* m_self;
 };
 
 }

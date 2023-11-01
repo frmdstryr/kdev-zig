@@ -108,11 +108,13 @@ bool ContextBuilder::shouldSkipNode(ZigNode &node, ZigNode &parent)
         // decl, skip making a separate declaration/context for the
         // variable and just use the name.
         // Eg const Foo = struct {}
-        NodeKind childKind = node.nextChild().kind();
+        ZigNode child = node.nextChild();
+        NodeKind childKind = child.kind();
         return (
             childKind == ContainerDecl
             || childKind == ErrorDecl
             || childKind == EnumDecl
+            //|| (childKind == Call && child.spellingName() == "@import")
         );
     }
     return false;
@@ -134,9 +136,14 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
     if (hasContext) {
         bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
         QString name = overwrite ? parent.spellingName() : node.spellingName();
-        openContext(&node, NodeTraits::contextType(Kind), &name);
+        if (Kind != Module) {
+            DUChainWriteLocker lock;
+            openContext(&node, NodeTraits::contextType(Kind), &name);
+        }
         visitChildren(node, parent);
-        closeContext();
+        if (Kind != Module) {
+            closeContext();
+        }
         return Continue;
     }
     return Recurse;
@@ -144,7 +151,7 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
 
 void ContextBuilder::startVisiting(ZigNode *node)
 {
-    visitChildren(*node, *node);
+    visitNode(*node, *node);
 }
 
 void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)

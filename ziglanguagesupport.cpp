@@ -34,6 +34,7 @@
 
 #include "zigparsejob.h"
 #include "codecompletion/model.h"
+#include "projectconfig/projectconfigpage.h"
 
 K_PLUGIN_FACTORY_WITH_JSON(KDevZigSupportFactory, "kdevzigsupport.json", registerPlugin<Zig::LanguageSupport>(); )
 
@@ -42,11 +43,14 @@ using namespace KDevelop;
 namespace Zig
 {
 
+LanguageSupport* LanguageSupport::m_self = nullptr;
+
 LanguageSupport::LanguageSupport(QObject *parent, const QVariantList &args)
     : KDevelop::IPlugin(QStringLiteral("kdevzigsupport"), parent),
       KDevelop::ILanguageSupport(),
       m_highlighting(new Highlighting(this))
 {
+    m_self = this;
     Q_UNUSED(args);
 
     new CodeCompletion(this, new CompletionModel(this), name());
@@ -58,6 +62,7 @@ LanguageSupport::~LanguageSupport()
     parseLock()->unlock();
 
     delete m_highlighting;
+    m_highlighting = nullptr;
 }
 
 QString LanguageSupport::name() const
@@ -93,6 +98,19 @@ SourceFormatterItemList LanguageSupport::sourceFormatterItems() const
     zigFormatter.setContent(zigPath + " fmt $TMPFILE");
 
     return SourceFormatterItemList { SourceFormatterStyleItem { "customscript", zigFormatter } };
+}
+
+int LanguageSupport::perProjectConfigPages() const
+{
+    return 1;
+}
+
+KDevelop::ConfigPage* LanguageSupport::perProjectConfigPage(int number, const KDevelop::ProjectConfigOptions& options, QWidget* parent)
+{
+    if ( number == 0 ) {
+        return new ProjectConfigPage(this, options, parent);
+    }
+    return nullptr;
 }
 
 }

@@ -13,6 +13,7 @@
 #include <language/duchain/ducontext.h>
 
 #include "zignode.h"
+#include "parsesession.h"
 
 namespace Zig
 {
@@ -21,11 +22,13 @@ namespace Zig
 class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor
 {
 public:
-    explicit ExpressionVisitor(KDevelop::DUContext* context);
+    explicit ExpressionVisitor(ParseSession* session, KDevelop::DUContext* context);
 
     /// Use this to construct the expression-visitor recursively
     ExpressionVisitor(Zig::ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext=nullptr);
     ~ExpressionVisitor() override = default;
+
+    ParseSession* session() {return m_session;}
 
     // Visit the nodes children and finally the node
     void startVisiting(ZigNode &node, ZigNode &parent);
@@ -59,8 +62,8 @@ public:
     VisitResult callBuiltinThis(ZigNode &node);
     VisitResult callBuiltinImport(ZigNode &node);
 
-//private:
-//    static QHash<QString, KDevelop::AbstractType::Ptr> m_defaultTypes;
+protected:
+    ParseSession* m_session;
 };
 
 }

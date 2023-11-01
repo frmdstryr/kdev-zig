@@ -70,8 +70,9 @@ struct DeclType<Kind, typename std::enable_if<NodeTraits::isKDevDeclaration(Kind
     typedef KDevelop::Declaration Type;
 };
 
+
 template <NodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == ContainerDecl>::type>
+struct DeclType<Kind, typename std::enable_if<Kind == Module || Kind == ContainerDecl>::type>
 {
     typedef KDevelop::ClassDeclaration Type;
 };

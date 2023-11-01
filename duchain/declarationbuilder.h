@@ -72,7 +72,7 @@ private:
     template <NodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
     KDevelop::FunctionType::Ptr createType(ZigNode &node);
 
-    template <NodeKind Kind, EnableIf<Kind == ContainerDecl> = dummy>
+    template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl> = dummy>
     KDevelop::StructureType::Ptr createType(ZigNode &node);
 
     template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
@@ -109,6 +109,8 @@ private:
     void updateFunctionDecl(ZigNode &node);
 
     void maybeBuildCapture(ZigNode &node, ZigNode &parent);
+
+    void buildImportDecl(ZigNode &node, ZigNode &parent);
 };
 
 }

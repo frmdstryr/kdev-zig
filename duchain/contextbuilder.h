@@ -70,7 +70,6 @@ protected:
 
     bool shouldSkipNode(ZigNode &node, ZigNode &parent);
 
-private:
     ParseSession *session;
 };
 

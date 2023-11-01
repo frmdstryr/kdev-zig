@@ -27,6 +27,7 @@
 #include "types/errortype.h"
 #include "types/declarationtypes.h"
 #include "nodetraits.h"
+#include "helpers.h"
 #include "zigdebug.h"
 
 namespace Zig
@@ -40,7 +41,7 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
     // qDebug() << "DeclarationBuilder::visitNode" << node.index << "kind" << kind;
     switch (kind) {
     case Module:
-        return buildDeclaration<Module>(node, parent);
+       return buildDeclaration<Module>(node, parent);
     case ContainerDecl: {
         QString tok = node.mainToken();
         if (tok == "enum") {
@@ -64,6 +65,12 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
         return buildDeclaration<TestDecl>(node, parent);
+    // case Call: {
+    //     if (node.spellingName() == "@import") {
+    //         buildImportDecl(node, parent);
+    //     }
+    //     // Fall through
+    // }
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -102,7 +109,9 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
     createDeclaration<Kind>(node, name, hasContext, range);
     VisitResult ret = buildContext<Kind>(node, parent);
-    if (hasContext) eventuallyAssignInternalContext();
+    if (hasContext) {
+        eventuallyAssignInternalContext();
+    }
     closeDeclaration();
     return ret;
 }
@@ -111,10 +120,15 @@ template <NodeKind Kind>
 Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
 {
     DUChainWriteLocker lock;
+    Identifier identifier(name);
+    auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
+    if (Kind == Module) {
+        identifier = Identifier(session->document().str());
+    }
 
-    // qDebug()  << "Create decl node:" << node.index << " name:" << name << " range:" << range  << " kind:" << Kind;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
-        Identifier(name), range,
+        identifier,
+        declRange,
         hasContext ? DeclarationIsDefinition : NoFlags
     );
 
@@ -127,6 +141,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, const QString 
     setDeclData<Kind>(decl);
     setType<Kind>(decl, type.data());
     closeType();
+    // qDebug()  << "Create decl node:" << node.index << " name:" << identifier.toString() << " range:" << declRange << " kind:" << Kind << "type" << type->toString();
     return decl;
 }
 
@@ -137,12 +152,17 @@ typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node)
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
-template <NodeKind Kind, EnableIf<Kind == ContainerDecl>>
+template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl>>
 StructureType::Ptr DeclarationBuilder::createType(ZigNode &node)
 {
     Q_UNUSED(node); // TODO: Determine container type (struct, union)
     // QString mainToken = node.mainToken();
-    return StructureType::Ptr(new StructureType);
+    auto structType = new StructureType();
+    Q_ASSERT(structType);
+    if (Kind == Module) {
+        structType->setModifiers(ModuleModifier);
+    }
+    return StructureType::Ptr(structType);
 }
 
 template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
@@ -160,13 +180,13 @@ AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node)
         ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
 
         if (!typeNode.isRoot()) {
-            ExpressionVisitor v(currentContext());
+            ExpressionVisitor v(session, currentContext());
             v.startVisiting(typeNode, node);
             return v.lastType();
         } else {
             ZigNode valueNode = node.varValue();
             if (!valueNode.isRoot()) {
-                ExpressionVisitor v(currentContext());
+                ExpressionVisitor v(session, currentContext());
                 v.startVisiting(valueNode, node);
                 return v.lastType();
             }
@@ -205,9 +225,12 @@ void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 template<NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
 void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
 {
-    if (Kind == ContainerDecl) {
+    if (Kind == Module || Kind == ContainerDecl) {
         decl->setClassType(ClassDeclarationData::Struct);
     }
+    // if (Kind == Module) {
+    //     decl->setInternalContext(currentContext());
+    // }
 }
 
 template<NodeKind Kind, EnableIf<Kind == Module>>
@@ -226,7 +249,7 @@ template<NodeKind Kind, EnableIf<Kind == AliasDecl>>
 void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
 {
     decl->setIsTypeAlias(true);
-    decl->setKind(Declaration::Type);
+    decl->setKind(Declaration::Alias);
 }
 
 template<NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
@@ -273,7 +296,7 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             auto *param = createDeclaration<ParamDecl>(paramType, paramName, true, paramRange);
 
             //lock.unlock();
-            ExpressionVisitor v(currentContext());
+            ExpressionVisitor v(session, currentContext());
             v.startVisiting(paramType, node);
             //lock.lock();
             fn->addArgument(v.lastType(), i);
@@ -288,8 +311,7 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
     {
         ZigNode typeNode = node.returnType();
         Q_ASSERT(!typeNode.isRoot());
-        lock.unlock();
-        ExpressionVisitor v(currentContext());
+        ExpressionVisitor v(session, currentContext());
         v.startVisiting(typeNode, node);
 
         // Zig does not use error_union for inferred return types...
@@ -300,7 +322,6 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             returnType = AbstractType::Ptr(errType);
         }
 
-        lock.lock();
         fn->setReturnType(returnType);
         decl->setAbstractType(fn);
     }
@@ -316,6 +337,45 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
         auto *param = createDeclaration<VarDecl>(node, captureName, true, range);
         closeDeclaration();
     }
+}
+
+void DeclarationBuilder::buildImportDecl(ZigNode &node, ZigNode &parent)
+{
+    // Q_ASSERT(node.spellingName() == "@import");
+    //
+    DUChainWriteLocker lock;
+    auto range = editorFindSpellingRange(node, "");
+    QString name = node.nextChild().spellingName();
+
+    QUrl importPath = Helper::importPath(name, session->document().str());
+    auto *moduleContext = DUChain::self()->chainForDocument(importPath);
+    //auto alias = new AliasDeclaration(range, currentContext());
+    auto decl = createDeclaration<AliasDecl>(node, name, false, range);
+    if (moduleContext) {
+        auto alias = dynamic_cast<AliasDeclaration*>(decl);
+        Q_ASSERT(alias);
+        alias->setAliasedDeclaration(moduleContext->owner());
+        qDebug() << "Import alias" << alias->toString();
+    }
+    closeDeclaration();
+    // auto alias = new AliasDeclaration(range, currentContext());
+    // if (moduleContext) {
+    //     alias->setAliasedDeclaration(moduleContext->owner());
+    // }
+    // // auto *mod = createDeclaration<Module>(node, name, true, range);
+    // // openContext(&node, NodeTraits::contextType(Module), &name);
+    // // QUrl importPath = Helper::importPath(name, session->document().str());
+    // // auto *moduleContext = DUChain::self()->chainForDocument(importPath);
+    // // if (moduleContext) {
+    // //     for (auto decl: moduleContext->localDeclarations()) {
+    // //         auto alias = new AliasDeclaration(
+    // //             RangeInRevision::invalid(), currentContext());
+    // //         alias->setAliasedDeclaration(decl);
+    // //     }
+    // // }
+    // // closeContext();
+    //closeDeclaration();
+
 }
 
 

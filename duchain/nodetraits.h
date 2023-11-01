@@ -74,14 +74,16 @@ constexpr bool isKDevDeclaration(NodeKind kind)
         || kind == ErrorDecl
         || kind == VarDecl
         || kind == TestDecl
-        || kind == Module;
+    ;
 }
 
 constexpr bool isTypeDeclaration(NodeKind kind)
 {
     return  kind == EnumDecl
         || kind == ErrorDecl
-        || kind == ContainerDecl;
+        || kind == ContainerDecl
+        || kind == Module
+    ;
 }
 
 // Set the owner context. Decls that can be returned by @This();
@@ -108,6 +110,7 @@ constexpr bool shouldUseParentName(NodeKind kind, NodeKind parentKind)
         kind == ContainerDecl
         || kind == EnumDecl
         || kind == ErrorDecl
+        // || kind == Module
     );
 }
 
