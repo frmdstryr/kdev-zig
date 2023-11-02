@@ -1,9 +1,11 @@
 # Zig Language Support plugin
 
 This package is a WIP to provide language support for Zig. It uses zig's
-builtin parser.
+builtin parser via a library.
 
-It was forked from kdev-rust.
+![Example](https://user-images.githubusercontent.com/380158/279830656-9fc7aa74-175c-4826-a698-401751a07464.png)
+
+It was forked from kdev-rust and borrows code from kdev-python so it is GPL.
 
 ## Compiling
 

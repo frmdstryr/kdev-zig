@@ -52,6 +52,15 @@ pub fn dumpAstFlat(ast: *Ast, stream: anytype) !void {
     }
 }
 
+pub fn dumpTokensFlat(ast: *Ast, stream: anytype) !void {
+    var i: u32 = 0;
+    try stream.writeAll("|  #  | Token                |\n");
+    try stream.writeAll("|-----|----------------------|\n");
+    while (i < ast.tokens.len) : (i += 1) {
+        try stream.print("|{: >5}| {s: <20} |\n", .{i, ast.tokenSlice(i)});
+    }
+}
+
 pub fn dumpAstRoots(ast: Ast, stream: anytype) WriteError!void {
     var indent: usize = 0;
     for (ast.rootDecls()) |i| {
@@ -72,20 +81,49 @@ pub fn dumpAstRoots(ast: Ast, stream: anytype) WriteError!void {
     }
 }
 
+fn printAstError(ast: *Ast, filename: []const u8, source: []const u8) !void {
+    const stderr = std.io.getStdErr().writer();
+    for (ast.errors) |parse_error| {
+        const loc = ast.tokenLocation(0, parse_error.token);
+        try stderr.print("{s}:{d}:{d}: error: ", .{ filename, loc.line + 1, loc.column + 1 });
+        try ast.renderError(parse_error, stderr);
+        try stderr.print("\n{s}\n", .{source[loc.line_start..loc.line_end]});
+        {
+            var i: usize = 0;
+            while (i < loc.column) : (i += 1) {
+                try stderr.writeAll(" ");
+            }
+            try stderr.writeAll("^");
+        }
+        try stderr.writeAll("\n");
+    }
+}
+
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    var ast = try std.zig.Ast.parse(
-        allocator,
-        \\pub fn foo(x: u8) void {}
-        , .zig
-    );
+    const source =
+        \\const foo = enum(u8) {A, B};
+        \\const a = foo.A;
+    ;
+    var ast = try std.zig.Ast.parse(allocator, source, .zig);
     defer ast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
+    if (ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+
+    // TODO:
+    //for (@import("BuiltinFn.zig").items) |it| {
+    //    try stdout.writeAll(it);
+    //}
     //try dumpAst(stdout, ast);
     //const r = try ast.render(allocator);
     //try stdout.writeAll(r);
+    try dumpTokensFlat(&ast, stdout);
     try dumpAstFlat(&ast, stdout);
     //try dumpAstRoots(stdout, ast);
 }
