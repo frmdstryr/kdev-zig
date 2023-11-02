@@ -15,6 +15,8 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <kconfiggroup.h>
+#include "zigdebug.h"
+#include <interfaces/iprojectcontroller.h>
 
 
 namespace Zig
@@ -182,7 +184,7 @@ QString Helper::zigExecutablePath(IProject* project)
     if ( ! result.isEmpty() ) {
         return result;
     }
-    qWarning() << "zig exe not found. Using default";
+    qCWarning(KDEV_ZIG) << "zig exe not found. Using default";
     return "/usr/bin/zig";
 }
 
@@ -195,21 +197,26 @@ QString Helper::stdLibPath(IProject* project)
         QProcess zig;
         QStringList args = {"env"};
         QString zigExe = zigExecutablePath(project);
+        qCDebug(KDEV_ZIG) << "zig exe" << zigExe;
         if (QFile(zigExe).exists()) {
             zig.start(zigExe, args);
             zig.waitForFinished(1000);
             QString output = QString::fromUtf8(zig.readAllStandardOutput());
+            qCDebug(KDEV_ZIG) << "zig env output:" << output;
             QStringList lines = output.split("\n");
             for (const QString &line: lines) {
                 auto r = stdDirPattern.match(line);
                 if (r.hasMatch()) {
-                    QString path = r.captured(1);
-                    projectPackages.insert("std", QString::fromUtf8(path.toUtf8()));
+                    QString match = r.captured(1);
+                    QString path = QDir::isAbsolutePath(match) ? match :
+                        QDir::home().filePath(match);
+                    qCDebug(KDEV_ZIG) << "std_lib" << path;
+                    projectPackages.insert("std", path);
                     return *projectPackages.constFind("std");
                 }
             }
         }
-        qWarning() << "zig std lib path not found";
+        qCWarning(KDEV_ZIG) << "zig std lib path not found";
         return "/usr/local/lib/zig/lib/zig/std";
     }
     return *projectPackages.constFind("std");
@@ -219,14 +226,17 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
 {
     QUrl importPath;
     if (importName == "std") {
-        importPath = QUrl::fromLocalFile(QDir::cleanPath(stdLibPath(nullptr) + "/std.zig"));
+        auto project = ICore::self()->projectController()->findProjectForUrl(
+            QUrl::fromLocalFile(currentFile)
+        );
+        importPath = QUrl::fromLocalFile(QDir::cleanPath(stdLibPath(project) + "/std.zig"));
     } else {
         QDir folder = currentFile;
         folder.cdUp();
         importPath = QUrl::fromLocalFile(QDir::cleanPath(folder.absoluteFilePath(importName)));
     }
 
-    // qDebug() << "Import " << importName << "path " << importPath.toLocalFile();
+    // qCDebug(KDEV_ZIG) << "Import " << importName << "path " << importPath.toLocalFile();
     if (!QFile(importPath.toLocalFile()).exists()) {
         return QUrl("");
     }

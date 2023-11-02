@@ -91,7 +91,7 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Error);
         p->setDescription(i18n("Undefined builtin %1", functionName));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
@@ -100,18 +100,26 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
     ZigNode child = node.nextChild();
 
     if (functionName == "@import") {
+        // Show use range on the string
+        QString importName = child.spellingName();
+        useRange = editorFindSpellingRange(child, importName);
         ExpressionVisitor v(session ,currentContext());
         v.startVisiting(node, parent);
         auto mod = v.lastDeclaration();
         if (mod) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(mod));
         } else {
-            QString importName = child.spellingName();
             ProblemPointer p = ProblemPointer(new Problem());
             p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
             p->setSource(IProblem::SemanticAnalysis);
-            p->setSeverity(IProblem::Hint);
-            p->setDescription(i18n("Import missing or unresolved %1", importName));
+            QUrl url = Helper::importPath(importName, session->document().str());
+            if (url.isEmpty()) {
+                p->setSeverity(IProblem::Error);
+                p->setDescription(i18n("Import %1 does not exist", importName));
+            } else {
+                p->setSeverity(IProblem::Hint);
+                p->setDescription(i18n("Import %1 not yet resolved", importName));
+            }
             DUChainWriteLocker lock;
             topContext()->addProblem(p);
         }
@@ -257,15 +265,18 @@ void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
 void UseBuilder::visitArrayAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
+    Q_UNUSED(parent);
 }
 
 void UseBuilder::visitPtrAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
+    Q_UNUSED(parent);
 }
 
 void UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     QString name = node.spellingName();
     RangeInRevision useRange = editorFindSpellingRange(node, name);
 
@@ -315,6 +326,8 @@ void UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
 
 void UseBuilder::visitLiteral(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
     // TODO
 }
 

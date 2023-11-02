@@ -85,9 +85,6 @@ private:
     template<NodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<NodeKind Kind, EnableIf<Kind == Module> = dummy>
-    void setDeclData(KDevelop::Declaration *decl);
-
     template<NodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
     void setDeclData(KDevelop::AliasDeclaration *decl);
 
@@ -110,8 +107,6 @@ private:
     void updateFunctionDecl(ZigNode &node);
 
     void maybeBuildCapture(ZigNode &node, ZigNode &parent);
-
-    void buildImportDecl(ZigNode &node, ZigNode &parent);
 };
 
 }

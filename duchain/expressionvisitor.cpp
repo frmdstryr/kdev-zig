@@ -10,6 +10,7 @@
 #include "types/slicetype.h"
 #include "expressionvisitor.h"
 #include "helpers.h"
+#include "zigdebug.h"
 
 namespace Zig
 {
@@ -68,7 +69,7 @@ void ExpressionVisitor::startVisiting(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
 {
     NodeTag tag = node.tag();
-    // qDebug() << "ExpressionVisitor::visitNode" << node.index << "tag" << tag;
+    // qCDebug(KDEV_ZIG) << "ExpressionVisitor::visitNode" << node.index << "tag" << tag;
 
     switch (tag) {
     case NodeTag_identifier:
@@ -147,7 +148,7 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitPointerType(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // qDebug() << "visit pointer";
+    // qCDebug(KDEV_ZIG) << "visit pointer";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
@@ -161,7 +162,7 @@ VisitResult ExpressionVisitor::visitPointerType(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitAddressOf(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // qDebug() << "visit address of";
+    // qCDebug(KDEV_ZIG) << "visit address of";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
@@ -175,7 +176,7 @@ VisitResult ExpressionVisitor::visitAddressOf(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitDeref(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // qDebug() << "visit deref";
+    // qCDebug(KDEV_ZIG) << "visit deref";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
@@ -190,7 +191,7 @@ VisitResult ExpressionVisitor::visitDeref(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
 {
-    // qDebug() << "visit optional";
+    // qCDebug(KDEV_ZIG) << "visit optional";
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
@@ -204,7 +205,7 @@ VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // qDebug() << "visit unwrap optional";
+    // qCDebug(KDEV_ZIG) << "visit unwrap optional";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
@@ -240,7 +241,7 @@ VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent
 {
     Q_UNUSED(parent);
     QString name = node.spellingName();
-    // qDebug() << "visit number lit" << name;
+    // qCDebug(KDEV_ZIG) << "visit number lit" << name;
     encounter(AbstractType::Ptr(
         new BuiltinType(name.contains(".") ?
             "comptime_float" : "comptime_int")));
@@ -251,7 +252,7 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString name = node.spellingName();
-    // qDebug() << "visit ident" << name;
+    // qCDebug(KDEV_ZIG) << "visit ident" << name;
     if (BuiltinType::isBuiltinType(name)) {
         encounter(AbstractType::Ptr(new BuiltinType(name)));
     } else if (name == "true" || name == "false") {
@@ -290,6 +291,7 @@ VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)
 
 VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(node);
     NodeKind kind = parent.kind();
     if (kind == VarDecl) {
         QString name = parent.spellingName();
@@ -312,6 +314,7 @@ VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent
 
 VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
 {
+    Q_UNUSED(parent);
     QString name = node.mainToken();
     if (name == "@This") {
         return callBuiltinThis(node);
@@ -427,15 +430,12 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     auto *importedModule = DUChain::self()->chainForDocument(importPath);
     if (importedModule) {
         if (auto mod = importedModule->owner()) {
-            // qDebug() << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
+            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
             encounterLvalue(DeclarationPointer(mod));
             return Recurse;
         }
-        // qDebug() << "No owner!";
     } else {
-        // TODO: Create import error?
         Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
-        // qDebug() << "No module!";
     }
     encounterUnknown();
     return Recurse;
@@ -467,7 +467,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     const auto T = v.lastType();
     // Root modules have a ModuleModifier set
     // const auto isModule = T->modifiers() & ModuleModifier;
-    // qDebug() << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
+    // qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
 
     if (auto s = T.dynamicCast<SliceType>()) {
         // Slices have builtin len / ptr types
@@ -483,11 +483,11 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
         }
     }
     else if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
-        // qDebug() << " result " << decl->abstractType()->toString();
+        // qCDebug(KDEV_ZIG) << " result " << decl->abstractType()->toString();
         encounterLvalue(DeclarationPointer(decl));
     }
     else {
-        // qDebug() << " no result ";
+        // qCDebug(KDEV_ZIG) << " no result ";
         encounterUnknown();
     }
     return Recurse;
@@ -496,7 +496,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    // qDebug() << "visit pointer";
+    // qCDebug(KDEV_ZIG) << "visit pointer";
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
     ZigNode rhs = {node.ast, data.rhs};
@@ -566,7 +566,8 @@ VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
     Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
-    ZigNode rhs = {node.ast, data.rhs};
+    // TODO: It's possible to check the range
+    // ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(this);
     v.startVisiting(lhs, node);
 

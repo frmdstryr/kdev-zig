@@ -23,6 +23,12 @@ Run the `duchaintest` for kdev-zig tests.
 
 In case you run into problems with it use `ninja uninstall`.
 
+To enable debug logging set the following env var.
+
+```bash
+export QT_LOGGING_RULES="kdevelop.languages.zig.duchain.debug=true;"
+```
+
 ## Running
 
 Then run KDevelop.

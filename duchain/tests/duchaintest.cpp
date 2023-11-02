@@ -159,7 +159,7 @@ void DUChainTest::sanityCheckImport()
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier("std"));
     QCOMPARE(decls.size(), 1);
-    //QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
+    QCOMPARE(decls.first()->abstractType()->toString(), "struct std"); // std
     decls = context->findDeclarations(Identifier("time"));
     //QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // time
     QCOMPARE(decls.size(), 1);

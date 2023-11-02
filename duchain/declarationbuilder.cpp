@@ -60,12 +60,6 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
         return buildDeclaration<TestDecl>(node, parent);
-    // case Call: {
-    //     if (node.spellingName() == "@import") {
-    //         buildImportDecl(node, parent);
-    //     }
-    //     // Fall through
-    // }
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -120,7 +114,16 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &paren
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
-        identifier = Identifier(session->document().str());
+        // FIXME: Relative module name?
+        QStringList parts = session->document().str().split("/");
+        identifier = Identifier("@import " + parts.last().replace(".zig", ""));
+    } else if (Kind == TestDecl) {
+        if (name.isEmpty()) {
+            // include space so it cannot be referenced as a variable
+            identifier = Identifier("test 0");
+        } else {
+            identifier = Identifier("test " + name);
+        }
     }
 
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
@@ -238,16 +241,8 @@ void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
     if (Kind == Module || Kind == ContainerDecl) {
         decl->setClassType(ClassDeclarationData::Struct);
     }
-    // if (Kind == Module) {
-    //     decl->setInternalContext(currentContext());
-    // }
 }
 
-template<NodeKind Kind, EnableIf<Kind == Module>>
-void DeclarationBuilder::setDeclData(Declaration *decl)
-{
-    decl->setKind(Declaration::Namespace);
-}
 
 template<NodeKind Kind, EnableIf<Kind == VarDecl>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
@@ -348,46 +343,5 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
         closeDeclaration();
     }
 }
-
-void DeclarationBuilder::buildImportDecl(ZigNode &node, ZigNode &parent)
-{
-    // Q_ASSERT(node.spellingName() == "@import");
-    //
-    DUChainWriteLocker lock;
-    auto range = editorFindSpellingRange(node, "");
-    QString name = node.nextChild().spellingName();
-
-    QUrl importPath = Helper::importPath(name, session->document().str());
-    auto *moduleContext = DUChain::self()->chainForDocument(importPath);
-    //auto alias = new AliasDeclaration(range, currentContext());
-    auto decl = createDeclaration<AliasDecl>(node, parent, name, false, range);
-    if (moduleContext) {
-        auto alias = dynamic_cast<AliasDeclaration*>(decl);
-        Q_ASSERT(alias);
-        alias->setAliasedDeclaration(moduleContext->owner());
-        qDebug() << "Import alias" << alias->toString();
-    }
-    closeDeclaration();
-    // auto alias = new AliasDeclaration(range, currentContext());
-    // if (moduleContext) {
-    //     alias->setAliasedDeclaration(moduleContext->owner());
-    // }
-    // // auto *mod = createDeclaration<Module>(node, name, true, range);
-    // // openContext(&node, NodeTraits::contextType(Module), &name);
-    // // QUrl importPath = Helper::importPath(name, session->document().str());
-    // // auto *moduleContext = DUChain::self()->chainForDocument(importPath);
-    // // if (moduleContext) {
-    // //     for (auto decl: moduleContext->localDeclarations()) {
-    // //         auto alias = new AliasDeclaration(
-    // //             RangeInRevision::invalid(), currentContext());
-    // //         alias->setAliasedDeclaration(decl);
-    // //     }
-    // // }
-    // // closeContext();
-    //closeDeclaration();
-
-}
-
-
 
 } // namespace zig
