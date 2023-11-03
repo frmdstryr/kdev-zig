@@ -330,6 +330,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
         || name == "@max"
         || name == "@mod"
         || name == "@rem"
+        || name == "@abs"
         || name == "@shlExact"
         || name == "@shrExact"
         || name == "@mulAdd"
@@ -404,14 +405,14 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     ZigNode strNode = node.nextChild();
     if (strNode.tag() != NodeTag_string_literal) {
         encounterUnknown();
-        return Recurse;
+        return Continue;
     }
     QString importName = strNode.spellingName();
 
     QUrl importPath = Helper::importPath(importName, session()->document().str());
     if (importPath.isEmpty()) {
         encounterUnknown();
-        return Recurse;
+        return Continue;
     }
 
     // TODO: How do I import from another file???
@@ -419,22 +420,29 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     auto *importedModule = DUChain::self()->chainForDocument(importPath);
     if (importedModule) {
         if (auto mod = importedModule->owner()) {
-            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "type" << mod->abstractType()->toString();
+            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString();
             encounterLvalue(DeclarationPointer(mod));
-            return Recurse;
+            return Continue;
         }
+        qCDebug(KDEV_ZIG) << "Module has no owner" << importPath.toString();
     } else {
         Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
         // Also reschedule reparsing of this
-        Helper::scheduleDependency(session()->document(), session()->jobPriority());
+        qCDebug(KDEV_ZIG) << "Module scheduled for parsing" << importPath.toString();
+        // Helper::scheduleDependency(session()->document(), session()->jobPriority());
     }
     encounterUnknown();
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
+    // QString functionName = node.spellingName();
+    // if (functionName == "@compileError") {
+    //     encounter(new BuiltinType("compileError"));
+    // }
+
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);

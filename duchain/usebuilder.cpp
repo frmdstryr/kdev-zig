@@ -110,23 +110,29 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
             UseBuilderBase::newUse(useRange, DeclarationPointer(mod));
         } else {
             ProblemPointer p = ProblemPointer(new Problem());
+
             p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
             p->setSource(IProblem::SemanticAnalysis);
             QUrl url = Helper::importPath(importName, session->document().str());
             if (url.isEmpty()) {
-                p->setSeverity(IProblem::Error);
-                p->setDescription(i18n("Import %1 does not exist", importName));
+                p->setSeverity(IProblem::Warning);
+                p->setDescription(i18n("Import \"%1\" does not exist", importName));
+                if (importName.endsWith(".zig")) {
+                    p->setExplanation(i18n("File not found"));
+                } else {
+                    p->setExplanation(i18n("Package path not defined"));
+                }
             } else {
                 p->setSeverity(IProblem::Hint);
                 p->setDescription(i18n("Import %1 not yet resolved", importName));
+                p->setExplanation(i18n("File at %1", url.toString()));
+
             }
             DUChainWriteLocker lock;
             topContext()->addProblem(p);
         }
         return;
     }
-
-
 
     QList<Declaration *> declarations;
     bool show_error = true;

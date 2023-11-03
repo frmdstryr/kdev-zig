@@ -7,3 +7,4 @@ build
 *.so
 *.a.o
 log.txt
+zig-cache

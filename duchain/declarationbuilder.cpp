@@ -109,12 +109,18 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
-    createDeclaration<Kind>(node, parent, name, hasContext, range);
+    auto *decl = createDeclaration<Kind>(node, parent, name, hasContext, range);
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) {
         eventuallyAssignInternalContext();
     }
     closeDeclaration();
+
+    if (Kind == Module) {
+        DUChainWriteLocker lock;
+        topContext()->setOwner(decl);
+    }
+
     return ret;
 }
 

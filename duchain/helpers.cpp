@@ -317,6 +317,7 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
     if (QFile(importPath.toLocalFile()).exists()) {
         return importPath;
     }
+    qCDebug(KDEV_ZIG) << "@import(" << importName << ") does not exist" << importPath.toLocalFile();
     return QUrl("");
 }
 
