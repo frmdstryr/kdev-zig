@@ -61,6 +61,8 @@ public:
     explicit ParseSession(const ParseSessionData::Ptr &data);
     ~ParseSession();
 
+    static KDevelop::IndexedString languageString();
+
     void parse();
 
     ParseSessionData::Ptr data() const;

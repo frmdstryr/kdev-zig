@@ -354,6 +354,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
     QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
     QTest::newRow("ptr type aligned ptr") << "var x: *align(4)u8 = undefined;" << "x" << "*u8" << "";
+    QTest::newRow("ptr type aligned array ptr") << "var x: [*]u8 = undefined;" << "x" << "[*]u8" << "";
 
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";

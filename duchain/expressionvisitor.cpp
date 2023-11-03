@@ -425,6 +425,8 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
         }
     } else {
         Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
+        // Also reschedule reparsing of this
+        Helper::scheduleDependency(session()->document(), session()->jobPriority());
     }
     encounterUnknown();
     return Recurse;
@@ -673,6 +675,10 @@ VisitResult ExpressionVisitor::visitPointerTypeAligned(ZigNode &node, ZigNode &p
         ptrType->setBaseType(typeVisitor.lastType());
         if (ok) {
             ptrType->setAlignOf(align);
+        }
+        auto next_token = ast_node_main_token(node.ast, node.index) + 1;
+        if (node.tokenSlice(next_token) == "]") {
+            ptrType->setModifiers(ArrayModifier);
         }
         encounter(AbstractType::Ptr(ptrType));
     } else {

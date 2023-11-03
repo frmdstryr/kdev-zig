@@ -519,7 +519,8 @@ enum NodeKind
     While,
     Switch,
     Defer,
-    Catch
+    Catch,
+    Usingnamespace
 };
 
 enum VisitResult

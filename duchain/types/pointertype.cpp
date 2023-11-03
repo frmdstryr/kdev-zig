@@ -93,9 +93,11 @@ QString PointerType::toString() const
 {
     auto T = baseType();
     const auto isConst = T ? T->modifiers() & ConstModifier : false;
+    const auto isArray = modifiers() & ArrayModifier;
     QString c = isConst ? "const " : "";
     QString baseString = T ? (c + T->toString()) : QStringLiteral("<notype>");
-    return QLatin1Char('*') + baseString + AbstractType::toString(true);
+    QString prefix = isArray ? "[*]" : "*";
+    return prefix + baseString + AbstractType::toString(true);
 }
 
 AbstractType::WhichType PointerType::whichType() const

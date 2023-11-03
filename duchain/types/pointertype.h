@@ -20,6 +20,9 @@ namespace Zig
 
 using namespace KDevelop;
 
+// If pointer is to an array use this to render [*]
+const quint32 ArrayModifier = 1 << 15;
+
 class KDEVPLATFORMLANGUAGE_EXPORT PointerTypeData
     : public AbstractTypeData
 {

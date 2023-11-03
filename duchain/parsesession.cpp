@@ -43,6 +43,13 @@ void ParseSessionData::parse()
     m_ast = parse_ast(m_document.c_str(), m_contents);
 }
 
+KDevelop::IndexedString ParseSession::languageString()
+{
+    static const KDevelop::IndexedString langString("Zig");
+    return langString;
+}
+
+
 ParseSession::ParseSession(const ParseSessionData::Ptr &data)
     : d(data)
 {

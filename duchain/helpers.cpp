@@ -71,7 +71,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
         const auto isModule = s->modifiers() & ModuleModifier;
         // Lookup in the original declaration's module context
         DUChainReadLocker lock;
-        const auto moduleContext = (isModule) ? s->declaration(nullptr)->topContext() : topContext;
+        const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext;
         if (auto ctx = s->internalContext(moduleContext)) {
             auto decls = ctx->findDeclarations(
                 attribute, CursorInRevision::invalid(),

@@ -71,12 +71,14 @@ ParseSessionData::Ptr ParseJob::findParseSessionData(const IndexedString &url)
     return {};
 }
 
+
 void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 {
     Q_UNUSED(self);
     Q_UNUSED(thread);
-    if (abortRequested() || ICore::self()->shuttingDown()) {
-        return abortJob();
+    QReadLocker parseLock(languageSupport()->parseLock());
+    if (abortRequested()) {
+        return;
     }
 
     qCDebug(KDEV_ZIG) << "Parse job starting for: " << document().toUrl();
@@ -88,41 +90,19 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         }
     }
 
-    QReadLocker parseLock(languageSupport()->parseLock());
-    UrlParseLock urlLock(document());
-    readContents();
 
-    if (abortRequested()) {
-        return;
-    }
-
-    if (!(minimumFeatures() & TopDUContext::ForceUpdate || minimumFeatures() & Rescheduled)) {
-        DUChainReadLocker lock;
-        static const IndexedString langString(zig()->name());
-        for (const ParsingEnvironmentFilePointer &file : DUChain::self()->allEnvironmentFiles(document())) {
-            if (file->language() != langString) {
-                continue;
-            }
-
-            if (!file->needsUpdate() && file->featuresSatisfied(minimumFeatures()) && file->topContext()) {
-                qCDebug(KDEV_ZIG) << "Already up to date, skipping:" << document().str();
-                setDuChain(file->topContext());
-                if (ICore::self()->languageController()->backgroundParser()->trackerForUrl(document())) {
-                    lock.unlock();
-                    highlightDUChain();
-                }
-                return;
-            }
-            break;
+   {
+        UrlParseLock urlLock(document());
+        if (abortRequested() || !isUpdateRequired(ParseSession::languageString())) {
+            return;
+        }
+        ProblemPointer readProblem = readContents();
+        if (readProblem) {
+            return;
         }
     }
 
-    if (abortRequested()) {
-        return;
-    }
-
     ParseSession session(findParseSessionData(document()));
-
     if (!session.data()) {
         session.setData(ParseSessionData::Ptr(
             new ParseSessionData(document(), contents().contents, parsePriority())
@@ -138,10 +118,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         DUChainReadLocker lock;
         toUpdate = DUChainUtils::standardContextForUrl(document().toUrl());
     }
-
     if (toUpdate) {
-        DUChainWriteLocker lock;
         translateDUChainToRevision(toUpdate);
+        DUChainWriteLocker lock; // Must come after translateDUChainToRevision
         toUpdate->setRange(RangeInRevision(0, 0, INT_MAX, INT_MAX));
         toUpdate->clearProblems();
     }

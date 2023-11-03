@@ -62,7 +62,8 @@ const NodeKind = enum(u8) {
     While,
     Switch,
     Defer,
-    Catch
+    Catch,
+    Usingnamespace,
 };
 
 // std.mem.len does not check for null
@@ -400,6 +401,7 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
         .switch_comma, .@"switch" => .Switch,
         .@"defer", .@"errdefer" => .Defer,
         .@"catch" => .Catch,
+        .@"usingnamespace" => .Usingnamespace,
         // TODO
         else => .Unknown,
     };
