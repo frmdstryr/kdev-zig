@@ -279,10 +279,11 @@ export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType)
             };
         }
         if (tag == .@"catch") {
-            return switch (capture) {
-                .Payload => ast.nodes.items(.main_token)[index] + 1,
-                .Error => 0,
-            };
+            // If token after catch is a | then uses token after that
+            const main_token = ast.nodes.items(.main_token)[index];
+            if (ast.tokens.items(.tag)[main_token+1] == .pipe) {
+                return main_token + 2;
+            }
         }
     }
     return 0;
@@ -318,6 +319,8 @@ test "capture-name" {
     try testCaptureName("test { if (a) |b| { _ = b; } else |c| {}}", .@"if", .Error, "c");
     try testCaptureName("test { while (a) |b| { _ = b; }}", .while_simple, .Payload, "b");
     try testCaptureName("test { for (a) |b| { _ = b; }}", .for_simple, .Payload, "b");
+    try testCaptureName("test { try foo() catch |err| {}; }", .@"catch", .Payload, "err");
+    try testCaptureName("test { errdefer |err| {} }", .@"errdefer", .Payload, "err");
 }
 
 export fn ast_node_range(ptr: ?*Ast, index: Index) SourceRange {
@@ -1710,7 +1713,7 @@ test "all-visit" {
     const buffer_size = 20*1000*1024; // 20MB
     while (try walker.next()) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".zig")) {
-            std.log.warn("{s}", .{entry.path});
+            errdefer std.log.warn("{s}", .{entry.path});
             const file = try entry.dir.openFile(entry.basename, .{});
             const source = try file.readToEndAllocOptions(
                 allocator, buffer_size, null, 4, 0

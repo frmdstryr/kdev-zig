@@ -168,13 +168,23 @@ bool BuiltinType::isBuiltinVariable(const QString& name)
     );
 }
 
-BuiltinType* BuiltinType::newFromName(const QString& name)
+AbstractType::Ptr BuiltinType::newFromName(const QString& name)
 {
-    if (BuiltinType::isBuiltinType(name))
-        return new BuiltinType(name);
-    if (name == "true" || name == "false")
-        return new BuiltinType("bool");
-    return nullptr;
+    static QHash<QString, AbstractType::Ptr> builtinTypeCache;
+    auto it = builtinTypeCache.constFind(name);
+    if (it != builtinTypeCache.constEnd())
+        return *it;
+    if (BuiltinType::isBuiltinType(name)) {
+        auto t = new BuiltinType(name);
+        Q_ASSERT(t);
+        auto r = AbstractType::Ptr(t);
+        builtinTypeCache.insert(name, r);
+        return r;
+    }
+    if (name == "true" || name == "false") {
+        return newFromName("bool");
+    }
+    return AbstractType::Ptr();
 }
 
 

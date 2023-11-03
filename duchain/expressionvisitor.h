@@ -64,6 +64,7 @@ public:
 
 protected:
     ParseSession* m_session;
+
 };
 
 }

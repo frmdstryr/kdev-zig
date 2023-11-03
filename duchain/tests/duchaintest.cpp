@@ -363,5 +363,30 @@ void DUChainTest::testVarType_data()
     // TODO: constness
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
 
+    // TODO: Order of decls matters but should not...
     QTest::newRow("nested struct") << "const Foo = struct {bar: Bar = .{}, const Bar = struct {a: u8};}; test{\nvar f = Foo.Bar{};\n}" << "f" << "Foo::Bar" << "2,0";
+    QTest::newRow("nested struct field") << "const Foo = struct {const Bar = struct {a: u8}; bar: Bar = .{}, }; test{\nvar f = Foo{}; var y = f.bar.a;\n}" << "y" << "u8" << "2,0";
+    QTest::newRow("struct fn arg") <<
+        "const Bar = struct {\n"
+        "  a: u8, \n"
+        "  pub fn copy(other: Bar) Bar {\n"
+        "      const b = other.a;\n"
+        "      return Bar{.a=b};\n"
+        "  }"
+        "};" << "b" << "u8" << "5,0";
+    QTest::newRow("nested struct fn arg") <<
+        "const Foo = struct {\n"
+        "  const Bar = struct {\n"
+        "    a: u8, \n"
+        "    pub fn nestedCopy(other: Bar) Bar {\n"
+        "        const b = other.a;\n"
+        "        return Bar{.a=b};\n"
+        "    }"
+        "  }; "
+        "  bar: Bar = .{}, "
+        "};" << "b" << "u8" << "5,0";
+    QTest::newRow("nested struct field after") << "const Foo = struct {bar: Bar = .{}, const Bar = struct {a: u8}; }; test{\nvar f = Foo{}; var y = f.bar.a;\n}" << "y" << "u8" << "2,0";
+
+    QTest::newRow("if capture") << "test { var x: ?u8 = 0; if (x) |y| {\n}}" << "y" << "u8" << "1,0";
+    QTest::newRow("while capture") << "test { var x: ?u8 = 0; while (x) |y| {\n}}" << "y" << "u8" << "1,0";
 }

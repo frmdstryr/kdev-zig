@@ -15,7 +15,6 @@
 namespace Zig
 {
 
-//QHash<QString, KDevelop::AbstractType::Ptr> ExpressionVisitor::m_defaultTypes;
 static VisitResult expressionVistorCallback(ZAst* ast, NodeIndex node, NodeIndex parent, void *data)
 {
     ExpressionVisitor *visitor = static_cast<ExpressionVisitor *>(data);
@@ -31,14 +30,6 @@ ExpressionVisitor::ExpressionVisitor(ParseSession* session, KDevelop::DUContext*
     , m_session(session)
 {
     Q_ASSERT(m_session);
-    // if ( m_defaultTypes.isEmpty() ) {
-    //     m_defaultTypes.insert("void", AbstractType::Ptr(new BuiltinType("void")));
-    //     m_defaultTypes.insert("true", AbstractType::Ptr(new BuiltinType("bool")));
-    //     m_defaultTypes.insert("false", AbstractType::Ptr(new BuiltinType("bool")));
-    //     m_defaultTypes.insert("comptime_int", AbstractType::Ptr(new BuiltinType("comptime_int")));
-    //     m_defaultTypes.insert("comptime_float", AbstractType::Ptr(new BuiltinType("comptime_float")));
-    //     m_defaultTypes.insert("string", AbstractType::Ptr(new BuiltinType("[]const u8")));
-    // }
 }
 
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
@@ -227,7 +218,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent
     Q_ASSERT(sliceType);
     sliceType->setSentinel(0);
     sliceType->setDimension(value.size());
-    sliceType->setElementType(AbstractType::Ptr(new BuiltinType("u8")));
+    sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
 
     auto ptrType = new PointerType();
@@ -242,9 +233,8 @@ VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent
     Q_UNUSED(parent);
     QString name = node.spellingName();
     // qCDebug(KDEV_ZIG) << "visit number lit" << name;
-    encounter(AbstractType::Ptr(
-        new BuiltinType(name.contains(".") ?
-            "comptime_float" : "comptime_int")));
+    encounter(BuiltinType::newFromName(
+        name.contains(".") ? "comptime_float" : "comptime_int"));
     return Recurse;
 }
 
@@ -253,21 +243,21 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
     Q_UNUSED(parent);
     QString name = node.spellingName();
     // qCDebug(KDEV_ZIG) << "visit ident" << name;
-    if (BuiltinType::isBuiltinType(name)) {
-        encounter(AbstractType::Ptr(new BuiltinType(name)));
-    } else if (name == "true" || name == "false") {
-        encounter(AbstractType::Ptr(new BuiltinType("bool")));
+    if (auto builtinType = BuiltinType::newFromName(name)) {
+        encounter(builtinType);
     } else {
-        CursorInRevision findBeforeCursor = CursorInRevision::invalid();
         Declaration* decl = Helper::declarationForName(
             name,
-            findBeforeCursor,
+            CursorInRevision::invalid(),
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
             encounter(decl->abstractType(), DeclarationPointer(decl));
         } else {
-            encounterUnknown();
+            // Needs resolved later
+            auto delayedType = new DelayedType();
+            delayedType->setIdentifier(IndexedTypeIdentifier(name));
+            encounter(AbstractType::Ptr(delayedType));
         }
     }
 
@@ -295,10 +285,9 @@ VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent
     NodeKind kind = parent.kind();
     if (kind == VarDecl) {
         QString name = parent.spellingName();
-        CursorInRevision findBeforeCursor = CursorInRevision::invalid();
         Declaration* decl = Helper::declarationForName(
             name,
-            findBeforeCursor,
+            CursorInRevision::invalid(),
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
@@ -369,7 +358,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
         name == "@intFromPtr"
         || name == "@returnAddress"
     ) {
-        encounter(AbstractType::Ptr(new BuiltinType("usize")));
+        encounter(BuiltinType::newFromName("usize"));
     } else if (
         name == "@memcpy"
         || name == "@memset"
@@ -379,7 +368,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
         || name == "@setFloatMode"
         || name == "@setRuntimeSafety"
     ) {
-        encounter(AbstractType::Ptr(new BuiltinType("void")));
+        encounter(BuiltinType::newFromName("void"));
     } else if (
         name == "@alignOf"
         || name == "@sizeOf"
@@ -387,7 +376,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
         || name == "@bitSizeOf"
         || name == "@offsetOf"
     ) {
-        encounter(AbstractType::Ptr(new BuiltinType("comptime_int")));
+        encounter(BuiltinType::newFromName("comptime_int"));
     } else {
         encounterUnknown();
     }
@@ -463,16 +452,28 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     ZigNode owner = node.nextChild();
     v.visitNode(owner, node);
     QString attr = node.tokenSlice(node.data().rhs);
-    DUChainReadLocker lock;
     const auto T = v.lastType();
     // Root modules have a ModuleModifier set
     // const auto isModule = T->modifiers() & ModuleModifier;
     // qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
 
+    // if (auto delayed = v.lastType().dynamicCast<DelayedType>()) {
+    //     QString ident = delayed->identifier().toString();
+    //     qDebug() << "Access delayed type" << ident;
+    //     auto decl = declarationForName(
+    //         ident,
+    //         CursorInRevision::invalid(),
+    //         DUChainPointer<const DUContext>(topContext)
+    //     );
+    //     if (decl) {
+    //         return accessAttribute(decl->abstractType(), attribute, topContext);
+    //     }
+    // }
+
     if (auto s = T.dynamicCast<SliceType>()) {
         // Slices have builtin len / ptr types
         if (attr == "len") {
-            encounter(AbstractType::Ptr(new BuiltinType("usize")));
+            encounter(BuiltinType::newFromName("usize"));
         } else if (attr == "ptr") {
             auto ptr = new PointerType();
             ptr->setModifiers(s->modifiers());
@@ -481,8 +482,11 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
         } else {
             encounterUnknown();
         }
+        return Recurse;
     }
-    else if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
+
+    if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
+        // DUChainReadLocker lock; // Needed if printing debug statement
         // qCDebug(KDEV_ZIG) << " result " << decl->abstractType()->toString();
         encounterLvalue(DeclarationPointer(decl));
     }
@@ -517,7 +521,7 @@ VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
-    encounter(AbstractType::Ptr(new BuiltinType("bool")));
+    encounter(BuiltinType::newFromName("bool"));
     return Recurse;
 }
 

@@ -26,13 +26,21 @@ public:
     static QMutex cacheMutex;
     static QMap<KDevelop::IProject*, QVector<QUrl>> cachedCustomIncludes;
     static QMap<KDevelop::IProject*, QVector<QUrl>> cachedSearchPaths;
+
+    // The project... vars should only be accessed while holding the projectPathLock
     static QMutex projectPathLock;
     static QVector<QUrl> projectSearchPaths;
+    static bool projectPackagesLoaded;
     static QMap<QString, QString> projectPackages;
 
     static QString zigExecutablePath(KDevelop::IProject* project);
+
+    // Caller must NOT be holding projectPathLock for these
     static QString stdLibPath(KDevelop::IProject* project);
+    static void loadPackages(KDevelop::IProject* project);
+    static QString packagePath(const QString &name, const QString& currentFile);
     static QUrl importPath(const QString& importName, const QString& currentFile);
+
     static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
 
     static void scheduleDependency(

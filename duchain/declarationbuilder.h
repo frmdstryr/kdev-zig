@@ -106,6 +106,7 @@ private:
     // Before children are visited
     void updateFunctionDecl(ZigNode &node);
 
+    template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(ZigNode &node, ZigNode &parent);
 };
 

@@ -20,7 +20,9 @@
 #include <type_traits>
 #include <QRegularExpression>
 
+#include <language/duchain/problem.h>
 #include <language/duchain/duchainlock.h>
+#include <language/editor/documentrange.h>
 
 #include "expressionvisitor.h"
 #include "types/builtintype.h"
@@ -29,6 +31,7 @@
 #include "nodetraits.h"
 #include "helpers.h"
 #include "zigdebug.h"
+#include "types/optionaltype.h"
 
 namespace Zig
 {
@@ -76,11 +79,19 @@ void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
         currentContext()->setOwner(currentDeclaration());
     }
 
-    if (kind == FunctionDecl) {
+    switch (kind) {
+    case FunctionDecl:
         updateFunctionDecl(node);
-    }
-    else if (NodeTraits::canHaveCapture(kind)) {
-        maybeBuildCapture(node, parent);
+        break;
+#define BUILD_CAPTURE_FOR(K) case K: maybeBuildCapture<K>(node, parent); break
+        BUILD_CAPTURE_FOR(If);
+        BUILD_CAPTURE_FOR(For);
+        BUILD_CAPTURE_FOR(While);
+        BUILD_CAPTURE_FOR(Defer);
+        BUILD_CAPTURE_FOR(Catch);
+#undef BUILD_CAPTURE_FOR
+    default:
+        break;
     }
     ContextBuilder::visitChildren(node, parent);
 
@@ -110,7 +121,6 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 template <NodeKind Kind>
 Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &parent, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
 {
-    DUChainWriteLocker lock;
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
@@ -126,6 +136,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &paren
         }
     }
 
+    DUChainWriteLocker lock;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         identifier,
         declRange,
@@ -135,13 +146,19 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &paren
     if (NodeTraits::isTypeDeclaration(Kind)) {
         decl->setKind(Declaration::Type);
     }
+    lock.unlock();
 
     auto type = createType<Kind>(node, parent);
     openType(type);
+    lock.lock();
     setDeclData<Kind>(decl);
     setType<Kind>(decl, type.data());
+    lock.unlock();
     closeType();
-    // qDebug()  << "Create decl node:" << node.index << " name:" << identifier.toString() << " range:" << declRange << " kind:" << Kind << "type" << type->toString();
+    // {
+    //     lock.lock();
+    //     qDebug()  << "Create decl node:" << node.index << " name:" << identifier.toString() << " range:" << declRange << " kind:" << Kind << "type" << type->toString();
+    // }
     return decl;
 }
 
@@ -189,9 +206,9 @@ AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
         v.startVisiting(arg, parent);
         return v.lastType();
     }
-    else if (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl) {
+    else if (Kind == VarDecl || Kind == FieldDecl) {
         // const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
-        ZigNode typeNode = Kind == ParamDecl ? node : node.varType();
+        ZigNode typeNode = node.varType();
 
         if (!typeNode.isRoot()) {
             ExpressionVisitor v(session, currentContext());
@@ -205,6 +222,15 @@ AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
                 return v.lastType();
             }
         }
+    }
+    else if (Kind ==  ParamDecl) {
+        // Function arg node is the type
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(node, parent);
+        return v.lastType();
+    }
+    else if (Kind == TestDecl) {
+        return AbstractType::Ptr(new BuiltinType("test"));
     }
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
@@ -263,25 +289,8 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     Q_UNUSED(decl);
 }
 
-// void DeclarationBuilder::updateDeclaration(ZigNode &node)
-// {
-// //     if (parentDecl && Kind == ContainerDecl && parent.kind() == VarDecl) {
-// //         // qDebug() << "Update last decl" << parentDecl->toString();
-// //         if (parentDecl && hasCurrentType()) {
-// //             DUChainWriteLocker lock;
-// //             parentDecl->setIsTypeAlias(true);
-// //             parentDecl->setKind(Declaration::Type);
-// //             parentDecl->setType(currentAbstractType());
-// //         }
-// //     }
-//     if (node.kind() == FunctionDecl) {
-//         updateFunctionDeclaration(node);
-//     }
-// }
-
 void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
 {
-    DUChainWriteLocker lock;
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
     auto fn = decl->type<FunctionType>();
@@ -298,48 +307,64 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
             Q_ASSERT(!paramType.isRoot());
             QString paramName = node.paramName(i);
             auto paramRange = node.paramRange(i);
-            createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
-
-            //lock.unlock();
-            ExpressionVisitor v(session, currentContext());
-            v.startVisiting(paramType, node);
-            //lock.lock();
-            fn->addArgument(v.lastType(), i);
-
-            buildContext<ParamDecl>(paramType, node);
-            eventuallyAssignInternalContext();
+            auto *param = createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
+            {
+                DUChainWriteLocker lock;
+                fn->addArgument(param->abstractType(), i);
+            }
+            // buildContext<ParamDecl>(paramType, node);
+            // eventuallyAssignInternalContext();
             closeDeclaration();
-            //lock.unlock();
+
         }
     }
 
-    {
-        ZigNode typeNode = node.returnType();
-        Q_ASSERT(!typeNode.isRoot());
-        ExpressionVisitor v(session, currentContext());
-        v.startVisiting(typeNode, node);
+    ZigNode typeNode = node.returnType();
+    Q_ASSERT(!typeNode.isRoot());
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(typeNode, node);
 
-        // Zig does not use error_union for inferred return types...
-        auto returnType = v.lastType();
-        if (node.returnsInferredError()) {
-            auto *errType = new ErrorType();
-            errType->setBaseType(returnType);
-            returnType = AbstractType::Ptr(errType);
-        }
-
-        fn->setReturnType(returnType);
-        decl->setAbstractType(fn);
+    // Zig does not use error_union for inferred return types...
+    auto returnType = v.lastType();
+    if (node.returnsInferredError()) {
+        auto *errType = new ErrorType();
+        errType->setBaseType(returnType);
+        returnType = AbstractType::Ptr(errType);
     }
+    DUChainWriteLocker lock;
+    fn->setReturnType(returnType);
+    decl->setAbstractType(fn);
+    // qDebug()  << "  fn type" << fn->toString();
 }
 
+template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)>>
 void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
 {
     QString captureName = node.captureName(CaptureType::Payload);
     if (!captureName.isEmpty()) {
         auto range = node.captureRange(CaptureType::Payload);
         // FIXME: Get type node of capture ???
-        DUChainWriteLocker lock;
-        createDeclaration<VarDecl>(node, parent, captureName, true, range);
+        auto decl = createDeclaration<VarDecl>(node, parent, captureName, true, range);
+        if (Kind == If || Kind == While) {
+            // If and While captures unwrap the optional type
+            ZigNode optionalType = node.nextChild();
+            ExpressionVisitor v(session, currentContext());
+            v.startVisiting(optionalType, node);
+            if (auto opt = v.lastType().dynamicCast<OptionalType>()) {
+                DUChainWriteLocker lock;
+                decl->setAbstractType(opt->baseType());
+            } else if (v.lastType() != v.unknownType()) {
+                // Type is known but not an optional type, this is a problem
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+                p->setSource(IProblem::SemanticAnalysis);
+                p->setSeverity(IProblem::Hint);
+                p->setDescription(i18n("Attempt to unwrap non-optional type"));
+                DUChainWriteLocker lock;
+                topContext()->addProblem(p);
+            }
+        }
+
         closeDeclaration();
     }
 }

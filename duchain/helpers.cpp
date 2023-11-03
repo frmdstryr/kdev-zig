@@ -9,6 +9,7 @@
 #include <language/duchain/duchainlock.h>
 #include <language/backgroundparser/backgroundparser.h>
 #include <interfaces/ilanguagecontroller.h>
+#include <util/path.h>
 #include "types/declarationtypes.h"
 #include "types/pointertype.h"
 #include "types/builtintype.h"
@@ -30,8 +31,8 @@ QVector<QUrl> Helper::projectSearchPaths;
 
 // FIXME: Is this actually per project?
 QMutex Helper::projectPathLock;
+bool Helper::projectPackagesLoaded;
 QMap<QString, QString> Helper::projectPackages;
-
 
 
 void Helper::scheduleDependency(const IndexedString& dependency, int betterThanPriority)
@@ -60,6 +61,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     if ( ! accessed || !topContext ) {
         return nullptr;
     }
+
     if (auto ptr = accessed.dynamicCast<Zig::PointerType>()) {
         // Zig automatically walks pointers
         return accessAttribute(ptr->baseType(), attribute, topContext);
@@ -68,6 +70,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     if (auto s = accessed.dynamicCast<StructureType>()) {
         const auto isModule = s->modifiers() & ModuleModifier;
         // Lookup in the original declaration's module context
+        DUChainReadLocker lock;
         const auto moduleContext = (isModule) ? s->declaration(nullptr)->topContext() : topContext;
         if (auto ctx = s->internalContext(moduleContext)) {
             auto decls = ctx->findDeclarations(
@@ -82,6 +85,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     }
 
     if (auto s = accessed.dynamicCast<EnumerationType>()) {
+        DUChainReadLocker lock;
         if (auto ctx = s->internalContext(topContext)) {
             auto decls = ctx->findDeclarations(
                 attribute, CursorInRevision::invalid(),
@@ -121,8 +125,11 @@ Declaration* Helper::declarationForName(
 
             for (Declaration* declaration: declarations) {
                 if (declaration->context()->type() != DUContext::Class ||
-                    (currentContext->type() == DUContext::Function && declaration->context() == currentContext->parentContext())) {
-                     // Declarations from class decls must be referenced through `self.<foo>`, except
+                    (declaration->context() == currentContext->parentContext() && (
+                        currentContext->type() == DUContext::Function
+                        || currentContext->type() == DUContext::Class // Also needed for Zig's nested structs
+                    ))) {
+                     // Declarations from struct decls must be referenced through `self.<foo>`, except
                      //  in their local scope (handled above) or when used as default arguments for methods of the same class.
                      // Otherwise, we're done!
                     return declaration;
@@ -188,59 +195,129 @@ QString Helper::zigExecutablePath(IProject* project)
     return "/usr/bin/zig";
 }
 
+void Helper::loadPackages(KDevelop::IProject* project)
+{
+    if (!project) {
+        return;
+    }
+
+    QMutexLocker lock(&Helper::projectPathLock);
+
+    // Keep old stdlib to avoid re-running zig
+    QString oldStdLib = projectPackages.contains("std") ?
+        *projectPackages.constFind("std"): "";
+
+    projectPackages.clear();
+
+    // Load packages
+
+    QString pkgs = project->projectConfiguration()->group("kdevzigsupport").readEntry("zigPackages");
+    qCDebug(KDEV_ZIG) << "zig packages configured" << pkgs;
+    for (const QString &pkg : pkgs.split("\n")) {
+        QStringList parts = pkg.split(":");
+        if (parts.size() == 2) {
+            QString pkgName = parts[0].trimmed();
+            QString pkgPath = parts[1].trimmed();
+            if (!pkgName.isEmpty() && !pkgPath.isEmpty()) {
+                QString finalPath = QDir::isAbsolutePath(pkgPath) ? pkgPath :
+                    QDir(project->path().toLocalFile()).filePath(pkgPath);
+                qCDebug(KDEV_ZIG) << "zig package set: " << pkgName << ": " << finalPath;
+                projectPackages.insert(pkgName, finalPath);
+            }
+        } else {
+            qCDebug(KDEV_ZIG) << "zig package is invalid format: " << pkg;
+        }
+    }
+
+    // If none is defined use the last saved
+    if (!oldStdLib.isEmpty() && !projectPackages.contains("std")) {
+        projectPackages.insert("std", oldStdLib);
+    }
+
+    projectPackagesLoaded = true;
+}
 
 QString Helper::stdLibPath(IProject* project)
 {
     static QRegularExpression stdDirPattern("\\s*\"std_dir\":\\s*\"(.+)\"");
     QMutexLocker lock(&Helper::projectPathLock);
-    if (!projectPackages.contains("std")) {
-        QProcess zig;
-        QStringList args = {"env"};
-        QString zigExe = zigExecutablePath(project);
-        qCDebug(KDEV_ZIG) << "zig exe" << zigExe;
-        if (QFile(zigExe).exists()) {
-            zig.start(zigExe, args);
-            zig.waitForFinished(1000);
-            QString output = QString::fromUtf8(zig.readAllStandardOutput());
-            qCDebug(KDEV_ZIG) << "zig env output:" << output;
-            QStringList lines = output.split("\n");
-            for (const QString &line: lines) {
-                auto r = stdDirPattern.match(line);
-                if (r.hasMatch()) {
-                    QString match = r.captured(1);
-                    QString path = QDir::isAbsolutePath(match) ? match :
-                        QDir::home().filePath(match);
-                    qCDebug(KDEV_ZIG) << "std_lib" << path;
-                    projectPackages.insert("std", path);
-                    return *projectPackages.constFind("std");
-                }
+    if (!projectPackagesLoaded) {
+        lock.unlock();
+        loadPackages(project);
+        lock.relock();
+    }
+    // Use one from project config or previously loaded from zig
+    if (projectPackages.contains("std")) {
+        QDir stdzig = *projectPackages.constFind("std");
+        stdzig.cdUp();
+        return stdzig.path();
+    }
+    QProcess zig;
+    QStringList args = {"env"};
+    QString zigExe = zigExecutablePath(project);
+    qCDebug(KDEV_ZIG) << "zig exe" << zigExe;
+    if (QFile(zigExe).exists()) {
+        zig.start(zigExe, args);
+        zig.waitForFinished(1000);
+        QString output = QString::fromUtf8(zig.readAllStandardOutput());
+        qCDebug(KDEV_ZIG) << "zig env output:" << output;
+        QStringList lines = output.split("\n");
+        for (const QString &line: lines) {
+            auto r = stdDirPattern.match(line);
+            if (r.hasMatch()) {
+                QString match = r.captured(1);
+                QString path = QDir::isAbsolutePath(match) ? match :
+                    QDir::home().filePath(match);
+                qCDebug(KDEV_ZIG) << "std_lib" << path;
+                projectPackages.insert("std", QDir::cleanPath(path + "/std.zig"));
+                QDir stdzig = *projectPackages.constFind("std");
+                stdzig.cdUp();
+                return stdzig.path();
             }
         }
-        qCWarning(KDEV_ZIG) << "zig std lib path not found";
-        return "/usr/local/lib/zig/lib/zig/std";
     }
-    return *projectPackages.constFind("std");
+    qCWarning(KDEV_ZIG) << "zig std lib path not found";
+    return "/usr/local/lib/zig/lib/zig/std";
+}
+
+QString Helper::packagePath(const QString &name, const QString& currentFile)
+{
+    auto project = ICore::self()->projectController()->findProjectForUrl(
+            QUrl::fromLocalFile(currentFile));
+
+    QMutexLocker lock(&Helper::projectPathLock);
+    if (!projectPackagesLoaded) {
+        lock.unlock();
+        loadPackages(project);
+        lock.relock();
+    }
+    if (projectPackages.contains(name)) {
+        return *projectPackages.constFind(name);
+    }
+    if (name == "std") {
+        lock.unlock();
+        return QDir::cleanPath(stdLibPath(project) + "/std.zig");
+    }
+    qCDebug(KDEV_ZIG) << "No zig package path found for " << name;
+    return "";
 }
 
 QUrl Helper::importPath(const QString& importName, const QString& currentFile)
 {
     QUrl importPath;
-    if (importName == "std") {
-        auto project = ICore::self()->projectController()->findProjectForUrl(
-            QUrl::fromLocalFile(currentFile)
-        );
-        importPath = QUrl::fromLocalFile(QDir::cleanPath(stdLibPath(project) + "/std.zig"));
-    } else {
+    if (importName.endsWith(".zig")) {
         QDir folder = currentFile;
         folder.cdUp();
-        importPath = QUrl::fromLocalFile(QDir::cleanPath(folder.absoluteFilePath(importName)));
+        importPath = QUrl::fromLocalFile(
+            QDir::cleanPath(folder.absoluteFilePath(importName))
+        );
+    } else {
+        importPath = QUrl::fromLocalFile(packagePath(importName, currentFile));
     }
-
-    // qCDebug(KDEV_ZIG) << "Import " << importName << "path " << importPath.toLocalFile();
-    if (!QFile(importPath.toLocalFile()).exists()) {
-        return QUrl("");
+    if (QFile(importPath.toLocalFile()).exists()) {
+        return importPath;
     }
-    return importPath;
+    return QUrl("");
 }
 
 

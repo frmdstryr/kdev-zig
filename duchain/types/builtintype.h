@@ -58,7 +58,7 @@ public:
     static bool isBuiltinFunc(const QString &name);
     static bool isBuiltinType(const QString &name);
     static bool isBuiltinVariable(const QString &name);
-    static BuiltinType* newFromName(const QString &name);
+    static AbstractType::Ptr newFromName(const QString &name);
 
     enum {
         Identity = 154
@@ -68,6 +68,7 @@ protected:
     void accept0 (TypeVisitor* v) const override;
 
     TYPE_DECLARE_DATA(BuiltinType)
+
 };
 
 }
