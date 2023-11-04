@@ -20,13 +20,18 @@
 #include <language/duchain/ducontext.h>
 #include <language/duchain/declaration.h>
 #include <language/duchain/problem.h>
+#include <language/duchain/types/structuretype.h>
+#include <language/duchain/types/functiontype.h>
 #include <language/editor/documentrange.h>
 
 #include "types/builtintype.h"
+#include "types/slicetype.h"
+#include "types/pointertype.h"
+#include "types/optionaltype.h"
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
-#include "types/slicetype.h"
+
 
 namespace Zig
 {
@@ -40,74 +45,70 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 
 VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
 {
-    NodeKind kind = node.kind();
-    // qDebug() << "UseBuilder::visitNode" << node.index << "kind" << kind;
-    switch (kind){
-        case Call:
-            visitCall(node, parent);
-            break;
-        case ContainerInit:
-            visitContainerInit(node, parent);
-            break;
-        case VarAccess:
-            visitVarAccess(node, parent);
-            break;
-        case FieldAccess:
-            visitFieldAccess(node, parent);
-            break;
-        case ArrayAccess:
-            visitArrayAccess(node, parent);
-            break;
-        case PtrAccess:
-            visitPtrAccess(node, parent);
-            break;
-        case Literal:
-            visitLiteral(node, parent);
-            break;
-        case Ident:
+    NodeTag tag = node.tag();
+    // qCDebug(KDEV_ZIG) << "UseBuilder::visitNode" << node.index << "tag" << tag;
+    switch (tag) {
+        case NodeTag_identifier:
             visitIdent(node, parent);
             break;
-        default:
+        case NodeTag_field_access:
+            visitFieldAccess(node, parent);
             break;
+        case NodeTag_call:
+        case NodeTag_call_comma:
+        case NodeTag_call_one:
+        case NodeTag_call_one_comma:
+        case NodeTag_async_call:
+        case NodeTag_async_call_comma:
+            visitCall(node, parent);
+            break;
+        case NodeTag_builtin_call:
+        case NodeTag_builtin_call_comma:
+        case NodeTag_builtin_call_two:
+        case NodeTag_builtin_call_two_comma:
+            visitBuiltinCall(node, parent);
+            break;
+        case NodeTag_struct_init:
+        case NodeTag_struct_init_comma:
+        case NodeTag_struct_init_one:
+        case NodeTag_struct_init_one_comma:
+            visitStructInit(node, parent);
+            break;
+        case NodeTag_deref:
+            visitDeref(node, parent);
+            break;
+        case NodeTag_unwrap_optional:
+            visitUnwrapOptional(node, parent);
+            break;
+        // case VarAccess:
+        //     visitVarAccess(node, parent);
+        //     break;
+        // case ArrayAccess:
+        //     visitArrayAccess(node, parent);
+        //     break;
+        // case PtrAccess:
+        //     visitPtrAccess(node, parent);
+        //     break;
     }
     return ContextBuilder::visitNode(node, parent);
 }
 
-void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitBuiltinCall(ZigNode &node, ZigNode &parent)
 {
-    // TODO
     QString functionName = node.spellingName();
-    //// qDebug()<< "call" << functionName;
-    RangeInRevision useRange = editorFindSpellingRange(node, functionName);
-
-    IndexedIdentifier identifier = IndexedIdentifier(Identifier(functionName));
-    currentPath.clear();
-    currentPath.push(identifier);
-    if (functionName.isEmpty()) {
-        return;
-    }
-    if (functionName.startsWith("@") && !BuiltinType::isBuiltinFunc(functionName))
-    {
-        ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-        p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Error);
-        p->setDescription(i18n("Undefined builtin %1", functionName));
-        DUChainWriteLocker lock;
-        topContext()->addProblem(p);
-        return;
-    }
-    ZigNode child = node.nextChild();
-
     if (functionName == "@import") {
         // Show use range on the string
+        ZigNode child = node.nextChild();
         QString importName = child.spellingName();
-        useRange = editorFindSpellingRange(child, importName);
+        RangeInRevision useRange = editorFindSpellingRange(child, importName);
+
         ExpressionVisitor v(session ,currentContext());
         v.startVisiting(node, parent);
-        auto mod = v.lastDeclaration();
-        if (mod) {
-            UseBuilderBase::newUse(useRange, DeclarationPointer(mod));
+        auto decl = v.lastDeclaration();
+        if (decl) {
+            if (decl->range() != useRange) {
+                UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+            }
         } else {
             ProblemPointer p = ProblemPointer(new Problem());
 
@@ -131,210 +132,215 @@ void UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
             DUChainWriteLocker lock;
             topContext()->addProblem(p);
         }
-        return;
+        return Continue;
     }
-
-    QList<Declaration *> declarations;
-    bool show_error = true;
-
-    if (child.kind() == FieldAccess) {
-        // TODO: Find type of child or use generic expression parser?
-        ZigNode owner = child.nextChild();
-        if (node.kind() == Ident) {
-            DUChainReadLocker lock;
-            QualifiedIdentifier ownerPath(Identifier(owner.spellingName()));
-            DUContext* context = topContext()->findContextAt(useRange.start);
-            declarations = findSimpleVar(ownerPath, context);
-            if (!declarations.isEmpty()) {
-                DUContext* ownerContext = declarations.first()->internalContext();
-                declarations = findSimpleVar(currentPath, ownerContext, DUContext::OnlyFunctions);
-            }
-        } else {
-            show_error = false; // Might be a problem, IDK
-        }
-    } else {
-        // Look for fn in scope
-        DUChainReadLocker lock;
-        DUContext *context = topContext()->findContextAt(useRange.start);
-        declarations = findSimpleVar(currentPath, context, DUContext::OnlyFunctions);
-    }
-
-    if (declarations.isEmpty() && show_error && !functionName.startsWith("@")) {
+    else if (!BuiltinType::isBuiltinFunc(functionName)) {
+        RangeInRevision useRange = editorFindSpellingRange(node, functionName);
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined function %1", functionName));
+        p->setSeverity(IProblem::Error);
+        p->setDescription(i18n("Undefined builtin %1", functionName));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
-    } else {
-        for (Declaration *declaration : declarations) {
-            // TODO: Check if a struct or alias of struct
-            if (declaration->range() != useRange) {
-                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-                break;
-            }
-        }
+        return Continue;
     }
-
+    // TODO: use for @This() ?
+    // builtins have no decls
+    return Continue;
 }
 
-void UseBuilder::visitContainerInit(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
 {
-    QString containerName = node.spellingName();
-    RangeInRevision useRange = editorFindSpellingRange(node, containerName);
+    //// qDebug()<< "call" << functionName;
+    ZigNode child = node.nextChild();
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(child, node);
 
-    IndexedIdentifier identifier = IndexedIdentifier(Identifier(containerName));
-    currentPath.clear();
-    currentPath.push(identifier);
-    if (containerName.isEmpty()) {
-        return;
-    }
-    if (containerName == ".") {
-        return;  // TODO: Handle .
-    }
+    QString functionName = child.spellingName();
+    RangeInRevision useRange = editorFindSpellingRange(node, functionName);
 
-    QList<Declaration *> declarations;
-    {
-        DUChainReadLocker lock;
-        DUContext *context = topContext()->findContextAt(useRange.start);
-        declarations = findSimpleVar(currentPath, context, DUContext::OnlyContainerTypes);
-    }
-
-    if (declarations.isEmpty()) {
-        ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-        p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined container %1", containerName));
-        DUChainWriteLocker lock;
-        topContext()->addProblem(p);
-    } else {
-        for (Declaration *declaration : declarations) {
-            // TODO: Check if a struct or alias of struct
-            if (declaration->range() != useRange) {
-                // qDebug() << "Create use:" << node.index << " name:" << containerName << " range:" << useRange;
-                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-                break;
-            }
+    if (auto fn = v.lastType().dynamicCast<FunctionType>()) {
+        auto decl = v.lastDeclaration();
+        if (decl && decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }
+        return Continue;
     }
-
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Undefined function"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
 }
 
-void UseBuilder::visitVarAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitStructInit(ZigNode &node, ZigNode &parent)
+{
+
+    ZigNode owner = node.nextChild(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(owner, node);
+    auto useRange = editorFindSpellingRange(owner, owner.spellingName());
+    if (auto s = v.lastType().dynamicCast<StructureType>()) {
+        auto decl = v.lastDeclaration();
+        if (decl && decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        }
+        return Continue;
+    }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Undefined struct"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+}
+
+VisitResult UseBuilder::visitVarAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
+    return Continue;
 }
 
-void UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
 {
-
     QString attr = node.spellingName();
     if (attr.isEmpty()) {
-        return;
+        return Continue;
     }
-    RangeInRevision useRange = editorFindSpellingRange(node, attr);
-
-    QualifiedIdentifier identifier((Identifier(attr)));
     ZigNode owner = node.nextChild(); // access lhs
-    DUChainReadLocker lock;
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
     const auto T = v.lastType();
-    QString ident = T ? T->toString() : "unknown";
-
     if (auto s = T.dynamicCast<SliceType>()) {
         if (attr == "len" || attr == "ptr") {
-            return; // Builtins
+            return Continue; // Builtins
         }
     }
 
     auto *decl = Helper::accessAttribute(T, attr, topContext());
-    lock.unlock();
-
+    RangeInRevision useRange = editorFindSpellingRange(node, attr);
     if (!decl) {
+        DUChainWriteLocker lock;
+        QString ident = T ? T->toString() : "unknown"; // T toString needs lock
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         p->setDescription(i18n("No field %1 on %2", attr, ident));
-        DUChainWriteLocker lock;
         topContext()->addProblem(p);
     }
     else if (decl->range() != useRange) {
         // qDebug() << "Create use:" << node.index << " name:" << attr << " range:" << useRange;
         UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
     }
+    return Continue;
 }
 
-void UseBuilder::visitArrayAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitArrayAccess(ZigNode &node, ZigNode &parent)
 {
     // TODO
     Q_UNUSED(parent);
+    return Continue;
 }
 
-void UseBuilder::visitPtrAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
 {
     // TODO
     Q_UNUSED(parent);
+    ZigNode owner = node.nextChild(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(owner, node);
+    auto useRange = node.range();
+    if (auto s = v.lastType().dynamicCast<OptionalType>()) {
+        auto decl = v.lastDeclaration();
+        if (decl && decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        }
+        return Continue;
+    }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Attempt to unwrap non-optional type"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
 }
 
-void UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitDeref(ZigNode &node, ZigNode &parent)
 {
+    // TODO
     Q_UNUSED(parent);
+    ZigNode owner = node.nextChild(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(owner, node);
+    auto useRange = node.range();
+    if (auto s = v.lastType().dynamicCast<PointerType>()) {
+        auto decl = v.lastDeclaration();
+        if (decl && decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        }
+        return Continue;
+    }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Attempt to dereference non-pointer type"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+}
+
+VisitResult UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
+{
     QString name = node.spellingName();
     RangeInRevision useRange = editorFindSpellingRange(node, name);
 
-    IndexedIdentifier identifier = IndexedIdentifier(Identifier(name));
-    currentPath.clear();
-    currentPath.push(identifier);
-    if (name.isEmpty()) {
-        return;
+    if (name.isEmpty() || name == ".") {
+        return Continue;
     }
-    if (name == ".") {
-        return;  // TODO: Handle .
+    if (BuiltinType::isBuiltinVariable(name) || BuiltinType::isBuiltinType(name)) {
+        return Continue;
     }
 
-    QList<Declaration *> declarations;
-    {
-        DUChainReadLocker lock;
-        DUContext *context = topContext()->findContextAt(useRange.start);
-        declarations = context->findLocalDeclarations(identifier);
-        if (declarations.isEmpty()) {
-            QualifiedIdentifier qualifiedIdentifier((Identifier(name)));
-            declarations = findSimpleVar(qualifiedIdentifier, context, DUContext::NoSearchFlags);
+    Declaration* decl = Helper::declarationForName(
+        name,
+        useRange.start,
+        DUChainPointer<const DUContext>(currentContext())
+    );
+    if (decl) {
+        if (decl->range() != useRange) {
+            // qDebug() << "Create use:" << node.index << " name:" << name << " range:" << useRange;
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }
+        return Continue;
     }
 
-    if (declarations.isEmpty()
-        && !BuiltinType::isBuiltinVariable(name) // TODO: Check depending on usage
-        && !BuiltinType::isBuiltinType(name) // TODO: Check depending on usage
-    ) {
-        ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-        p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined variable %1", name));
-        DUChainWriteLocker lock;
-        topContext()->addProblem(p);
-    } else {
-        for (Declaration *declaration : declarations) {
-            // TODO: Check if a struct or alias of struct
-            if (declaration->range() != useRange) {
-                // qDebug() << "Create use:" << node.index << " name:" << name << " range:" << useRange;
-                UseBuilderBase::newUse(useRange, DeclarationPointer(declaration));
-                break;
-            }
-        }
+    if (parent.kind() == FieldDecl) {
+        // Enum field
+        // TODO: Validate name ?
+        return Continue;
     }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Undefined variable %1", name));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
 }
 
-void UseBuilder::visitLiteral(ZigNode &node, ZigNode &parent)
-{
-    Q_UNUSED(node);
-    Q_UNUSED(parent);
-    // TODO
-}
-
-}
+} // end namespace zig

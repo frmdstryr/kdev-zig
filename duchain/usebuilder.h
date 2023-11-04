@@ -40,14 +40,15 @@ public:
     virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
 
 private:
-    void visitCall(ZigNode &node, ZigNode &parent);
-    void visitContainerInit(ZigNode &node, ZigNode &parent);
-    void visitVarAccess(ZigNode &node, ZigNode &parent);
-    void visitFieldAccess(ZigNode &node, ZigNode &parent);
-    void visitArrayAccess(ZigNode &node, ZigNode &parent);
-    void visitPtrAccess(ZigNode &node, ZigNode &parent);
-    void visitLiteral(ZigNode &node, ZigNode &parent);
-    void visitIdent(ZigNode &node, ZigNode &parent);
+    VisitResult visitCall(ZigNode &node, ZigNode &parent);
+    VisitResult visitBuiltinCall(ZigNode &node, ZigNode &parent);
+    VisitResult visitStructInit(ZigNode &node, ZigNode &parent);
+    VisitResult visitVarAccess(ZigNode &node, ZigNode &parent);
+    VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
+    VisitResult visitArrayAccess(ZigNode &node, ZigNode &parent);
+    VisitResult visitDeref(ZigNode &node, ZigNode &parent);
+    VisitResult visitUnwrapOptional(ZigNode &node, ZigNode &parent);
+    VisitResult visitIdent(ZigNode &node, ZigNode &parent);
 
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;

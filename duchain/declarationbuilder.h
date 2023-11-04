@@ -108,6 +108,8 @@ private:
 
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(ZigNode &node, ZigNode &parent);
+
+    VisitResult visitUsingnamespace(ZigNode &node, ZigNode &parent);
 };
 
 }

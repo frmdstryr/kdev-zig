@@ -59,15 +59,6 @@ protected:
     KDevelop::DUContext *newContext(const KDevelop::RangeInRevision &range) override;
     KDevelop::TopDUContext *newTopContext(const KDevelop::RangeInRevision &range, KDevelop::ParsingEnvironmentFile *file) override;
 
-    // Find any declarations matching ident in this or any parent scope
-    // Caller must be holding the read lock
-    // TODO: Does something like this already exist?
-    QList<KDevelop::Declaration*> findSimpleVar(
-        KDevelop::QualifiedIdentifier &ident,
-        KDevelop::DUContext* context,
-        KDevelop::DUContext::SearchFlag flag = KDevelop::DUContext::SearchFlag::NoSearchFlags
-    );
-
     bool shouldSkipNode(ZigNode &node, ZigNode &parent);
 
     ParseSession *session;

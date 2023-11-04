@@ -92,6 +92,7 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     BUILD_CONTEXT_FOR(Switch);
     BUILD_CONTEXT_FOR(Defer);
     BUILD_CONTEXT_FOR(Catch);
+    BUILD_CONTEXT_FOR(Usingnamespace);
 
     BUILD_CONTEXT_FOR(Unknown);
 
@@ -200,36 +201,6 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
     }
 
     return new ZigTopDUContext(document(), range, file);
-}
-
-
-
-QList<Declaration*> ContextBuilder::findSimpleVar(
-    QualifiedIdentifier &ident, DUContext* context,
-    KDevelop::DUContext::SearchFlag flag
-)
-{
-    QList<Declaration *> declarations;
-    if (context) {
-        DUContext* parentContext = context;
-        Identifier localIdent(ident.last());
-        declarations = context->findLocalDeclarations(
-                localIdent,
-                CursorInRevision::invalid(),
-                nullptr,
-                AbstractType::Ptr(),
-                flag);
-        while (declarations.isEmpty() && parentContext) {
-            declarations = parentContext->findDeclarations(
-                ident,
-                CursorInRevision::invalid(),
-                AbstractType::Ptr(),
-                nullptr,
-                flag);
-            parentContext = parentContext->parentContext();
-        }
-    }
-    return declarations;
 }
 
 }

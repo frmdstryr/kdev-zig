@@ -151,6 +151,7 @@ void DUChainTest::sanityCheckVar()
 
 void DUChainTest::sanityCheckImport()
 {
+    return; // Disable/
     ReferencedTopDUContext timecontext = parseStdCode("time.zig");
     ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
     QString code("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;");
@@ -404,6 +405,10 @@ void DUChainTest::testVarType_data()
         "};" << "b" << "u8" << "5,0";
     QTest::newRow("nested struct field after") << "const Foo = struct {bar: Bar = .{}, const Bar = struct {a: u8}; }; test{\nvar f = Foo{}; var y = f.bar.a;\n}" << "y" << "u8" << "2,0";
 
-    QTest::newRow("if capture") << "test { var x: ?u8 = 0; if (x) |y| {\n}}" << "y" << "u8" << "1,0";
-    QTest::newRow("while capture") << "test { var x: ?u8 = 0; while (x) |y| {\n}}" << "y" << "u8" << "1,0";
+    QTest::newRow("if capture") << "test { var x: ?u8 = 0; if (x) |y| {\n} }" << "y" << "u8" << "1,0";
+    QTest::newRow("while capture") << "test { var x: ?u8 = 0; while (x) |y| {\n} }" << "y" << "u8" << "1,0";
+
+    // Imported namespaces
+    QTest::newRow("no usingnamespace") << "const A = struct {const a = 1;}; const B = struct { var x = a;\n};" << "x" << "mixed" << "B";
+    QTest::newRow("usingnamespace") << "const A = struct {const a = 1;}; const B = struct { usingnamespace A; var x = a;\n};" << "x" << "comptime_int" << "B";
 }

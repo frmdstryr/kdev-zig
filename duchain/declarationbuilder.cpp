@@ -64,6 +64,9 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
         return buildDeclaration<TestDecl>(node, parent);
+    case Usingnamespace:
+        visitUsingnamespace(node, parent);
+        // fall through
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -399,6 +402,38 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
 
         closeDeclaration();
     }
+}
+
+VisitResult DeclarationBuilder::visitUsingnamespace(ZigNode &node, ZigNode &parent)
+{
+    QString name = node.spellingName();
+    auto range = editorFindSpellingRange(node, name);
+    ZigNode child = node.nextChild();
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(child, node);
+    if (auto s = v.lastType().dynamicCast<StructureType>()) {
+        DUChainWriteLocker lock;
+        const auto isModule = s->modifiers() & ModuleModifier;
+        const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext();
+        if (auto ctx = s->internalContext(moduleContext)) {
+            currentContext()->addImportedParentContext(
+                ctx,
+                CursorInRevision::invalid()
+            );
+            return Continue;
+        }
+    }
+
+    // Type is known but not an optional type, this is a problem
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Namespace unknown or not yet resolved"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+
 }
 
 } // namespace zig

@@ -339,16 +339,17 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
+            // qCDebug(KDEV_ZIG) << "found decl for " << name;
             encounter(decl->abstractType(), DeclarationPointer(decl));
         } else {
             // Needs resolved later
-            auto delayedType = new DelayedType();
-            delayedType->setIdentifier(IndexedTypeIdentifier(name));
-            encounter(AbstractType::Ptr(delayedType));
+            //auto delayedType = new DelayedType();
+            //delayedType->setIdentifier(IndexedTypeIdentifier(name));
+            //encounter(AbstractType::Ptr(delayedType));
+            encounterUnknown();
         }
     }
-
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)

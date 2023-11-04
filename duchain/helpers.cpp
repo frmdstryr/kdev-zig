@@ -101,6 +101,28 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     return nullptr;
 }
 
+static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
+{
+    return (
+        ctx->type() == DUContext::Function
+        || ctx->type() == DUContext::Class // Also needed for Zig's nested structs
+    );
+}
+
+static bool declarationIsInDirectParentUsingnamespace(const Declaration* decl, const DUContext* ctx)
+{
+    // var/field/function
+    if (decl->context() == ctx->parentContext())
+        return true;
+    // usingnamespace
+    return true;
+    // This is redireculously slow
+    // for (const auto &imp: ctx->importedParentContexts()) {
+    //     if (decl->context() == imp.context(nullptr))
+    //         return true;
+    // }
+    //return false;
+}
 
 Declaration* Helper::declarationForName(
     const QString& name,
@@ -109,8 +131,9 @@ Declaration* Helper::declarationForName(
 {
     DUChainReadLocker lock;
     auto identifier = KDevelop::Identifier(name);
-    auto localDeclarations = context->findLocalDeclarations(identifier, location, nullptr,
-                                                            AbstractType::Ptr(), DUContext::DontResolveAliases);
+    auto localDeclarations = context->findLocalDeclarations(
+        identifier, location, nullptr,
+        AbstractType::Ptr(), DUContext::DontResolveAliases);
     if ( !localDeclarations.isEmpty() ) {
         return localDeclarations.last();
     }
@@ -124,11 +147,12 @@ Declaration* Helper::declarationForName(
             declarations = currentContext->findDeclarations(identifier, findUntil);
 
             for (Declaration* declaration: declarations) {
-                if (declaration->context()->type() != DUContext::Class ||
-                    (declaration->context() == currentContext->parentContext() && (
-                        currentContext->type() == DUContext::Function
-                        || currentContext->type() == DUContext::Class // Also needed for Zig's nested structs
-                    ))) {
+                // qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
+                if (declaration->context()->type() != DUContext::Class
+                    || (contextTypeIsFnOrClass(currentContext)
+                        // && declarationIsInDirectParentUsingnamespace(declaration, currentContext))
+                    )
+                ) {
                      // Declarations from struct decls must be referenced through `self.<foo>`, except
                      //  in their local scope (handled above) or when used as default arguments for methods of the same class.
                      // Otherwise, we're done!
