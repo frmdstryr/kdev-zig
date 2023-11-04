@@ -17,6 +17,10 @@
 namespace Zig {
 
 
+static QRegularExpression signedIntPattern("i\\d+");
+static QRegularExpression unsignedIntPattern("u\\d+");
+static QRegularExpression floatPattern("f(16|32|64|80|128)");
+
 using namespace KDevelop;
 
 BuiltinTypeData::BuiltinTypeData()
@@ -118,6 +122,50 @@ uint BuiltinType::hash() const
     return KDevHash(AbstractType::hash()) << toString();
 }
 
+bool BuiltinType::isUnsigned() const
+{
+    // TODO: Set flags instead of doing this ?
+    QString n = toString();
+    return (
+        unsignedIntPattern.match(n).hasMatch()
+        || n == "usize"
+        || n == "c_char"
+        || n == "c_uint"
+        || n == "c_ulong"
+        || n == "c_ulonglong"
+        || n == "comptime_int"
+    );
+}
+
+bool BuiltinType::isSigned() const
+{
+    // TODO: Set flags instead of doing this ?
+    QString n = toString();
+    return (
+        signedIntPattern.match(n).hasMatch()
+        || n == "isize"
+        || n == "c_int"
+        || n == "c_short"
+        || n == "c_long"
+        || n == "c_longlong"
+        || n == "comptime_int"
+    );
+}
+
+bool BuiltinType::isFloat() const
+{
+    // TODO: Set flags instead of doing this ?
+    QString n = toString();
+    return (
+        floatPattern.match(n).hasMatch()
+        || n == "comptime_float"
+        || n == "comptime_int" // automatically casted
+        || n == "c_longdouble"
+    );
+}
+
+
+
 bool BuiltinType::isBuiltinFunc(const QString& name)
 {
    return is_zig_builtin_fn_name(name.toUtf8());
@@ -126,9 +174,6 @@ bool BuiltinType::isBuiltinFunc(const QString& name)
 bool BuiltinType::isBuiltinType(const QString& name)
 {
     // TODO: Pull these from zig directly somehow
-    static QRegularExpression unsignedIntPattern("u\\d+");
-    static QRegularExpression signedIntPattern("i\\d+");
-    static QRegularExpression floatPattern("f(16|32|64|80|128)");
     return (
         name == "void"
         || name == "type"

@@ -111,7 +111,7 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
     auto *decl = createDeclaration<Kind>(node, parent, name, hasContext, range);
     VisitResult ret = buildContext<Kind>(node, parent);
-    if (hasContext) {
+    if (hasContext && Kind != Module) {
         eventuallyAssignInternalContext();
     }
     closeDeclaration();

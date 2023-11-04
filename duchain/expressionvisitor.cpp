@@ -11,6 +11,7 @@
 #include "expressionvisitor.h"
 #include "helpers.h"
 #include "zigdebug.h"
+#include "nodetraits.h"
 
 namespace Zig
 {
@@ -53,7 +54,6 @@ void ExpressionVisitor::visitChildren(ZigNode &node, ZigNode &parent)
 void ExpressionVisitor::startVisiting(ZigNode &node, ZigNode &parent)
 {
     Q_ASSERT(!node.isRoot());
-    ast_visit(node.ast, node.index, expressionVistorCallback, this);
     visitNode(node, parent);
 }
 
@@ -69,10 +69,16 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
         return visitFieldAccess(node, parent);
     case NodeTag_optional_type:
         return visitOptionalType(node, parent);
+    case NodeTag_char_literal:
+        return visitCharLiteral(node, parent);
     case NodeTag_string_literal:
         return visitStringLiteral(node, parent);
     case NodeTag_number_literal:
         return visitNumberLiteral(node, parent);
+    case NodeTag_multiline_string_literal:
+        return visitMultilineStringLiteral(node, parent);
+    case NodeTag_enum_literal:
+        return visitEnumLiteral(node, parent);
     case NodeTag_ptr_type:
     case NodeTag_ptr_type_bit_range:
         return visitPointerType(node, parent);
@@ -114,9 +120,37 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_less_than:
     case NodeTag_greater_than:
     case NodeTag_greater_or_equal:
+    case NodeTag_bool_and:
+    case NodeTag_bool_not:
         return visitBoolExpr(node, parent);
+
+    case NodeTag_mul:
+    case NodeTag_div:
+    case NodeTag_mod:
+    case NodeTag_mul_wrap:
+    case NodeTag_mul_sat:
+    case NodeTag_add:
+    case NodeTag_add_wrap:
+    case NodeTag_add_sat:
+    case NodeTag_sub:
+    case NodeTag_sub_wrap:
+    case NodeTag_sub_sat:
+    case NodeTag_shl:
+    case NodeTag_shl_sat:
+    case NodeTag_shr:
+    case NodeTag_bit_and:
+    case NodeTag_bit_xor:
+    case NodeTag_bit_or:
+        return visitMathExpr(node, parent);
+    case NodeTag_negation:
+    case NodeTag_negation_wrap:
+        return visitNegation(node, parent);
+    case NodeTag_bit_not:
+        return visitBitNot(node, parent);
     case NodeTag_try:
         return visitTry(node, parent);
+    case NodeTag_orelse:
+        return visitOrelse(node, parent);
     case NodeTag_array_type:
         return visitArrayType(node, parent);
     case NodeTag_array_access:
@@ -130,9 +164,23 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_ptr_type_aligned:
         return visitPointerTypeAligned(node, parent);
     //case NodeTag_ptr_type_sentinel:
-    default:
-        break;
+    case NodeTag_if:
+    //case NodeTag_if_simple: // not expr?
+        return visitIf(node, parent);
+    //case NodeTag_switch:
+    //case NodeTag_switch_comma:
+    //case NodeTag_switch_case:
+    //case NodeTag_switch_case_inline:
+    case NodeTag_block:
+    case NodeTag_block_semicolon:
+    case NodeTag_grouped_expression:
+    case NodeTag_await:
+
+        visitChildren(node, parent);
+        return Continue;
     }
+    // TODO: Thereset
+
     return Recurse;
 }
 
@@ -225,7 +273,26 @@ VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent
     Q_ASSERT(ptrType);
     ptrType->setBaseType(AbstractType::Ptr(sliceType));
     encounter(AbstractType::Ptr(ptrType));
-    return Recurse;
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitMultilineStringLiteral(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    //auto range = node.range();
+
+    auto sliceType = new SliceType();
+    Q_ASSERT(sliceType);
+    sliceType->setSentinel(0);
+    // sliceType->setDimension();
+    sliceType->setElementType(BuiltinType::newFromName("u8"));
+    sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
+
+    auto ptrType = new PointerType();
+    Q_ASSERT(ptrType);
+    ptrType->setBaseType(AbstractType::Ptr(sliceType));
+    encounter(AbstractType::Ptr(ptrType));
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent)
@@ -235,7 +302,26 @@ VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent
     // qCDebug(KDEV_ZIG) << "visit number lit" << name;
     encounter(BuiltinType::newFromName(
         name.contains(".") ? "comptime_float" : "comptime_int"));
-    return Recurse;
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitCharLiteral(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
+    encounter(BuiltinType::newFromName("u8"));
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitEnumLiteral(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    //QString name = node.spellingName();
+    // qCDebug(KDEV_ZIG) << "visit number lit" << name;
+    //encounter(BuiltinType::newFromName(
+    //    name.contains(".") ? "comptime_float" : "comptime_int"));
+    encounterUnknown(); // TODO: Get enum?
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
@@ -452,7 +538,7 @@ VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
         // TODO: Handle builtins?
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
@@ -492,7 +578,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
         } else {
             encounterUnknown();
         }
-        return Recurse;
+        return Continue;
     }
 
     if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
@@ -504,7 +590,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
         // qCDebug(KDEV_ZIG) << " no result ";
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
@@ -523,7 +609,7 @@ VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
     errType->setBaseType(typeVisitor.lastType());
     errType->setErrorType(errorVisitor.lastType());
     encounter(AbstractType::Ptr(errType));
-    return Recurse;
+    return Continue;
 }
 
 
@@ -532,7 +618,68 @@ VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
     Q_UNUSED(node);
     Q_UNUSED(parent);
     encounter(BuiltinType::newFromName("bool"));
-    return Recurse;
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitMathExpr(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+
+    ExpressionVisitor v1(this);
+    v1.visitNode(lhs, node);
+
+    // Check if lhs & rhs are compatable
+    if (auto a = v1.lastType().dynamicCast<BuiltinType>()) {
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor v2(this);
+        v2.visitNode(rhs, node);
+        if (auto b = v2.lastType().dynamicCast<BuiltinType>()) {
+            if ((a->isFloat() && b->isFloat())
+                || (a->isSigned() && b->isSigned())
+                || (a->isUnsigned() && b->isUnsigned())
+            ) {
+                encounter(a->isComptime() ? b : a);
+                return Continue;
+            }
+            // else error, must cast
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitNegation(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode child = node.nextChild();
+    ExpressionVisitor v(this);
+    v.visitNode(child, node);
+    if (auto a = v.lastType().dynamicCast<BuiltinType>()) {
+        if (a->isSigned() || a->isFloat()) {
+            encounter(a);
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitBitNot(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode child = node.nextChild();
+    ExpressionVisitor v(this);
+    v.visitNode(child, node);
+    if (auto a = v.lastType().dynamicCast<BuiltinType>()) {
+        if (a->isInteger()) {
+            encounter(a);
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
@@ -546,8 +693,60 @@ VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
     } else {
         encounterUnknown(); // TODO: Show error?
     }
-    return Recurse;
+    return Continue;
 }
+
+VisitResult ExpressionVisitor::visitOrelse(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ExpressionVisitor v1(this);
+    v1.visitNode(lhs, node);
+    if (auto optionalType = v1.lastType().dynamicCast<OptionalType>()) {
+        // Returns base type
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor v2(this);
+        v2.visitNode(rhs, node);
+        encounter(optionalType->baseType());
+        return Continue;
+    }
+    encounterUnknown(); // TODO: Show error?
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitIf(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    if (!node.captureName(Payload).isEmpty()) {
+        ZigNode lhs = {node.ast, data.lhs};
+        ExpressionVisitor v(this);
+        v.visitNode(lhs, node);
+        if (auto optionalType = v.lastType().dynamicCast<OptionalType>()) {
+            // Returns base type
+            // rhs is only valid for if_simple
+            // ZigNode rhs = {node.ast, data.rhs};
+            // ExpressionVisitor v2(this);
+            // v2.visitNode(rhs, node);
+            // TODO: Merge types???
+            encounter(optionalType->baseType());
+            return Continue;
+        }
+    }
+    // else if (node.tag() == NodeTag_if) {
+    //     ZigNode rhs = {node.ast, data.rhs};
+    //     ExpressionVisitor v(this);
+    //     v.visitNode(rhs, node);
+    //  // TODO: Merge types
+    //     encounter(v.lastType());
+    //     return Continue;
+    // }
+    encounterUnknown(); // TODO: Show error?
+    return Continue;
+
+}
+
 
 VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
 {
@@ -572,7 +771,7 @@ VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
     }
 
     encounter(AbstractType::Ptr(sliceType));
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
@@ -590,7 +789,7 @@ VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
     } else {
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
@@ -611,7 +810,7 @@ VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
     } else {
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitArrayTypeSentinel(ZigNode &node, ZigNode &parent)
@@ -650,7 +849,7 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(ZigNode &node, ZigNode &pa
     }
 
     encounter(AbstractType::Ptr(sliceType));
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitPointerTypeAligned(ZigNode &node, ZigNode &parent)
@@ -692,9 +891,7 @@ VisitResult ExpressionVisitor::visitPointerTypeAligned(ZigNode &node, ZigNode &p
     } else {
         encounterUnknown();
     }
-
-
-    return Recurse;
+    return Continue;
 }
 
 } // End namespce

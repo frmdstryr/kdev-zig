@@ -38,8 +38,15 @@ public:
     // Caller must NOT be holding projectPathLock for these
     static QString stdLibPath(KDevelop::IProject* project);
     static void loadPackages(KDevelop::IProject* project);
+    // Lookup package root file from package name.
+    // If name is std, returns <stdLibPath>/std.zig
     static QString packagePath(const QString &name, const QString& currentFile);
+    // Lookup the path for an @import based relative to the current file
+    // If the name is a package name, the packagePath is returned.
     static QUrl importPath(const QString& importName, const QString& currentFile);
+    // Returns the qualifier for the given path. If the file is in one of the
+    // package paths it will be relative to that. Eg std/fs.zig will return std.fs
+    static QString qualifierPath(const QString& currentFile);
 
     static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
 

@@ -52,6 +52,13 @@ public:
     QString dataType() const;
     void setDataType(QString &dataType);
 
+    bool isSigned() const;
+    bool isUnsigned() const;
+    bool isFloat() const;
+    bool isComptime() const { return toString().startsWith("comptime"); }
+    bool isInteger() const { return isSigned() || isUnsigned(); }
+    bool isNumeric() const { return isInteger() || isFloat(); }
+
     using Data = BuiltinTypeData;
 
     // Returns null if it is not a zig builtin type

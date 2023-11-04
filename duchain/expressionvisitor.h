@@ -44,14 +44,24 @@ public:
     VisitResult visitOptionalType(ZigNode &node, ZigNode &parent);
     VisitResult visitUnwrapOptional(ZigNode &node, ZigNode &parent);
     VisitResult visitStringLiteral(ZigNode &node, ZigNode &parent);
+    VisitResult visitCharLiteral(ZigNode &node, ZigNode &parent);
+    VisitResult visitMultilineStringLiteral(ZigNode &node, ZigNode &parent);
     VisitResult visitNumberLiteral(ZigNode &node, ZigNode &parent);
+    VisitResult visitEnumLiteral(ZigNode &node, ZigNode &parent);
     VisitResult visitIdentifier(ZigNode &node, ZigNode &parent);
     VisitResult visitErrorUnion(ZigNode &node, ZigNode &parent);
     VisitResult visitCall(ZigNode &node, ZigNode &parent);
     VisitResult visitBuiltinCall(ZigNode &node, ZigNode &parent);
     VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
     VisitResult visitBoolExpr(ZigNode &node, ZigNode &parent);
+    VisitResult visitMathExpr(ZigNode &node, ZigNode &parent);
+    VisitResult visitNegation(ZigNode &node, ZigNode &parent);
+    VisitResult visitBitNot(ZigNode &node, ZigNode &parent);
     VisitResult visitTry(ZigNode &node, ZigNode &parent);
+    VisitResult visitOrelse(ZigNode &node, ZigNode &parent);
+    VisitResult visitIf(ZigNode &node, ZigNode &parent);
+
+
 
     VisitResult visitPointerTypeAligned(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayType(ZigNode &node, ZigNode &parent);

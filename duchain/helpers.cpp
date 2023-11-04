@@ -321,5 +321,43 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
     return QUrl("");
 }
 
+QString Helper::qualifierPath(const QString& currentFile)
+{
+    QString f = currentFile.endsWith(".zig") ? currentFile.mid(0, currentFile.size()-3) : currentFile;
+    if (QDir::isRelativePath(f)) {
+        return "";
+    }
+    auto project = ICore::self()->projectController()->findProjectForUrl(
+            QUrl::fromLocalFile(currentFile));
+
+    QMutexLocker lock(&Helper::projectPathLock);
+    if (!projectPackagesLoaded) {
+        lock.unlock();
+        loadPackages(project);
+        lock.relock();
+    }
+
+    for (const auto& pkgName: projectPackages.keys()) {
+        const auto& pkgPath = projectPackages[pkgName];
+        if (currentFile == pkgPath) {
+            return pkgName;
+        }
+        QFileInfo pkg(pkgPath);
+        QDir pkgRoot(pkg.absolutePath());
+        QString relPath = pkgRoot.relativeFilePath(f);
+        if (relPath.isEmpty() || relPath == '.') {
+            return pkgName + '.';
+        }
+        if (!relPath.startsWith("..")) {
+            return pkgName + '.' + relPath.replace(QDir::separator(), '.');
+        }
+    }
+    if (project) {
+        QDir projectRoot(project->path().toLocalFile());
+        QString relPath = projectRoot.relativeFilePath(f);
+        return relPath.replace(QDir::separator(), '.');
+    }
+    return "";
+}
 
 } // namespace zig

@@ -23,6 +23,7 @@
 #include <language/duchain/declaration.h>
 
 #include "zigducontext.h"
+#include "helpers.h"
 #include "nodetraits.h"
 
 namespace Zig
@@ -177,7 +178,12 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, Zig
 
 KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
-    // TODO: Walk parent contexts?
+    if (node && !node->isEmpty()) {
+        QString qualifier = Helper::qualifierPath(session->document().str());
+        QString ident = qualifier.isEmpty() ? *node : qualifier + *node;
+        // qDebug() << ident;
+        return QualifiedIdentifier(ident);
+    }
     return QualifiedIdentifier(*node);
 }
 
