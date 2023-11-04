@@ -66,6 +66,7 @@ public:
     VisitResult visitPointerTypeAligned(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayType(ZigNode &node, ZigNode &parent);
     VisitResult visitSlice(ZigNode &node, ZigNode &parent);
+    VisitResult visitForRange(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayAccess(ZigNode &node, ZigNode &parent);
     VisitResult visitArrayTypeSentinel(ZigNode &node, ZigNode &parent);
 

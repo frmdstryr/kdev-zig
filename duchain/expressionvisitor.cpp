@@ -155,6 +155,8 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
         return visitArrayType(node, parent);
     case NodeTag_array_access:
         return visitArrayAccess(node, parent);
+    case NodeTag_for_range:
+        return visitForRange(node, parent);
     case NodeTag_slice:
     case NodeTag_slice_open:
     case NodeTag_slice_sentinel:
@@ -167,15 +169,14 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     case NodeTag_if:
     //case NodeTag_if_simple: // not expr?
         return visitIf(node, parent);
-    //case NodeTag_switch:
-    //case NodeTag_switch_comma:
-    //case NodeTag_switch_case:
-    //case NodeTag_switch_case_inline:
+    case NodeTag_switch:
+    case NodeTag_switch_comma:
+    case NodeTag_switch_case:
+    case NodeTag_switch_case_inline:
     case NodeTag_block:
     case NodeTag_block_semicolon:
     case NodeTag_grouped_expression:
     case NodeTag_await:
-
         visitChildren(node, parent);
         return Continue;
     }
@@ -718,11 +719,11 @@ VisitResult ExpressionVisitor::visitOrelse(ZigNode &node, ZigNode &parent)
 VisitResult ExpressionVisitor::visitIf(ZigNode &node, ZigNode &parent)
 {
     Q_UNUSED(parent);
-    NodeData data = node.data();
-    if (!node.captureName(Payload).isEmpty()) {
-        ZigNode lhs = {node.ast, data.lhs};
+    IfData data = ast_if_data(node.ast, node.index);
+    if (data.payload_token != 0) {
+        ZigNode cond = {node.ast, data.cond_expr};
         ExpressionVisitor v(this);
-        v.visitNode(lhs, node);
+        v.visitNode(cond, node);
         if (auto optionalType = v.lastType().dynamicCast<OptionalType>()) {
             // Returns base type
             // rhs is only valid for if_simple
@@ -734,14 +735,14 @@ VisitResult ExpressionVisitor::visitIf(ZigNode &node, ZigNode &parent)
             return Continue;
         }
     }
-    // else if (node.tag() == NodeTag_if) {
-    //     ZigNode rhs = {node.ast, data.rhs};
-    //     ExpressionVisitor v(this);
-    //     v.visitNode(rhs, node);
-    //  // TODO: Merge types
-    //     encounter(v.lastType());
-    //     return Continue;
-    // }
+    else {
+        ZigNode then = {node.ast, data.then_expr};
+        ExpressionVisitor v1(this);
+        v1.visitNode(then, node);
+        encounter(v1.lastType());
+        // TODO: Check if else type is compatible
+        return Continue;
+    }
     encounterUnknown(); // TODO: Show error?
     return Continue;
 
@@ -789,6 +790,17 @@ VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
     } else {
         encounterUnknown();
     }
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitForRange(ZigNode &node, ZigNode &parent)
+{
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
+    auto newSlice = new SliceType();
+    Q_ASSERT(newSlice);
+    newSlice->setElementType(BuiltinType::newFromName("usize"));
+    encounter(AbstractType::Ptr(newSlice)); // New slice
     return Continue;
 }
 

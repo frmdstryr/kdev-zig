@@ -32,6 +32,7 @@
 #include "helpers.h"
 #include "zigdebug.h"
 #include "types/optionaltype.h"
+#include "types/slicetype.h"
 
 namespace Zig
 {
@@ -370,6 +371,31 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
                 topContext()->addProblem(p);
             }
         }
+        else if (Kind == For) {
+            if (node.tag() == NodeTag_for_simple) {
+                ZigNode sliceType = node.nextChild();
+                ExpressionVisitor v(session, currentContext());
+                v.startVisiting(sliceType, node);
+                if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+                    DUChainWriteLocker lock;
+                    decl->setAbstractType(slice->elementType());
+                } else if (v.lastType() != v.unknownType()) {
+                    // Type is known but not an optional type, this is a problem
+                    ProblemPointer p = ProblemPointer(new Problem());
+                    p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+                    p->setSource(IProblem::SemanticAnalysis);
+                    p->setSeverity(IProblem::Hint);
+                    p->setDescription(i18n("Attempt to loop non-array type"));
+                    DUChainWriteLocker lock;
+                    topContext()->addProblem(p);
+                }
+            } else {
+                // TODO: Multiple capture for loop
+
+            }
+
+        }
+
 
         closeDeclaration();
     }

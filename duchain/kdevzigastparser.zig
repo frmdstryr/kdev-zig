@@ -824,6 +824,15 @@ export fn ast_node_data(ptr: ?*Ast, node: Index) NodeData {
     return NodeData{};
 }
 
+export fn ast_extra_data(ptr: ?*Ast, index: Index) Index {
+    if (ptr) |ast| {
+        if (index < ast.extra_data.len) {
+            return ast.extra_data[index];
+        }
+    }
+    return 0;
+}
+
 const ArrayTypeSentinel = extern struct {
     sentinel: Index = 0,
     elem_type: Index = 0,
@@ -845,6 +854,32 @@ export fn ast_array_type_sentinel(ptr: ?*Ast, node: Index) ArrayTypeSentinel {
     }
     return ArrayTypeSentinel{};
 }
+
+const IfData = extern struct {
+    payload_token: Index = 0,
+    error_token: Index = 0,
+    cond_expr: Index = 0,
+    then_expr: Index = 0,
+    else_expr: Index = 0,
+};
+
+export fn ast_if_data(ptr: ?*Ast, node: Index) IfData {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullIf(node)) |data| {
+                return IfData{
+                    .payload_token = data.payload_token orelse 0,
+                    .error_token = data.error_token orelse 0,
+                    .cond_expr = data.ast.cond_expr,
+                    .then_expr = data.ast.then_expr,
+                    .else_expr = data.ast.else_expr,
+                };
+            }
+        }
+    }
+    return IfData{};
+}
+
 
 
 fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
