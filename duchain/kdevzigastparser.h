@@ -592,43 +592,43 @@ struct IfData
 };
 
 ZAst *parse_ast(const char *name, const char *source);
-uint32_t ast_error_count(ZAst *tree);
+uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
 
-ZError *ast_error_at(ZAst* tree, uint32_t index);
+ZError *ast_error_at(const ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
-NodeKind ast_node_kind(ZAst *tree, NodeIndex node);
-NodeTag ast_node_tag(ZAst* tree, NodeIndex node);
-NodeData ast_node_data(ZAst *tree, NodeIndex node);
-uint32_t ast_extra_data(ZAst *tree, ExtraDataIndex index);
-ArrayTypeSentinel ast_array_type_sentinel(ZAst *tree, NodeIndex node);
-IfData ast_if_data(ZAst *tree, NodeIndex node);
-NodeIndex ast_visit_one_child(ZAst *tree, NodeIndex node);
-NodeIndex ast_var_type(ZAst *tree, NodeIndex node);
-NodeIndex ast_var_value(ZAst *tree, NodeIndex node);
-NodeIndex ast_fn_return_type(ZAst *tree, NodeIndex node);
-bool ast_fn_returns_inferred_error(ZAst *tree, NodeIndex node);
-uint32_t ast_fn_param_count(ZAst *tree, NodeIndex node);
-NodeIndex ast_fn_param_at(ZAst *tree, NodeIndex node, uint32_t i);
+NodeKind ast_node_kind(const ZAst *tree, NodeIndex node);
+NodeTag ast_node_tag(const ZAst* tree, NodeIndex node);
+NodeData ast_node_data(const ZAst *tree, NodeIndex node);
+uint32_t ast_extra_data(const ZAst *tree, ExtraDataIndex index);
+ArrayTypeSentinel ast_array_type_sentinel(const ZAst *tree, NodeIndex node);
+IfData ast_if_data(const ZAst *tree, NodeIndex node);
+NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
+NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
+NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);
+NodeIndex ast_fn_return_type(const ZAst *tree, NodeIndex node);
+bool ast_fn_returns_inferred_error(const ZAst *tree, NodeIndex node);
+uint32_t ast_fn_param_count(const ZAst *tree, NodeIndex node);
+NodeIndex ast_fn_param_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
 
-TokenIndex ast_node_name_token(ZAst *tree, NodeIndex node);
-TokenIndex ast_node_main_token(ZAst *tree, NodeIndex node);
-TokenIndex ast_node_capture_token(ZAst *tree, NodeIndex node, CaptureType capture);
-TokenIndex ast_fn_param_token(ZAst *tree, NodeIndex node, uint32_t i);
+TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
+TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);
+TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType capture);
+TokenIndex ast_fn_param_token(const ZAst *tree, NodeIndex node, uint32_t i);
 
 
 // NOTE: The caller must free with destroy_string
-const char *ast_token_slice(ZAst *tree, TokenIndex token);
+const char *ast_token_slice(const ZAst *tree, TokenIndex token);
 void destroy_string(const char *str);
 
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
-SourceRange ast_token_range(ZAst *tree, TokenIndex token);
-SourceRange ast_node_range(ZAst *tree, NodeIndex node);
+SourceRange ast_token_range(const ZAst *tree, TokenIndex token);
+SourceRange ast_node_range(const ZAst *tree, NodeIndex node);
 
 
-void ast_visit(ZAst *tree, NodeIndex node, VisitorCallbackFn callback, void *data);
+void ast_visit(const ZAst *tree, NodeIndex node, VisitorCallbackFn callback, void *data);
 
 bool is_zig_builtin_fn_name(const char *name);
 

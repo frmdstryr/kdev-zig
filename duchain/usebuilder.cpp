@@ -43,7 +43,7 @@ UseBuilder::UseBuilder(const KDevelop::IndexedString &document)
 {
 }
 
-VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeTag tag = node.tag();
     // qCDebug(KDEV_ZIG) << "UseBuilder::visitNode" << node.index << "tag" << tag;
@@ -80,6 +80,9 @@ VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
         case NodeTag_unwrap_optional:
             visitUnwrapOptional(node, parent);
             break;
+        case NodeTag_array_access:
+            visitArrayAccess(node, parent);
+            break;
         // case VarAccess:
         //     visitVarAccess(node, parent);
         //     break;
@@ -93,7 +96,7 @@ VisitResult UseBuilder::visitNode(ZigNode &node, ZigNode &parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
-VisitResult UseBuilder::visitBuiltinCall(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitBuiltinCall(const ZigNode &node, const ZigNode &parent)
 {
     QString functionName = node.spellingName();
     if (functionName == "@import") {
@@ -150,8 +153,9 @@ VisitResult UseBuilder::visitBuiltinCall(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     //// qDebug()<< "call" << functionName;
     ZigNode child = node.nextChild();
     ExpressionVisitor v(session, currentContext());
@@ -177,9 +181,9 @@ VisitResult UseBuilder::visitCall(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitStructInit(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitStructInit(const ZigNode &node, const ZigNode &parent)
 {
-
+    Q_UNUSED(parent);
     ZigNode owner = node.nextChild(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
@@ -202,14 +206,15 @@ VisitResult UseBuilder::visitStructInit(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitVarAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitVarAccess(const ZigNode &node, const ZigNode &parent)
 {
     // TODO
     return Continue;
 }
 
-VisitResult UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     QString attr = node.spellingName();
     if (attr.isEmpty()) {
         return Continue;
@@ -243,14 +248,49 @@ VisitResult UseBuilder::visitFieldAccess(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitArrayAccess(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &parent)
 {
     // TODO
     Q_UNUSED(parent);
+    NodeData data = node.data(); // access lhs
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor v1(session, currentContext());
+    v1.startVisiting(lhs, node);
+    ExpressionVisitor v2(session, currentContext());
+    v2.startVisiting(rhs, node);
+
+    if (auto slice = v1.lastType().dynamicCast<SliceType>()) {
+        if (auto index = v2.lastType().dynamicCast<BuiltinType>()) {
+            if (index->isInteger()) {
+                auto decl = v1.lastDeclaration();
+                auto useRange = rhs.range();
+                if (decl && decl->range() != useRange) {
+                    UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+                }
+                return Continue;
+            }
+        }
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, rhs.range().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Array index is not an integer type"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+    } else {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Attempt to index non-array type"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+    }
     return Continue;
 }
 
-VisitResult UseBuilder::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitUnwrapOptional(const ZigNode &node, const ZigNode &parent)
 {
     // TODO
     Q_UNUSED(parent);
@@ -276,7 +316,7 @@ VisitResult UseBuilder::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitDeref(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
 {
     // TODO
     Q_UNUSED(parent);
@@ -302,7 +342,7 @@ VisitResult UseBuilder::visitDeref(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult UseBuilder::visitIdent(ZigNode &node, ZigNode &parent)
+VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
 {
     QString name = node.spellingName();
     RangeInRevision useRange = editorFindSpellingRange(node, name);

@@ -21,58 +21,58 @@ namespace Zig
 {
 
 
-NodeKind ZigNode::kind()
+NodeKind ZigNode::kind() const
 {
     return ast_node_kind(ast, index);
 }
 
-NodeTag ZigNode::tag()
+NodeTag ZigNode::tag() const
 {
     return ast_node_tag(ast, index);
 }
 
-NodeData ZigNode::data()
+NodeData ZigNode::data() const
 {
     return ast_node_data(ast, index);
 }
 
 
-ZigNode ZigNode::nextChild()
+ZigNode ZigNode::nextChild() const
 {
     return ZigNode{ast, ast_visit_one_child(ast, index)};
 }
 
-ZigNode ZigNode::varType()
+ZigNode ZigNode::varType() const
 {
     return ZigNode{ast, ast_var_type(ast, index)};
 }
 
-ZigNode ZigNode::varValue()
+ZigNode ZigNode::varValue() const
 {
     return ZigNode{ast, ast_var_value(ast, index)};
 }
 
-ZigNode ZigNode::returnType()
+ZigNode ZigNode::returnType() const
 {
     return ZigNode{ast, ast_fn_return_type(ast, index)};
 }
 
-bool ZigNode::returnsInferredError()
+bool ZigNode::returnsInferredError() const
 {
     return ast_fn_returns_inferred_error(ast, index);
 }
 
-uint32_t ZigNode::paramCount()
+uint32_t ZigNode::paramCount() const
 {
     return ast_fn_param_count(ast, index);
 }
 
-ZigNode ZigNode::paramType(uint32_t i)
+ZigNode ZigNode::paramType(uint32_t i) const
 {
     return ZigNode{ast, ast_fn_param_at(ast, index, i)};
 }
 
-QString ZigNode::paramName(uint32_t i)
+QString ZigNode::paramName(uint32_t i) const
 {
     TokenIndex tok = ast_fn_param_token(ast, index, i);
     if (tok) {
@@ -82,19 +82,19 @@ QString ZigNode::paramName(uint32_t i)
     return "";
 }
 
-KDevelop::RangeInRevision ZigNode::paramRange(uint32_t i)
+KDevelop::RangeInRevision ZigNode::paramRange(uint32_t i) const
 {
     TokenIndex tok = ast_fn_param_token(ast, index, i);
     return tokenRange(tok);
 }
 
-QString ZigNode::tokenSlice(TokenIndex i)
+QString ZigNode::tokenSlice(TokenIndex i) const
 {
     ZigString name = ZigString(ast_token_slice(ast, i));
     return QString::fromUtf8(*name);
 }
 
-KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
+KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i) const
 {
     SourceRange range = ast_token_range(ast, i);
     KTextEditor::Range r = range.isEmpty() ?
@@ -107,7 +107,7 @@ KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i)
     return KDevelop::RangeInRevision::castFromSimpleRange(r);
 }
 
-KDevelop::RangeInRevision ZigNode::range()
+KDevelop::RangeInRevision ZigNode::range() const
 {
     SourceRange range = ast_node_range(ast, index);
     KTextEditor::Range r = range.isEmpty() ?
@@ -120,12 +120,12 @@ KDevelop::RangeInRevision ZigNode::range()
     return KDevelop::RangeInRevision::castFromSimpleRange(r);
 }
 
-SourceRange ZigNode::extent()
+SourceRange ZigNode::extent() const
 {
     return ast_node_range(ast, index);
 }
 
-QString ZigNode::captureName(CaptureType capture)
+QString ZigNode::captureName(CaptureType capture) const
 {
     TokenIndex tok = ast_node_capture_token(ast, index, capture);
     if (tok) {
@@ -135,14 +135,14 @@ QString ZigNode::captureName(CaptureType capture)
     return "";
 }
 
-KDevelop::RangeInRevision ZigNode::captureRange(CaptureType capture)
+KDevelop::RangeInRevision ZigNode::captureRange(CaptureType capture) const
 {
     TokenIndex tok = ast_node_capture_token(ast, index, capture);
     return tokenRange(tok);
 }
 
 
-QString ZigNode::spellingName()
+QString ZigNode::spellingName() const
 {
     TokenIndex tok = ast_node_name_token(ast, index);
     if (tok) {
@@ -158,7 +158,7 @@ QString ZigNode::spellingName()
     return "";
 }
 
-QString ZigNode::mainToken()
+QString ZigNode::mainToken() const
 {
     TokenIndex tok = ast_node_main_token(ast, index);
     if (tok) {
@@ -169,7 +169,7 @@ QString ZigNode::mainToken()
 }
 
 
-QString ZigNode::containerName()
+QString ZigNode::containerName() const
 {
     if (kind() == ContainerDecl) {
         return QString("%1_anon_%2").arg(mainToken()).arg(index);

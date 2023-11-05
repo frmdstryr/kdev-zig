@@ -37,18 +37,18 @@ public:
     UseBuilder(const KDevelop::IndexedString &document);
     ~UseBuilder() override = default;
 
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
+    virtual VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
 
 private:
-    VisitResult visitCall(ZigNode &node, ZigNode &parent);
-    VisitResult visitBuiltinCall(ZigNode &node, ZigNode &parent);
-    VisitResult visitStructInit(ZigNode &node, ZigNode &parent);
-    VisitResult visitVarAccess(ZigNode &node, ZigNode &parent);
-    VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
-    VisitResult visitArrayAccess(ZigNode &node, ZigNode &parent);
-    VisitResult visitDeref(ZigNode &node, ZigNode &parent);
-    VisitResult visitUnwrapOptional(ZigNode &node, ZigNode &parent);
-    VisitResult visitIdent(ZigNode &node, ZigNode &parent);
+    VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitVarAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitUnwrapOptional(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitIdent(const ZigNode &node, const ZigNode &parent);
 
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;

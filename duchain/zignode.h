@@ -52,33 +52,33 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     ZAst* ast;
     uint32_t index;
 
-    NodeKind kind();
-    NodeTag tag();
-    NodeData data();
-    ZigNode nextChild();
-    SourceRange extent();
-    QString spellingName();
-    QString mainToken();
-    QString containerName();
-    QString tokenSlice(TokenIndex i);
+    NodeKind kind() const;
+    NodeTag tag() const;
+    NodeData data() const;
+    ZigNode nextChild() const;
+    SourceRange extent() const;
+    QString spellingName() const;
+    QString mainToken() const;
+    QString containerName() const;
+    QString tokenSlice(TokenIndex i) const;
 
     // Capture name in case of if/while/for etc
-    QString captureName(CaptureType capture);
-    KDevelop::RangeInRevision captureRange(CaptureType capture);
+    QString captureName(CaptureType capture) const;
+    KDevelop::RangeInRevision captureRange(CaptureType capture) const;
 
     // Get type node if kind is VarDecl or return root node
-    ZigNode varType();
-    ZigNode varValue();
+    ZigNode varType() const;
+    ZigNode varValue() const;
 
     // Get return node if kind is FuncDecl or return root node
-    ZigNode returnType();
-    bool returnsInferredError();
-    uint32_t paramCount();
-    ZigNode paramType(uint32_t i);
-    QString paramName(uint32_t i);
-    KDevelop::RangeInRevision paramRange(TokenIndex i);
-    KDevelop::RangeInRevision tokenRange(TokenIndex i);
-    KDevelop::RangeInRevision range();
+    ZigNode returnType() const;
+    bool returnsInferredError() const;
+    uint32_t paramCount() const;
+    ZigNode paramType(uint32_t i) const;
+    QString paramName(uint32_t i) const;
+    KDevelop::RangeInRevision paramRange(TokenIndex i) const;
+    KDevelop::RangeInRevision tokenRange(TokenIndex i) const;
+    KDevelop::RangeInRevision range() const;
 
     inline bool isRoot() const { return index == 0; }
 };

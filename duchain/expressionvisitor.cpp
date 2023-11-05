@@ -45,19 +45,19 @@ ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::
 }
 
 
-void ExpressionVisitor::visitChildren(ZigNode &node, ZigNode &parent)
+void ExpressionVisitor::visitChildren(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ast_visit(node.ast, node.index, expressionVistorCallback, this);
 }
 
-void ExpressionVisitor::startVisiting(ZigNode &node, ZigNode &parent)
+void ExpressionVisitor::startVisiting(const ZigNode &node, const ZigNode &parent)
 {
     Q_ASSERT(!node.isRoot());
     visitNode(node, parent);
 }
 
-VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeTag tag = node.tag();
     // qCDebug(KDEV_ZIG) << "ExpressionVisitor::visitNode" << node.index << "tag" << tag;
@@ -185,7 +185,7 @@ VisitResult ExpressionVisitor::visitNode(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::visitPointerType(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // qCDebug(KDEV_ZIG) << "visit pointer";
@@ -199,7 +199,7 @@ VisitResult ExpressionVisitor::visitPointerType(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::visitAddressOf(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitAddressOf(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // qCDebug(KDEV_ZIG) << "visit address of";
@@ -213,7 +213,7 @@ VisitResult ExpressionVisitor::visitAddressOf(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::visitDeref(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitDeref(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // qCDebug(KDEV_ZIG) << "visit deref";
@@ -229,7 +229,7 @@ VisitResult ExpressionVisitor::visitDeref(ZigNode &node, ZigNode &parent)
 }
 
 
-VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitOptionalType(const ZigNode &node, const ZigNode &parent)
 {
     // qCDebug(KDEV_ZIG) << "visit optional";
     Q_UNUSED(parent);
@@ -242,7 +242,7 @@ VisitResult ExpressionVisitor::visitOptionalType(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::visitUnwrapOptional(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // qCDebug(KDEV_ZIG) << "visit unwrap optional";
@@ -258,7 +258,7 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(ZigNode &node, ZigNode &paren
 
 }
 
-VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString value = node.mainToken();
@@ -277,7 +277,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(ZigNode &node, ZigNode &parent
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitMultilineStringLiteral(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     //auto range = node.range();
@@ -296,7 +296,7 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(ZigNode &node, ZigNod
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitNumberLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString name = node.spellingName();
@@ -306,7 +306,7 @@ VisitResult ExpressionVisitor::visitNumberLiteral(ZigNode &node, ZigNode &parent
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitCharLiteral(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitCharLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
@@ -314,7 +314,7 @@ VisitResult ExpressionVisitor::visitCharLiteral(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitEnumLiteral(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitEnumLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     //QString name = node.spellingName();
@@ -325,7 +325,7 @@ VisitResult ExpressionVisitor::visitEnumLiteral(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString name = node.spellingName();
@@ -352,7 +352,7 @@ VisitResult ExpressionVisitor::visitIdentifier(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitStructInit(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
@@ -367,7 +367,7 @@ VisitResult ExpressionVisitor::visitStructInit(ZigNode &node, ZigNode &parent)
 }
 
 
-VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitContainerDecl(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     NodeKind kind = parent.kind();
@@ -389,16 +389,21 @@ VisitResult ExpressionVisitor::visitContainerDecl(ZigNode &node, ZigNode &parent
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString name = node.mainToken();
     if (name == "@This") {
         return callBuiltinThis(node);
-    } else if (name == "@import") {
+    }
+    else if (name == "@import") {
        return callBuiltinImport(node);
+    }
+    else if (name == "@fieldParentPtr") {
+        return callBuiltinFieldParentPtr(node);
+    }
     // todo @Type
-    } else if (
+    else if (
         // These return the type of the first argument
         name == "@as"
         || name == "@sqrt"
@@ -472,7 +477,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::callBuiltinThis(ZigNode &node)
+VisitResult ExpressionVisitor::callBuiltinThis(const ZigNode &node)
 {
     // TODO: Report problem if arguments ?
     auto range = node.range();
@@ -487,9 +492,9 @@ VisitResult ExpressionVisitor::callBuiltinThis(ZigNode &node)
     return Recurse;
 }
 
-VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
+VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
 {
-    // TODO: Report problem if invalid argument or file does not exist
+    // TODO: Report problem if invalid argument
     ZigNode strNode = node.nextChild();
     if (strNode.tag() != NodeTag_string_literal) {
         encounterUnknown();
@@ -523,7 +528,20 @@ VisitResult ExpressionVisitor::callBuiltinImport(ZigNode &node)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::callBuiltinFieldParentPtr(const ZigNode &node)
+{
+    ZigNode typeNode = node.nextChild();
+    // TODO: This assumes correct arguments
+    ExpressionVisitor v(this);
+    v.startVisiting(typeNode, node);
+    auto ptr = new PointerType();
+    Q_ASSERT(ptr);
+    ptr->setBaseType(v.lastType());
+    encounter(AbstractType::Ptr(ptr));
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // QString functionName = node.spellingName();
@@ -543,7 +561,7 @@ VisitResult ExpressionVisitor::visitCall(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
@@ -595,7 +613,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     // qCDebug(KDEV_ZIG) << "visit pointer";
@@ -615,7 +633,7 @@ VisitResult ExpressionVisitor::visitErrorUnion(ZigNode &node, ZigNode &parent)
 }
 
 
-VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitBoolExpr(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
@@ -623,7 +641,7 @@ VisitResult ExpressionVisitor::visitBoolExpr(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitMathExpr(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitMathExpr(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -652,7 +670,7 @@ VisitResult ExpressionVisitor::visitMathExpr(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitNegation(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitNegation(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ZigNode child = node.nextChild();
@@ -668,7 +686,7 @@ VisitResult ExpressionVisitor::visitNegation(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitBitNot(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitBitNot(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ZigNode child = node.nextChild();
@@ -684,7 +702,7 @@ VisitResult ExpressionVisitor::visitBitNot(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitTry(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
@@ -698,7 +716,7 @@ VisitResult ExpressionVisitor::visitTry(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitOrelse(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitOrelse(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -717,7 +735,7 @@ VisitResult ExpressionVisitor::visitOrelse(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitIf(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     IfData data = ast_if_data(node.ast, node.index);
@@ -750,7 +768,7 @@ VisitResult ExpressionVisitor::visitIf(ZigNode &node, ZigNode &parent)
 }
 
 
-VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitArrayType(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -776,7 +794,7 @@ VisitResult ExpressionVisitor::visitArrayType(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -794,7 +812,7 @@ VisitResult ExpressionVisitor::visitArrayAccess(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitForRange(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitForRange(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
@@ -805,7 +823,7 @@ VisitResult ExpressionVisitor::visitForRange(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitSlice(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -826,7 +844,7 @@ VisitResult ExpressionVisitor::visitSlice(ZigNode &node, ZigNode &parent)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitArrayTypeSentinel(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitArrayTypeSentinel(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();
@@ -865,7 +883,7 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(ZigNode &node, ZigNode &pa
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitPointerTypeAligned(ZigNode &node, ZigNode &parent)
+VisitResult ExpressionVisitor::visitPointerTypeAligned(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     NodeData data = node.data();

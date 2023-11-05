@@ -363,9 +363,11 @@ void DUChainTest::testVarType_data()
     QTest::newRow("if expr") << "var x = if (true) 1 else 2;" << "x" << "comptime_int" << "";
     QTest::newRow("if expr 2") << "var x: ?u8 = 0; var y = if (x) |z| z else 2;" << "y" << "u8" << "";
     QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
+    QTest::newRow("var fixed array type") << "const A = struct {}; var x: [2]A = undefined;" << "x" << "[2]A" << "";
     QTest::newRow("array access") << "var x: [2]u8 = undefined; var y = x[0];" << "y" << "u8" << "";
     QTest::newRow("array len") << "var x: [2]u8 = undefined; var y = x.len;" << "y" << "usize" << "";
     QTest::newRow("array slice") << "var x: [2]u8 = undefined; var y = x[0..];" << "y" << "[]u8" << "";
+    QTest::newRow("array ptr struct fn") << "const A = struct { pub fn foo() bool{} }; var x: [2]*A = undefined; var y = x[0].foo();" << "y" << "bool" << "";
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
     QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
     QTest::newRow("ptr type aligned ptr") << "var x: *align(4)u8 = undefined;" << "x" << "*u8" << "";
@@ -378,8 +380,11 @@ void DUChainTest::testVarType_data()
     QTest::newRow("@sizeOf()") << "const Foo = struct { a: u8, }; test {var x = @sizeOf(Foo);\n}" << "x" << "comptime_int" << "1,0";
     QTest::newRow("@as()") << "test{var x = @as(u8, 1);\n}" << "x" << "u8" << "1,0";
     QTest::newRow("@min()") << "test{var x: u32 = 1; var y = @min(x, 1);\n}" << "x" << "u32" << "1,0";
-    // TODO: constness
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
+    QTest::newRow("@fieldParentPtr()") <<
+        "const Point = struct {x: i32=0, y: i32=0};\n"
+        "test{var point = Point{}; const p = @fieldParentPtr(Point, \"x\", &point.x);\n}"
+        << "p" << "*Point" << "2,0";
 
     // TODO: Order of decls matters but should not...
     QTest::newRow("nested struct") << "const Foo = struct {bar: Bar = .{}, const Bar = struct {a: u8};}; test{\nvar f = Foo.Bar{};\n}" << "f" << "Foo::Bar" << "2,0";

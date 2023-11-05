@@ -39,7 +39,7 @@ namespace Zig
 
 using namespace KDevelop;
 
-VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
+VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeKind kind = node.kind();
     // qDebug() << "DeclarationBuilder::visitNode" << node.index << "kind" << kind;
@@ -73,7 +73,7 @@ VisitResult DeclarationBuilder::visitNode(ZigNode &node, ZigNode &parent)
 }
 
 // This is invoked within the nodes context
-void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
+void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &parent)
 {
     // qDebug() << "DeclarationBuilder::visitChildren" << node.index;
     NodeKind kind = node.kind();
@@ -103,7 +103,7 @@ void DeclarationBuilder::visitChildren(ZigNode &node, ZigNode &parent)
 }
 
 template<NodeKind Kind>
-VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
+VisitResult DeclarationBuilder::buildDeclaration(const ZigNode &node, const ZigNode &parent)
 {
     if (shouldSkipNode(node, parent)) {
         return Recurse; // Skip this case
@@ -129,14 +129,15 @@ VisitResult DeclarationBuilder::buildDeclaration(ZigNode &node, ZigNode &parent)
 }
 
 template <NodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &parent, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
+Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const ZigNode &parent, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
 {
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
         // FIXME: Relative module name?
-        QStringList parts = session->document().str().split("/");
-        identifier = Identifier("@import " + parts.last().replace(".zig", ""));
+        //QStringList parts = session->document().str().split("/");
+        //identifier = Identifier("@import " + parts.last().replace(".zig", ""));
+        identifier = Identifier(session->document().str());
     } else if (Kind == TestDecl) {
         if (name.isEmpty()) {
             // include space so it cannot be referenced as a variable
@@ -173,7 +174,7 @@ Declaration *DeclarationBuilder::createDeclaration(ZigNode &node, ZigNode &paren
 }
 
 template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)>>
-typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
+typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
@@ -181,7 +182,7 @@ typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(ZigNode &node, Z
 }
 
 template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl>>
-StructureType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
+StructureType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent)
@@ -194,7 +195,7 @@ StructureType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent
 }
 
 template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
-FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
+FunctionType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
@@ -202,7 +203,7 @@ FunctionType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
 }
 
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
-AbstractType::Ptr DeclarationBuilder::createType(ZigNode &node, ZigNode &parent)
+AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     NodeTag parentTag = parent.tag();
     if (
@@ -299,7 +300,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     Q_UNUSED(decl);
 }
 
-void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
+void DeclarationBuilder::updateFunctionDecl(const ZigNode &node)
 {
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
@@ -348,7 +349,7 @@ void DeclarationBuilder::updateFunctionDecl(ZigNode &node)
 }
 
 template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)>>
-void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
+void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &parent)
 {
     QString captureName = node.captureName(CaptureType::Payload);
     if (!captureName.isEmpty()) {
@@ -404,7 +405,7 @@ void DeclarationBuilder::maybeBuildCapture(ZigNode &node, ZigNode &parent)
     }
 }
 
-VisitResult DeclarationBuilder::visitUsingnamespace(ZigNode &node, ZigNode &parent)
+VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
 {
     QString name = node.spellingName();
     auto range = editorFindSpellingRange(node, name);

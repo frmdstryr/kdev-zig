@@ -29,7 +29,7 @@
 namespace Zig
 {
 
-using ContextBuilderBase = KDevelop::AbstractContextBuilder<ZigNode, QString>;
+using ContextBuilderBase = KDevelop::AbstractContextBuilder<const ZigNode, QString>;
 
 class KDEVZIGDUCHAIN_EXPORT ContextBuilder : public ContextBuilderBase
 {
@@ -39,27 +39,27 @@ public:
 
     void setParseSession(ParseSession *session);
 
-    virtual VisitResult visitNode(ZigNode &node, ZigNode &parent);
-    virtual void visitChildren(ZigNode &node, ZigNode &parent);
+    virtual VisitResult visitNode(const ZigNode &node, const ZigNode &parent);
+    virtual void visitChildren(const ZigNode &node, const ZigNode &parent);
 
 protected:
-    KDevelop::RangeInRevision editorFindSpellingRange(ZigNode &node, const QString &identifier);
+    KDevelop::RangeInRevision editorFindSpellingRange(const ZigNode &node, const QString &identifier);
 
     template <NodeKind>
-    VisitResult buildContext(ZigNode &node, ZigNode &parent);
+    VisitResult buildContext(const ZigNode &node, const ZigNode &parent);
 
     template<NodeKind Kind>
     KDevelop::DUContext *createContext(ZigNode *node, const KDevelop::QualifiedIdentifier& scopeId);
 
-    void startVisiting(ZigNode *node) override;
-    void setContextOnNode(ZigNode *node, KDevelop::DUContext *context) override;
-    KDevelop::DUContext *contextFromNode(ZigNode *node) override;
-    KDevelop::RangeInRevision editorFindRange(ZigNode *fromNode, ZigNode *toNode) override;
+    void startVisiting(const ZigNode *node) override;
+    void setContextOnNode(const ZigNode *node, KDevelop::DUContext *context) override;
+    KDevelop::DUContext *contextFromNode(const ZigNode *node) override;
+    KDevelop::RangeInRevision editorFindRange(const ZigNode *fromNode, const ZigNode *toNode) override;
     KDevelop::QualifiedIdentifier identifierForNode(QString *node) override;
     KDevelop::DUContext *newContext(const KDevelop::RangeInRevision &range) override;
     KDevelop::TopDUContext *newTopContext(const KDevelop::RangeInRevision &range, KDevelop::ParsingEnvironmentFile *file) override;
 
-    bool shouldSkipNode(ZigNode &node, ZigNode &parent);
+    bool shouldSkipNode(const ZigNode &node, const ZigNode &parent);
 
     ParseSession *session;
 };

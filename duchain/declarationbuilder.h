@@ -37,8 +37,8 @@
 namespace Zig
 {
 
-using TypeBuilderBase = KDevelop::AbstractTypeBuilder<ZigNode, QString, ContextBuilder>;
-using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<ZigNode, QString, TypeBuilderBase>;
+using TypeBuilderBase = KDevelop::AbstractTypeBuilder<const ZigNode, QString, ContextBuilder>;
+using DeclarationBuilderBase = KDevelop::AbstractDeclarationBuilder<const ZigNode, QString, TypeBuilderBase>;
 
 namespace detail { enum class enabler {}; }
 constexpr detail::enabler dummy = {};
@@ -51,33 +51,33 @@ public:
     DeclarationBuilder() = default;
     ~DeclarationBuilder() override = default;
 
-    VisitResult visitNode(ZigNode &node, ZigNode &parent) override;
-    virtual void visitChildren(ZigNode &node, ZigNode &parent) override;
+    VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
+    virtual void visitChildren(const ZigNode &node, const ZigNode &parent) override;
 
 private:
     template <NodeKind Kind>
-    VisitResult buildDeclaration(ZigNode &node, ZigNode &parent);
+    VisitResult buildDeclaration(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind>
     KDevelop::Declaration *createDeclaration(
-        ZigNode &node,
-        ZigNode &parent,
+        const ZigNode &node,
+        const ZigNode &parent,
         const QString &name,
         bool hasContext,
         KDevelop::RangeInRevision &range
     );
 
     template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
-    typename IdType<Kind>::Type::Ptr createType(ZigNode &node, ZigNode &parent);
+    typename IdType<Kind>::Type::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
-    KDevelop::FunctionType::Ptr createType(ZigNode &node, ZigNode &parent);
+    KDevelop::FunctionType::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl> = dummy>
-    KDevelop::StructureType::Ptr createType(ZigNode &node, ZigNode &parent);
+    KDevelop::StructureType::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
-    KDevelop::AbstractType::Ptr createType(ZigNode &node, ZigNode &parent);
+    KDevelop::AbstractType::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
@@ -104,12 +104,12 @@ private:
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 
     // Before children are visited
-    void updateFunctionDecl(ZigNode &node);
+    void updateFunctionDecl(const ZigNode &node);
 
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
-    void maybeBuildCapture(ZigNode &node, ZigNode &parent);
+    void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult visitUsingnamespace(ZigNode &node, ZigNode &parent);
+    VisitResult visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
 };
 
 }

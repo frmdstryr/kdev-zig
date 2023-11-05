@@ -43,7 +43,7 @@ void ContextBuilder::setParseSession(ParseSession *session)
     this->session = session;
 }
 
-RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QString &identifier)
+RangeInRevision ContextBuilder::editorFindSpellingRange(const ZigNode &node, const QString &identifier)
 {
     TokenIndex tok = ast_node_name_token(node.ast, node.index);
     SourceRange range = ast_token_range(node.ast, tok);
@@ -57,7 +57,7 @@ RangeInRevision ContextBuilder::editorFindSpellingRange(ZigNode &node, const QSt
     return RangeInRevision::castFromSimpleRange(spellingRange);
 }
 
-VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
+VisitResult ContextBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeKind kind = node.kind();
     // qDebug() << "ContextBuilder::visitNode" << node.index;
@@ -102,7 +102,7 @@ VisitResult ContextBuilder::visitNode(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-bool ContextBuilder::shouldSkipNode(ZigNode &node, ZigNode &parent)
+bool ContextBuilder::shouldSkipNode(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     if (node.kind() == VarDecl) {
@@ -122,14 +122,14 @@ bool ContextBuilder::shouldSkipNode(ZigNode &node, ZigNode &parent)
     return false;
 }
 
-void ContextBuilder::visitChildren(ZigNode &node, ZigNode &parent)
+void ContextBuilder::visitChildren(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     ast_visit(node.ast, node.index, contextBuilderVisitorCallback, this);
 }
 
 template <NodeKind Kind>
-VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
+VisitResult ContextBuilder::buildContext(const ZigNode &node, const ZigNode &parent)
 {
     if (shouldSkipNode(node, parent)) {
         return Recurse; // Skip this case
@@ -151,22 +151,22 @@ VisitResult ContextBuilder::buildContext(ZigNode &node, ZigNode &parent)
     return Recurse;
 }
 
-void ContextBuilder::startVisiting(ZigNode *node)
+void ContextBuilder::startVisiting(const ZigNode *node)
 {
     visitNode(*node, *node);
 }
 
-void ContextBuilder::setContextOnNode(ZigNode *node, KDevelop::DUContext *context)
+void ContextBuilder::setContextOnNode(const ZigNode *node, KDevelop::DUContext *context)
 {
     session->setContextOnNode(*node, context);
 }
 
-KDevelop::DUContext *ContextBuilder::contextFromNode(ZigNode *node)
+KDevelop::DUContext *ContextBuilder::contextFromNode(const ZigNode *node)
 {
     return session->contextFromNode(*node);
 }
 
-KDevelop::RangeInRevision ContextBuilder::editorFindRange(ZigNode *fromNode, ZigNode *toNode)
+KDevelop::RangeInRevision ContextBuilder::editorFindRange(const ZigNode *fromNode, const ZigNode *toNode)
 {
     SourceRange fromRange = fromNode->extent();
     SourceRange toRange = (fromNode == toNode) ? fromRange : toNode->extent();

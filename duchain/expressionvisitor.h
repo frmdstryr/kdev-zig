@@ -31,47 +31,48 @@ public:
     ParseSession* session() {return m_session;}
 
     // Visit the nodes children and finally the node
-    void startVisiting(ZigNode &node, ZigNode &parent);
+    void startVisiting(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult visitNode(ZigNode &node, ZigNode &parent);
-    void visitChildren(ZigNode &node, ZigNode &parent);
+    VisitResult visitNode(const ZigNode &node, const ZigNode &parent);
+    void visitChildren(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult visitStructInit(ZigNode &node, ZigNode &parent);
-    VisitResult visitContainerDecl(ZigNode &node, ZigNode &parent);
-    VisitResult visitAddressOf(ZigNode &node, ZigNode &parent);
-    VisitResult visitDeref(ZigNode &node, ZigNode &parent);
-    VisitResult visitPointerType(ZigNode &node, ZigNode &parent);
-    VisitResult visitOptionalType(ZigNode &node, ZigNode &parent);
-    VisitResult visitUnwrapOptional(ZigNode &node, ZigNode &parent);
-    VisitResult visitStringLiteral(ZigNode &node, ZigNode &parent);
-    VisitResult visitCharLiteral(ZigNode &node, ZigNode &parent);
-    VisitResult visitMultilineStringLiteral(ZigNode &node, ZigNode &parent);
-    VisitResult visitNumberLiteral(ZigNode &node, ZigNode &parent);
-    VisitResult visitEnumLiteral(ZigNode &node, ZigNode &parent);
-    VisitResult visitIdentifier(ZigNode &node, ZigNode &parent);
-    VisitResult visitErrorUnion(ZigNode &node, ZigNode &parent);
-    VisitResult visitCall(ZigNode &node, ZigNode &parent);
-    VisitResult visitBuiltinCall(ZigNode &node, ZigNode &parent);
-    VisitResult visitFieldAccess(ZigNode &node, ZigNode &parent);
-    VisitResult visitBoolExpr(ZigNode &node, ZigNode &parent);
-    VisitResult visitMathExpr(ZigNode &node, ZigNode &parent);
-    VisitResult visitNegation(ZigNode &node, ZigNode &parent);
-    VisitResult visitBitNot(ZigNode &node, ZigNode &parent);
-    VisitResult visitTry(ZigNode &node, ZigNode &parent);
-    VisitResult visitOrelse(ZigNode &node, ZigNode &parent);
-    VisitResult visitIf(ZigNode &node, ZigNode &parent);
+    VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitContainerDecl(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitAddressOf(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitPointerType(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitOptionalType(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitUnwrapOptional(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitStringLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitCharLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitMultilineStringLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitNumberLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitIdentifier(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitErrorUnion(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBoolExpr(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitMathExpr(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitNegation(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBitNot(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitTry(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
 
 
 
-    VisitResult visitPointerTypeAligned(ZigNode &node, ZigNode &parent);
-    VisitResult visitArrayType(ZigNode &node, ZigNode &parent);
-    VisitResult visitSlice(ZigNode &node, ZigNode &parent);
-    VisitResult visitForRange(ZigNode &node, ZigNode &parent);
-    VisitResult visitArrayAccess(ZigNode &node, ZigNode &parent);
-    VisitResult visitArrayTypeSentinel(ZigNode &node, ZigNode &parent);
+    VisitResult visitPointerTypeAligned(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitSlice(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitForRange(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayTypeSentinel(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult callBuiltinThis(ZigNode &node);
-    VisitResult callBuiltinImport(ZigNode &node);
+    VisitResult callBuiltinThis(const ZigNode &node);
+    VisitResult callBuiltinImport(const ZigNode &node);
+    VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
 
 protected:
     ParseSession* m_session;
