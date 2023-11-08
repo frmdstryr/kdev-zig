@@ -38,6 +38,9 @@ QTEST_MAIN(DUChainTest)
 
 // Parse start_line,start_col,end_line,end_col into range
 static RangeInRevision rangeFromString(const QString &values) {
+    if (values.trimmed() == "invalid") {
+        return RangeInRevision::invalid();
+    }
     auto parts = values.trimmed().split(",");
     Q_ASSERT(parts.size() == 4);
     CursorInRevision start(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
@@ -151,7 +154,8 @@ void DUChainTest::sanityCheckVar()
 
 void DUChainTest::sanityCheckImport()
 {
-    return; // Disable/
+    //return; // Disable/
+    // FIXME: This only works if modules imported inside std are already parsed...
     ReferencedTopDUContext timecontext = parseStdCode("time.zig");
     ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
     QString code("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;");
@@ -160,9 +164,10 @@ void DUChainTest::sanityCheckImport()
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier("std"));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), "struct std"); // std
+    // QCOMPARE(decls.first()->abstractType()->toString(), "struct std"); // std
+    QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
     decls = context->findDeclarations(Identifier("time"));
-    //QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // time
+    QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // time
     QCOMPARE(decls.size(), 1);
     decls = context->findDeclarations(Identifier("ns_per_us"));
     QCOMPARE(decls.size(), 1);
@@ -181,8 +186,8 @@ void DUChainTest::cleanupTestCase()
 void DUChainTest::testVarBindings()
 {
     QFETCH(QString, code);
+    QFETCH(QString, bindings);
     QFETCH(QString, contextName);
-    QFETCH(QStringList, bindings);
     qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
@@ -196,31 +201,32 @@ void DUChainTest::testVarBindings()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    for (const QString &binding : bindings) {
-        QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding)).size(),  1);
+    for (const QString &binding : bindings.split(",")) {
+        qDebug() << "  checking for" << binding.trimmed();
+        QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding.trimmed())).size(),  1);
     }
 }
 
 void DUChainTest::testVarBindings_data()
 {
-    QTest::addColumn<QString>("contextName");
     QTest::addColumn<QString>("code");
-    QTest::addColumn<QStringList>("bindings");
+    QTest::addColumn<QString>("bindings");
+    QTest::addColumn<QString>("contextName");
 
-    QTest::newRow("simple var") << "" << "var x = 1;" << QStringList { "x" };
-    QTest::newRow("simple const") << "" << "const y = 2;" << QStringList { "y" };
-    QTest::newRow("simple var typed") << "" << "var y: u8 = 2;" << QStringList { "y" };
-    QTest::newRow("multiple vars") << "" << "var x = 1;\nvar y = 2;" << QStringList { "x", "y" };
-    QTest::newRow("fn and var") << "" << "var x = 1;\npub fn foo() void {}" << QStringList { "x", "foo" };
-    QTest::newRow("fn var") << "1,0" << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << QStringList { "y" };
-    QTest::newRow("struct decl") << "" << "const Foo = struct {};" << QStringList { "Foo" };
-    QTest::newRow("fn multiple vars") << "1,0" << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << QStringList { "y", "x" };
-    QTest::newRow("struct fn") << "Foo" << "const Foo = struct { pub fn bar() void {}};" << QStringList { "bar" };
-    QTest::newRow("struct var") << "Foo" << "const Foo = struct { var x = 1; };" << QStringList { "x" };
-    QTest::newRow("struct vars") << "Foo" << "const Foo = struct { var x = 1; const y: u8 = 0;};" << QStringList { "x", "y" };
-    QTest::newRow("struct field") << "Foo" << "const Foo = struct { a: u8, };" << QStringList { "a" };
-    QTest::newRow("test decl") << "" << "test \"foo\" {  }" << QStringList { "foo" };
-    QTest::newRow("if capture") << "2,0" << "test {var opt: ?u8 = null;\n if (opt) |x| {\n _ = x;\n} }" << QStringList { "x" };
+    QTest::newRow("simple var") << "var x = 1;" << "x" << "";
+    QTest::newRow("simple const") << "const y = 2;" << "y" << "";
+    QTest::newRow("simple var typed") << "var y: u8 = 2;" << "y" << "";
+    QTest::newRow("multiple vars") << "var x = 1;\nvar y = 2;" << "x, y"  << "";
+    QTest::newRow("fn and var") << "var x = 1;\npub fn foo() void {}" << "x, foo" << "" ;
+    QTest::newRow("fn var") << "pub fn main() void {\n  var y: u8 = 2;\n _ = y;\n}" << "y" << "1,0";
+    QTest::newRow("struct decl") << "const Foo = struct {};" << "Foo" << "";
+    QTest::newRow("fn multiple vars") << "pub fn main() void {\n var y: u8 = 2;\n var x = y; _ = x;\n}" << "y, x" << "1,0";
+    QTest::newRow("struct fn") << "const Foo = struct { pub fn bar() void {}};" << "bar" << "Foo";
+    QTest::newRow("struct var") << "const Foo = struct { var x = 1; };" << "x" << "Foo";
+    QTest::newRow("struct vars") << "const Foo = struct { var x = 1; const y: u8 = 0;};" << "x, y" << "Foo";
+    QTest::newRow("struct field") << "const Foo = struct { a: u8, };" << "a" << "Foo";
+    QTest::newRow("test decl") << "test \"foo\" {  }" << "test foo"  << "";
+    QTest::newRow("if capture") << "test {var opt: ?u8 = null;\n if (opt) |x| {\n_ = x;\n} }" << "x" << "1,13";
     // Interal context ?
     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
 
@@ -229,36 +235,41 @@ void DUChainTest::testVarBindings_data()
 void DUChainTest::testVarUsage()
 {
     QFETCH(QString, code);
-    QFETCH(CursorInRevision, cursor);
-    QFETCH(QStringList, uses);
+    QFETCH(QString, container);
+    QFETCH(QString, uses);
     qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code, "test");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
     uint32_t i = 0;
-    for (const QString &param : uses) {
+    for (const QString &param : uses.split(";")) {
         QStringList parts = param.split("/");
-        QString use = parts[0];
-        RangeInRevision expectedRange = rangeFromString(parts[1]);
+        QString use = parts[0].trimmed();
+        RangeInRevision expectedRange = rangeFromString(parts[1].trimmed());
         qDebug() << "Checking for use of" << use;
-        auto localContext = cursor.isValid() ? context->findContextAt(cursor) : context;
+        DUContext *internalContext = getInternalContext(context, container);
+        QVERIFY(internalContext);
         //qDebug() << "Local decls at:" << cursor;
         qDebug() << "Locals are:";
-        for (const KDevelop::Declaration *decl : localContext->localDeclarations()) {
+        for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
             qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
         }
 
-        auto decls = localContext->findDeclarations(Identifier(use));
+        auto decls = internalContext->findDeclarations(Identifier(use));
+        qDebug() << "Decls for ident" << use;
         for (const KDevelop::Declaration *decl : decls) {
             qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
         }
-
         QVERIFY(decls.size() >  0);
-        QCOMPARE(decls.first()->uses().size(),  1);
-        QVector<RangeInRevision> useRanges = decls.first()->uses().values().at(0);
-        QCOMPARE(useRanges.size(),  1);
-        QCOMPARE(useRanges.at(0), expectedRange);
+        if (expectedRange.isValid()) {
+            QCOMPARE(decls.first()->uses().size(),  1);
+            QVector<RangeInRevision> useRanges = decls.first()->uses().values().at(0);
+            QCOMPARE(useRanges.size(),  1);
+            QCOMPARE(useRanges.at(0), expectedRange);
+        } else {
+            QCOMPARE(decls.first()->uses().size(),  0);
+        }
 
         i += 1;
     }
@@ -266,17 +277,31 @@ void DUChainTest::testVarUsage()
 
 void DUChainTest::testVarUsage_data()
 {
-    QTest::addColumn<CursorInRevision>("cursor");
     QTest::addColumn<QString>("code");
-    QTest::addColumn<QStringList>("uses");
+    QTest::addColumn<QString>("uses");
+    QTest::addColumn<QString>("container");
 
-    QTest::newRow("struct init") << CursorInRevision(3, 0)
-        << "const Foo = struct{};\ntest {\n var x = Foo{};\n}" << QStringList { "Foo/2,9,2,12" };
-    QTest::newRow("fn call") << CursorInRevision(3, 0)
-        << "pub fn main() void {}\ntest {\n main();\n}" << QStringList { "main/2,1,2,5" };
-    QTest::newRow("fn arg") << CursorInRevision(2, 0)
-        << "pub fn main(a: u8) void {\nconst b=1; return a;\n}" << QStringList { "a/1,8,1,9" };
-    // QTest::newRow("builtin call") << CursorInRevision(-1, -1)
+
+    QTest::newRow("struct init") << "const Foo = struct{};\ntest {\n var x = Foo{};\n}" << "Foo/2,9,2,12" << "3,0";
+    QTest::newRow("var") << "test{\n const b=1;\n const a = b;\n}" << "b/2,11,2,12" << "3,0";
+    QTest::newRow("var type") << "const A = struct {};\nvar a: A = undefined;\n" << "A/1,7,1,8" << "2,0";
+
+    QTest::newRow("var out of order") << "const a = b;\n const b=1;\n" << "b/0,10,0,11" << "2,0";
+    QTest::newRow("fn call") << "pub fn main() void {}\ntest {\n main();\n}" << "main/2,1,2,5" << "3,0";
+    QTest::newRow("fn arg") << "pub fn main(a: u8) u8 {\nconst b=1; return a;\n}" << "a/1,18,1,19" << "2,0";
+    QTest::newRow("field access") << "const A = struct{f: u8=0};\ntest{\n var a = A{};\n var b = a.f;\n}" << "a/3,9,3,10" << "4,0";
+    QTest::newRow("struct field") << "const A = struct{f: u8=0};\ntest{\n var a = A{};\n var b = a.f;\n}" << "f/3,11,3,12" << "A";
+    QTest::newRow("struct fn") << "const A = struct{f: u8=0, pub fn foo() void {}};\ntest{\n var a = A{};\n var b = a.foo();\n}" << "foo/3,11,3,14" << "A";
+    QTest::newRow("struct field type") << "const A = struct{b: Bar};\nconst Bar = struct{v: u8};\n" << "Bar/0,20,0,23" << "";
+
+    QTest::newRow("array access") << "var a = [2]u8;\nconst b = a[1];\n" << "a/1,10,1,11" << "2,0";
+    QTest::newRow("array index") << "const i = 0;\nvar a = [2]u8;\nconst b = a[i];\n" << "i/2,12,2,13" << "3,0";
+
+    // Make sure out of order does not work in fn's or tests
+    QTest::newRow("fn var order") << "pub fn main() void {\nconst a = b; const b=1; \n}" << "a/invalid" << "2,0";
+    QTest::newRow("test var order") << "test {\nconst a = b; const b=1; \n}" << "a/invalid" << "2,0";
+
+        // QTest::newRow("builtin call") << CursorInRevision(-1, -1)
     //     << "const a = @min(1, 2);\n" << QStringList { "@min/2,10,2,14" };
 
 }
@@ -341,6 +366,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("var addr of") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{}; var x = &f;\n}" << "x" << "*Foo" << "3,0";
     QTest::newRow("ptr deref") << "test {\nvar buf: *u8 = undefined; var x = buf.*;\n}" << "x" << "u8" << "2,0";
     QTest::newRow("unwrap optional") << "var x: ?u8 = 0; const y = x.?;" << "y" << "u8" << "";
+    QTest::newRow("unwrap optional ptr") << "var x: *?u8 = undefined; const y = x.?;" << "y" << "u8" << "";
+    QTest::newRow("unwrap optional ptr field")
+        << "const A = struct {value: u8}; const B = struct {a: ?*A = null};"
+           "var b = B{}; var ptr = &b; const y = ptr.a.?;" << "y" << "*A" << "";
     QTest::newRow("bool >") << "var x = 1 > 2;" << "x" << "bool" << "";
     QTest::newRow("bool >=") << "var x = 1 >= 2;" << "x" << "bool" << "";
     QTest::newRow("bool <") << "var x = 1 < 2;" << "x" << "bool" << "";
@@ -416,4 +445,17 @@ void DUChainTest::testVarType_data()
     // Imported namespaces
     QTest::newRow("no usingnamespace") << "const A = struct {const a = 1;}; const B = struct { var x = a;\n};" << "x" << "mixed" << "B";
     QTest::newRow("usingnamespace") << "const A = struct {const a = 1;}; const B = struct { usingnamespace A; var x = a;\n};" << "x" << "comptime_int" << "B";
+
+    QTest::newRow("var order") << "const A = 1 << B; const B = @as(u32, 1);\n" << "A" << "u32" << "";
+    QTest::newRow("aliased struct")
+    << "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
+       "const Point = geom.Point;\n"
+       "var p = Point{}; const value = p.x; " << "value" << "i8" << "";
+    QTest::newRow("aliased field init")
+    << "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
+       "var p = geom.Point{}; " << "p" << "geom::Point" << "";
+    QTest::newRow("aliased struct out of order")
+    << "const Point = geom.Point;\n"
+       "var p = Point{};\n"
+       "const geom = struct { const Point = struct { x: i8, y: i8}; };" << "p" << "geom::Point" << "";
 }

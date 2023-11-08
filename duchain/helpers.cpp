@@ -7,6 +7,7 @@
 #include <interfaces/icore.h>
 #include <interfaces/iproject.h>
 #include <language/duchain/duchainlock.h>
+#include <language/duchain/types/identifiedtype.h>
 #include <language/backgroundparser/backgroundparser.h>
 #include <interfaces/ilanguagecontroller.h>
 #include <util/path.h>
@@ -101,6 +102,17 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     return nullptr;
 }
 
+Declaration* Helper::declForIdentifiedType(
+        const KDevelop::AbstractType::Ptr type,
+        const KDevelop::TopDUContext* topContext)
+{
+    DUChainReadLocker lock;
+    if (auto *t = dynamic_cast<IdentifiedType*>(type.data())) {
+        return t->declaration(topContext);
+    }
+    return nullptr;
+}
+
 static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
 {
     return (
@@ -112,16 +124,30 @@ static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
 static bool declarationIsInDirectParentUsingnamespace(const Declaration* decl, const DUContext* ctx)
 {
     // var/field/function
-    if (decl->context() == ctx->parentContext())
-        return true;
+    return (decl->context() == ctx->parentContext());
+        //return true;
     // usingnamespace
-    return true;
-    // This is redireculously slow
+    //return true;
+    // This is slow
     // for (const auto &imp: ctx->importedParentContexts()) {
     //     if (decl->context() == imp.context(nullptr))
     //         return true;
     // }
     //return false;
+}
+
+
+/**
+ * In Zig order does not matter in container bodies
+ */
+static inline bool canFindBeyondUse(const DUContext* ctx)
+{
+    return (
+        ctx && ctx->owner() && (
+            ctx->owner()->isFunctionDeclaration()
+            || (ctx->owner()->kind() == Declaration::Kind::Type)
+        )
+    );
 }
 
 Declaration* Helper::declarationForName(
@@ -130,27 +156,32 @@ Declaration* Helper::declarationForName(
     DUChainPointer<const DUContext> context)
 {
     DUChainReadLocker lock;
+    const DUContext* currentContext = context.data();
+    bool findBeyondUse = canFindBeyondUse(currentContext);
+    CursorInRevision findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
     auto identifier = KDevelop::Identifier(name);
     auto localDeclarations = context->findLocalDeclarations(
-        identifier, location, nullptr,
+        identifier,
+        findUntil,
+        nullptr,
         AbstractType::Ptr(), DUContext::DontResolveAliases);
     if ( !localDeclarations.isEmpty() ) {
         return localDeclarations.last();
     }
 
     QList<Declaration*> declarations;
-    const DUContext* currentContext = context.data();
-    bool findInNext = true, findBeyondUse = false;
+    bool findInNext = true;
     do {
         if (findInNext) {
-            CursorInRevision findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
+            findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
             declarations = currentContext->findDeclarations(identifier, findUntil);
 
             for (Declaration* declaration: declarations) {
                 // qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
                 if (declaration->context()->type() != DUContext::Class
-                    || (contextTypeIsFnOrClass(currentContext)
-                        // && declarationIsInDirectParentUsingnamespace(declaration, currentContext))
+                    || (
+                        contextTypeIsFnOrClass(currentContext)
+                        // && declarationIsInDirectParentUsingnamespace(declaration, currentContext)
                     )
                 ) {
                      // Declarations from struct decls must be referenced through `self.<foo>`, except
@@ -166,7 +197,7 @@ Declaration* Helper::declarationForName(
             }
         }
 
-        if (!findBeyondUse && currentContext->owner() && currentContext->owner()->isFunctionDeclaration()) {
+        if (!findBeyondUse && canFindBeyondUse(currentContext)) {
             // Names in the body may be defined after the function definition, before the function is called.
             // Note: only the parameter list has type DUContext::Function, so we have to do this instead.
             findBeyondUse = findInNext = true;

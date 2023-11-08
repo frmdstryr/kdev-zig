@@ -30,13 +30,12 @@ namespace NodeTraits
 
 constexpr bool hasContext(NodeKind kind)
 {
-    return kind == Module
-        || kind == ContainerDecl
+    // Module uses topLevel as it's context so do not include it here
+    return kind == ContainerDecl
         || kind == EnumDecl
         || kind == FunctionDecl
         || kind == BlockDecl
         || kind == ErrorDecl
-        || kind == VarDecl
         || kind == TestDecl
         || kind == If
         || kind == For
@@ -44,6 +43,11 @@ constexpr bool hasContext(NodeKind kind)
         || kind == Switch
         || kind == Defer
     ;
+}
+
+constexpr bool hasChildren(NodeKind kind)
+{
+    return hasContext(kind) || (kind == Module || kind == VarDecl);
 }
 
 constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
@@ -57,7 +61,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == ErrorDecl      ? DUContext::Enum
         :  kind == TestDecl       ? DUContext::Other
         :  kind == BlockDecl      ? DUContext::Other
-        :  kind == VarDecl        ? DUContext::Other
+        // :  kind == VarDecl        ? DUContext::Other
         :  kind == If             ? DUContext::Other
         :  kind == For            ? DUContext::Other
         :  kind == While          ? DUContext::Other

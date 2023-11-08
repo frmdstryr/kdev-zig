@@ -51,10 +51,25 @@ public:
     DeclarationBuilder() = default;
     ~DeclarationBuilder() override = default;
 
+    /**
+     * @brief Entry function, called by KDevPlatform.
+     */
+    ReferencedTopDUContext build(const IndexedString& url, const ZigNode* node,
+                                 const ReferencedTopDUContext& updateContext = ReferencedTopDUContext()) override;
+
+    /**
+     * @brief Set whether the current running pass is the first or the second one.
+     * @param prebuilding true if first pass, false if second
+     */
+    void setPrebuilding(bool prebuilding) {m_prebuilding = prebuilding;}
+
     VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
     virtual void visitChildren(const ZigNode &node, const ZigNode &parent) override;
 
 private:
+    // true if the first of the two performed passes is currently active
+    bool m_prebuilding = false;
+
     template <NodeKind Kind>
     VisitResult buildDeclaration(const ZigNode &node, const ZigNode &parent);
 
@@ -63,7 +78,7 @@ private:
         const ZigNode &node,
         const ZigNode &parent,
         const QString &name,
-        bool hasContext,
+        bool isDef,
         KDevelop::RangeInRevision &range
     );
 

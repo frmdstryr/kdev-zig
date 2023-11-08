@@ -61,8 +61,6 @@ public:
     VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
 
-
-
     VisitResult visitPointerTypeAligned(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSlice(const ZigNode &node, const ZigNode &parent);

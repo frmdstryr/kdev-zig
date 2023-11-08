@@ -249,7 +249,13 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const Zi
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
     v.visitNode(value, node);
-    if (auto optional = v.lastType().dynamicCast<OptionalType>()) {
+
+    // Automatically derefs
+    auto T = v.lastType();
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
+    if (auto optional = T.dynamicCast<OptionalType>()) {
         encounter(AbstractType::Ptr(optional->baseType()));
     } else {
         encounterUnknown(); // TODO: Set error?
@@ -565,9 +571,10 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
 {
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
-    ZigNode owner = node.nextChild();
+    NodeData data = node.data();
+    ZigNode owner = {node.ast, data.lhs};
     v.visitNode(owner, node);
-    QString attr = node.tokenSlice(node.data().rhs);
+    QString attr = node.tokenSlice(data.rhs);
     const auto T = v.lastType();
     // Root modules have a ModuleModifier set
     // const auto isModule = T->modifiers() & ModuleModifier;

@@ -19,7 +19,7 @@ namespace Zig {
 
 static QRegularExpression signedIntPattern("i\\d+");
 static QRegularExpression unsignedIntPattern("u\\d+");
-static QRegularExpression floatPattern("f(16|32|64|80|128)");
+// static QRegularExpression floatPattern("f(16|32|64|80|128)");
 
 using namespace KDevelop;
 
@@ -85,10 +85,16 @@ bool BuiltinType::equals(const AbstractType* _rhs) const
     if (!AbstractType::equals(_rhs))
         return false;
 
-    if (const auto *rhs =dynamic_cast<const BuiltinType*>(_rhs))
-        return toString() == rhs->toString();
+    Q_ASSERT(dynamic_cast<const BuiltinType*>(_rhs));
+    const auto *rhs = static_cast<const BuiltinType*>(_rhs);
 
-    return false;
+    if (d_func()->m_dataTypeLen != rhs->d_func()->m_dataTypeLen)
+        return false;
+    const auto n = std::min(
+        static_cast<size_t>(d_func()->m_dataTypeLen),
+        sizeof(d_func()->m_dataType)
+    );
+    return memcmp(d_func()->m_dataType, rhs->d_func()->m_dataType, n) == 0;
 }
 
 BuiltinType::BuiltinType(QString name)
@@ -104,7 +110,8 @@ QString BuiltinType::toString() const
         static_cast<size_t>(d_func()->m_dataTypeLen),
         sizeof(d_func()->m_dataType)
     );
-    return QString::fromUtf8(d_func()->m_dataType, n);
+    // No builtins are utf-8
+    return QString::fromLatin1(d_func()->m_dataType, n);
 }
 
 void BuiltinType::accept0(TypeVisitor* v) const
@@ -128,12 +135,12 @@ bool BuiltinType::isUnsigned() const
     QString n = toString();
     return (
         unsignedIntPattern.match(n).hasMatch()
-        || n == "usize"
-        || n == "c_char"
-        || n == "c_uint"
-        || n == "c_ulong"
-        || n == "c_ulonglong"
-        || n == "comptime_int"
+        || n == QLatin1String("usize")
+        || n == QLatin1String("c_char")
+        || n == QLatin1String("c_uint")
+        || n == QLatin1String("c_ulong")
+        || n == QLatin1String("c_ulonglong")
+        || n == QLatin1String("comptime_int")
     );
 }
 
@@ -143,12 +150,12 @@ bool BuiltinType::isSigned() const
     QString n = toString();
     return (
         signedIntPattern.match(n).hasMatch()
-        || n == "isize"
-        || n == "c_int"
-        || n == "c_short"
-        || n == "c_long"
-        || n == "c_longlong"
-        || n == "comptime_int"
+        || n == QLatin1String("isize")
+        || n == QLatin1String("c_int")
+        || n == QLatin1String("c_short")
+        || n == QLatin1String("c_long")
+        || n == QLatin1String("c_longlong")
+        || n == QLatin1String("comptime_int")
     );
 }
 
@@ -156,14 +163,16 @@ bool BuiltinType::isFloat() const
 {
     // TODO: Set flags instead of doing this ?
     QString n = toString();
-    return (
-        floatPattern.match(n).hasMatch()
-        || n == "comptime_float"
-        || n == "comptime_int" // automatically casted
-        || n == "c_longdouble"
+    return (n == QLatin1String("f32")
+        || n == QLatin1String("f64")
+        || n == QLatin1String("f128")
+        || n == QLatin1String("f16")
+        || n == QLatin1String("f80")
+        || n == QLatin1String("comptime_float")
+        || n == QLatin1String("comptime_int") // automatically casted
+        || n == QLatin1String("c_longdouble")
     );
 }
-
 
 
 bool BuiltinType::isBuiltinFunc(const QString& name)
@@ -175,30 +184,35 @@ bool BuiltinType::isBuiltinType(const QString& name)
 {
     // TODO: Pull these from zig directly somehow
     return (
-        name == "void"
-        || name == "type"
-        || name == "bool"
-        || name == "isize"
-        || name == "usize"
-        || name == "anyerror"
-        || name == "anyframe"
-        || name == "noreturn"
-        || name == "anyopaque"
-        || name == "comptime_int"
-        || name == "comptime_float"
-        || name == "c_char"
-        || name == "c_short"
-        || name == "c_ushort"
-        || name == "c_int"
-        || name == "c_uint"
-        || name == "c_long"
-        || name == "c_ulong"
-        || name == "c_longlong"
-        || name == "c_ulonglong"
-        || name == "c_longdouble"
+        name == QLatin1String("u8") // Very common
+        || name == QLatin1String("void")
+        || name == QLatin1String("type")
+        || name == QLatin1String("bool")
+        || name == QLatin1String("isize")
+        || name == QLatin1String("usize")
+        || name == QLatin1String("comptime_int")
+        || name == QLatin1String("comptime_float")
         || unsignedIntPattern.match(name).hasMatch()
         || signedIntPattern.match(name).hasMatch()
-        || floatPattern.match(name).hasMatch()
+        || name == QLatin1String("f32")
+        || name == QLatin1String("f64")
+        || name == QLatin1String("f128")
+        || name == QLatin1String("f16")
+        || name == QLatin1String("f80")
+        || name == QLatin1String("anyerror")
+        || name == QLatin1String("anyframe")
+        || name == QLatin1String("noreturn")
+        || name == QLatin1String("anyopaque")
+        || name == QLatin1String("c_char")
+        || name == QLatin1String("c_short")
+        || name == QLatin1String("c_ushort")
+        || name == QLatin1String("c_int")
+        || name == QLatin1String("c_uint")
+        || name == QLatin1String("c_long")
+        || name == QLatin1String("c_ulong")
+        || name == QLatin1String("c_longlong")
+        || name == QLatin1String("c_ulonglong")
+        || name == QLatin1String("c_longdouble")
     );
 }
 
@@ -206,10 +220,10 @@ bool BuiltinType::isBuiltinVariable(const QString& name)
 {
     // TODO: Pull these from zig directly somehow
     return (
-        name == "null"
-        || name == "undefined"
-        || name == "true"
-        || name == "false"
+        name == QLatin1String("null")
+        || name == QLatin1String("undefined")
+        || name == QLatin1String("true")
+        || name == QLatin1String("false")
     );
 }
 
@@ -226,7 +240,7 @@ AbstractType::Ptr BuiltinType::newFromName(const QString& name)
         builtinTypeCache.insert(name, r);
         return r;
     }
-    if (name == "true" || name == "false") {
+    if (name == QLatin1String("true") || name == QLatin1String("false")) {
         return newFromName("bool");
     }
     return AbstractType::Ptr();

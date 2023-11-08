@@ -87,6 +87,13 @@ public:
         const KDevelop::CursorInRevision& location,
         const KDevelop::TopDUContext* topContext);
 
+    /**
+     * Shortcut that finds the declaration if the type casts to an Identified
+     * type. May return null
+     */
+    static KDevelop::Declaration*  declForIdentifiedType(
+        const KDevelop::AbstractType::Ptr type,
+        const KDevelop::TopDUContext* topContext);
 
 };
 

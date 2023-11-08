@@ -134,16 +134,16 @@ VisitResult ContextBuilder::buildContext(const ZigNode &node, const ZigNode &par
     if (shouldSkipNode(node, parent)) {
         return Recurse; // Skip this case
     }
-    constexpr bool hasContext = NodeTraits::hasContext(Kind);
-    if (hasContext) {
-        bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
-        QString name = overwrite ? parent.spellingName() : node.spellingName();
-        if (Kind != Module) {
+    if (NodeTraits::hasChildren(Kind)) {
+        constexpr bool hasContext = NodeTraits::hasContext(Kind);
+        if (hasContext) {
+            bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
+            QString name = overwrite ? parent.spellingName() : node.spellingName();
             DUChainWriteLocker lock;
             openContext(&node, NodeTraits::contextType(Kind), &name);
         }
         visitChildren(node, parent);
-        if (Kind != Module) {
+        if (hasContext) {
             closeContext();
         }
         return Continue;

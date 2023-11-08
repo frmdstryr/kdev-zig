@@ -591,6 +591,28 @@ struct IfData
     NodeIndex else_expr;
 };
 
+struct VarDataInfo
+{
+    bool is_pub : 1;
+    bool is_const : 1;
+    bool is_comptime : 1;
+    bool is_extern : 1;
+    bool is_export : 1;
+    bool is_threadlocal: 1;
+    unsigned reserved: 2;
+};
+
+struct VarData
+{
+  TokenIndex lib_name;
+  NodeIndex type_node;
+  NodeIndex align_node;
+  NodeIndex addrspace_node;
+  NodeIndex section_node;
+  NodeIndex init_node;
+  VarDataInfo info;
+};
+
 ZAst *parse_ast(const char *name, const char *source);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
@@ -604,6 +626,7 @@ NodeData ast_node_data(const ZAst *tree, NodeIndex node);
 uint32_t ast_extra_data(const ZAst *tree, ExtraDataIndex index);
 ArrayTypeSentinel ast_array_type_sentinel(const ZAst *tree, NodeIndex node);
 IfData ast_if_data(const ZAst *tree, NodeIndex node);
+VarData ast_var_data(const ZAst *tree, NodeIndex node);
 NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);

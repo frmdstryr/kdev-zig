@@ -880,7 +880,49 @@ export fn ast_if_data(ptr: ?*Ast, node: Index) IfData {
     return IfData{};
 }
 
+const VarDataInfo = packed struct {
+    is_pub: bool = false,
+    is_const: bool = false,
+    is_comptime: bool = false,
+    is_extern: bool = false,
+    is_threadlocal: bool = false,
+    reserved: u3 = 0,
+};
 
+const VarData = extern struct {
+    lib_name: Index = 0,
+    type_node: Index = 0,
+    align_node: Index = 0,
+    addrspace_node: Index = 0,
+    section_node: Index = 0,
+    init_node: Index = 0,
+    info: VarDataInfo = .{},
+};
+
+export fn ast_var_data(ptr: ?*Ast, node: Index) VarData {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullVarDecl(node)) |data| {
+                return VarData{
+                    .lib_name = data.lib_name orelse 0,
+                    .type_node = data.ast.type_node,
+                    .align_node = data.ast.align_node,
+                    .addrspace_node = data.ast.addrspace_node,
+                    .section_node = data.ast.section_node,
+                    .init_node = data.ast.init_node,
+                    .info = VarDataInfo{
+                        .is_pub = data.visib_token != null,
+                        .is_const = isTokenSliceEql(ast, data.ast.mut_token, "const"),
+                        .is_extern = data.extern_export_token != null,
+                        .is_comptime = data.comptime_token != null,
+                        .is_threadlocal = data.threadlocal_token != null,
+                    }
+                };
+            }
+        }
+    }
+    return VarData{};
+}
 
 fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
     _ = ast;
@@ -1537,6 +1579,29 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
         try std.testing.expectEqual(@as(Index, @intCast(b)), a);
     }
 
+    var timer = try std.time.Timer.start();
+    for (0..ast.tokens.len) |i| {
+        _ = ast.tokenLocation(0, @intCast(i));
+    }
+    const t0: f64 = @floatFromInt(timer.read());
+    std.log.warn("Old: {d:6.2}ms", .{std.math.round(t0/std.time.ms_per_s)});
+
+    timer.reset();
+    for (0..ast.tokens.len) |i| {
+        _ = ast.tokenLocationScan(0, @intCast(i));
+    }
+    const t1: f64 = @floatFromInt(timer.read());
+    std.log.warn("New: {d:6.2}ms", .{std.math.round(t1/std.time.ms_per_s)});
+    const dt = t1-t0;
+    std.log.warn("Diff: delta={d:6.2}ms {d:6.2}% {s}", .{
+        dt/std.time.ms_per_s, 100*(t1-t0)/t0, if (t1 < t0) "faster" else "slower"});
+
+    for (0..ast.tokens.len) |i| {
+        const a = ast.tokenLocation(0, @intCast(i));
+        const b = ast.tokenLocationScan(0, @intCast(i));
+        try std.testing.expectEqual(a, b);
+    }
+
     // If given, make sure the tag is actually used in the source parsed
     if (indexOfNodeWithTag(ast, 0, tag) == null) {
         std.log.err("Expected tag {} not found in ast\n", .{tag});
@@ -1750,7 +1815,7 @@ test "all-visit" {
     const buffer_size = 20*1000*1024; // 20MB
     while (try walker.next()) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".zig")) {
-            errdefer std.log.warn("{s}", .{entry.path});
+            std.log.warn("{s}", .{entry.path});
             const file = try entry.dir.openFile(entry.basename, .{});
             const source = try file.readToEndAllocOptions(
                 allocator, buffer_size, null, 4, 0

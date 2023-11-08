@@ -39,6 +39,29 @@ namespace Zig
 
 using namespace KDevelop;
 
+ReferencedTopDUContext DeclarationBuilder::build(
+    const IndexedString& url, const ZigNode* node,
+    const ReferencedTopDUContext& updateContext)
+{
+    ReferencedTopDUContext ctx(updateContext);
+    //m_correctionHelper.reset(new CorrectionHelper(url, this));
+
+    // The declaration builder needs to run twice,
+    // so it can resolve uses of structs, functions, etc
+    // which are used before they are defined .
+    if ( ! m_prebuilding ) {
+        DeclarationBuilder prebuilder;
+        prebuilder.setParseSession(session);
+        prebuilder.setPrebuilding(true);
+        ctx = prebuilder.build(url, node, updateContext);
+        qCDebug(KDEV_ZIG) << "Second declarationbuilder pass";
+    }
+    else {
+        qCDebug(KDEV_ZIG) << "Prebuilding declarations";
+    }
+    return DeclarationBuilderBase::build(url, node, ctx);
+}
+
 VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeKind kind = node.kind();
@@ -108,28 +131,29 @@ VisitResult DeclarationBuilder::buildDeclaration(const ZigNode &node, const ZigN
     if (shouldSkipNode(node, parent)) {
         return Recurse; // Skip this case
     }
-    Q_UNUSED(parent);
     constexpr bool hasContext = NodeTraits::hasContext(Kind);
+    constexpr bool isDef = hasContext || Kind == Module;
     bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
+
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
-    auto *decl = createDeclaration<Kind>(node, parent, name, hasContext, range);
-    VisitResult ret = buildContext<Kind>(node, parent);
-    if (hasContext && Kind != Module) {
-        eventuallyAssignInternalContext();
-    }
-    closeDeclaration();
-
+    auto *decl = createDeclaration<Kind>(node, parent, name, isDef, range);
     if (Kind == Module) {
         DUChainWriteLocker lock;
         topContext()->setOwner(decl);
     }
 
+    VisitResult ret = buildContext<Kind>(node, parent);
+    if (hasContext) {
+        eventuallyAssignInternalContext();
+    }
+    closeDeclaration();
+
     return ret;
 }
 
 template <NodeKind Kind>
-Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const ZigNode &parent, const QString &name, bool hasContext, KDevelop::RangeInRevision &range)
+Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const ZigNode &parent, const QString &name, bool isDef, KDevelop::RangeInRevision &range)
 {
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
@@ -151,7 +175,7 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         identifier,
         declRange,
-        hasContext ? DeclarationIsDefinition : NoFlags
+        isDef ? DeclarationIsDefinition : NoFlags
     );
 
     if (NodeTraits::isTypeDeclaration(Kind)) {

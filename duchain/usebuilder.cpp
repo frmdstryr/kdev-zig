@@ -264,7 +264,7 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
         if (auto index = v2.lastType().dynamicCast<BuiltinType>()) {
             if (index->isInteger()) {
                 auto decl = v1.lastDeclaration();
-                auto useRange = rhs.range();
+                auto useRange = lhs.range();
                 if (decl && decl->range() != useRange) {
                     UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
                 }
@@ -292,14 +292,17 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
 
 VisitResult UseBuilder::visitUnwrapOptional(const ZigNode &node, const ZigNode &parent)
 {
-    // TODO
     Q_UNUSED(parent);
     ZigNode owner = node.nextChild(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
+    auto T = v.lastType();
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
     auto useRange = node.range();
-    if (auto s = v.lastType().dynamicCast<OptionalType>()) {
-        auto decl = v.lastDeclaration();
+    if (auto s = T.dynamicCast<OptionalType>()) {
+        auto decl = Helper::declForIdentifiedType(s->baseType(), nullptr);
         if (decl && decl->range() != useRange) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }
@@ -324,8 +327,8 @@ VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
     auto useRange = node.range();
-    if (auto s = v.lastType().dynamicCast<PointerType>()) {
-        auto decl = v.lastDeclaration();
+    if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
+        auto decl = Helper::declForIdentifiedType(ptr->baseType(), nullptr);
         if (decl && decl->range() != useRange) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }
@@ -345,15 +348,16 @@ VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
 VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
 {
     QString name = node.spellingName();
+
+    if (
+        name.isEmpty()
+        || BuiltinType::isBuiltinVariable(name)
+        || BuiltinType::isBuiltinType(name)
+        || name == "." // TODO
+    ) {
+        return Continue;
+    }
     RangeInRevision useRange = editorFindSpellingRange(node, name);
-
-    if (name.isEmpty() || name == ".") {
-        return Continue;
-    }
-    if (BuiltinType::isBuiltinVariable(name) || BuiltinType::isBuiltinType(name)) {
-        return Continue;
-    }
-
     Declaration* decl = Helper::declarationForName(
         name,
         useRange.start,
@@ -373,6 +377,7 @@ VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
         return Continue;
     }
 
+    qCDebug(KDEV_ZIG) << "Undefined variable " << name;
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
