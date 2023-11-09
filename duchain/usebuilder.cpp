@@ -229,7 +229,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
         }
     }
 
-    auto *decl = Helper::accessAttribute(T, attr, topContext());
+    auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext());
     RangeInRevision useRange = editorFindSpellingRange(node, attr);
     if (!decl) {
         DUChainWriteLocker lock;

@@ -1,9 +1,11 @@
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
+#include <language/duchain/types/typealiastype.h>
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/duchainutils.h>
 #include <language/duchain/duchain.h>
 #include <language/duchain/functiondeclaration.h>
+#include <language/duchain/aliasdeclaration.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -37,6 +39,7 @@ ExpressionVisitor::ExpressionVisitor(ParseSession* session, const KDevelop::DUCo
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
     : DynamicLanguageExpressionVisitor(parent)
     , m_session(parent->session())
+    , m_lastTopContext(parent->m_lastTopContext)
 {
     if ( overrideContext ) {
         m_context = overrideContext;
@@ -349,9 +352,18 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
-            // qCDebug(KDEV_ZIG) << "found decl for " << name;
-            encounter(decl->abstractType(), DeclarationPointer(decl));
+            if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
+                auto d = alias->aliasedDeclaration();
+                //qCDebug(KDEV_ZIG) << name << "is alias";
+                encounterTopContext(d.indexedTopContext().data());
+            }
+            // {
+            //     DUChainReadLocker lock;
+            //     qCDebug(KDEV_ZIG) << "found" << decl->toString();
+            // }
+            encounterLvalue(DeclarationPointer(decl));
         } else {
+            // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
             // Needs resolved later
             //auto delayedType = new DelayedType();
             //delayedType->setIdentifier(IndexedTypeIdentifier(name));
@@ -532,7 +544,8 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
     auto *importedModule = DUChain::self()->chainForDocument(importPath);
     if (importedModule) {
         if (auto mod = importedModule->owner()) {
-            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString();
+            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString() << "ctx" << importedModule;
+            encounterTopContext(importedModule);
             encounterLvalue(DeclarationPointer(mod));
             return Continue;
         }
@@ -603,20 +616,10 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
     QString attr = node.tokenSlice(data.rhs);
     const auto T = v.lastType();
     // Root modules have a ModuleModifier set
-    // const auto isModule = T->modifiers() & ModuleModifier;
-    // qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
-
-    // if (auto delayed = v.lastType().dynamicCast<DelayedType>()) {
-    //     QString ident = delayed->identifier().toString();
-    //     qDebug() << "Access delayed type" << ident;
-    //     auto decl = declarationForName(
-    //         ident,
-    //         CursorInRevision::invalid(),
-    //         DUChainPointer<const DUContext>(topContext)
-    //     );
-    //     if (decl) {
-    //         return accessAttribute(decl->abstractType(), attribute, topContext);
-    //     }
+    // {
+    //     DUChainReadLocker lock; // Needed if printing debug statement
+    //     const auto isModule = T->modifiers() & ModuleModifier;
+    //     qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
     // }
 
     if (auto s = T.dynamicCast<SliceType>()) {
@@ -634,13 +637,21 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
         return Continue;
     }
 
-    if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
-        // DUChainReadLocker lock; // Needed if printing debug statement
-        // qCDebug(KDEV_ZIG) << " result " << decl->abstractType()->toString();
+    if (auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext())) {
+        //DUChainReadLocker lock; // Needed if printing debug statement
+        //qCDebug(KDEV_ZIG) << " result " << decl->toString();
+        if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
+            auto d = alias->aliasedDeclaration();
+            //qCDebug(KDEV_ZIG) << " attr is alias";
+            encounterTopContext(d.indexedTopContext().data());
+        } else if (v.lastTopContext() != topContext()) {
+            // qCDebug(KDEV_ZIG) << " attr is not alias";
+            encounterTopContext(v.lastTopContext());
+        }
         encounterLvalue(DeclarationPointer(decl));
     }
     else {
-        // qCDebug(KDEV_ZIG) << " no result ";
+        //qCDebug(KDEV_ZIG) << " no result ";
         encounterUnknown();
     }
     return Continue;

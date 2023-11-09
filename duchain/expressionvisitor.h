@@ -13,6 +13,7 @@
 #include <language/duchain/ducontext.h>
 
 #include "zignode.h"
+#include "zigdebug.h"
 #include "parsesession.h"
 
 namespace Zig
@@ -72,8 +73,21 @@ public:
     VisitResult callBuiltinImport(const ZigNode &node);
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
 
+    // Imported contexts
+    void encounterTopContext(const KDevelop::TopDUContext* ctx)
+    {
+        // qCDebug(KDEV_ZIG) << "Encounter top context" << ctx;
+        m_lastTopContext = ctx;
+    }
+
+    const KDevelop::TopDUContext* lastTopContext() const
+    {
+        return m_lastTopContext ? m_lastTopContext: topContext();
+    }
+
 protected:
     ParseSession* m_session;
+    const KDevelop::TopDUContext* m_lastTopContext = nullptr;
 
 };
 

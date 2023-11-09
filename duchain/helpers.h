@@ -73,7 +73,9 @@ public:
                                                   const KDevelop::TopDUContext* topContext);
 
     static KDevelop::Declaration* accessAttribute(const KDevelop::AbstractType::Ptr accessed,
-        const QString& attribute, const KDevelop::TopDUContext* topContext) {
+                                                  const QString& attribute,
+                                                  const KDevelop::TopDUContext* topContext)
+    {
         return accessAttribute(accessed, KDevelop::IndexedIdentifier(KDevelop::Identifier(attribute)), topContext);
     }
 

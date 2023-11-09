@@ -7,6 +7,7 @@ const assert = std.debug.assert;
 const Index = Ast.Node.Index;
 const Tag = Ast.Node.Tag;
 // const VisitResult = Ast.VisitResult;
+const INVALID_TOKEN = std.math.maxInt(Index);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -250,25 +251,25 @@ export fn destroy_error(ptr: ?*ZError) void {
 export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType) Index {
     if (ptr) |ast| {
         if (index >= ast.nodes.len) {
-            return 0;
+            return INVALID_TOKEN;
         }
         if (ast.fullIf(index)) |r| {
             return switch (capture) {
-                .Payload => r.payload_token orelse 0,
-                .Error => r.error_token orelse 0,
+                .Payload => r.payload_token orelse INVALID_TOKEN,
+                .Error => r.error_token orelse INVALID_TOKEN,
             };
         }
         if (ast.fullWhile(index)) |r| {
             return switch (capture) {
-                .Payload => r.payload_token orelse 0,
-                .Error => r.error_token orelse 0,
+                .Payload => r.payload_token orelse INVALID_TOKEN,
+                .Error => r.error_token orelse INVALID_TOKEN,
             };
         }
 
         if (ast.fullFor(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token,
-                .Error => 0,
+                .Error => INVALID_TOKEN,
             };
         }
 
@@ -276,7 +277,7 @@ export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType)
         if (tag == .@"errdefer") {
             return switch (capture) {
                 .Payload => ast.nodes.items(.data)[index].lhs,
-                .Error => 0,
+                .Error => INVALID_TOKEN,
             };
         }
         if (tag == .@"catch") {
@@ -287,7 +288,7 @@ export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType)
             }
         }
     }
-    return 0;
+    return INVALID_TOKEN;
 }
 
 
@@ -572,78 +573,78 @@ export fn ast_fn_param_token(ptr: ?*Ast, index: Index, i: u32) Index {
                 var it = proto.iterate(ast);
                 while (it.next()) |param| {
                     if (j == i) {
-                        return param.name_token orelse 0;
+                        return param.name_token orelse INVALID_TOKEN;
                     }
                     j += 1;
                 }
             }
         }
     }
-    return 0;
+    return INVALID_TOKEN;
 }
 
+// Note: 0 is a valid token
 export fn ast_node_main_token(ptr: ?*Ast, index: Index) Index {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             return ast.nodes.items(.main_token)[index];
         }
     }
-    return 0;
+    return INVALID_TOKEN;
 }
 
 
 // Lookup the token index that has the name/identifier for the given node
 export fn ast_node_name_token(ptr: ?*Ast, index: Index) Index {
     if (ptr) |ast| {
-        if (index >= ast.nodes.len) {
-            return 0;
+        if (index < ast.nodes.len) {
+            const tag = ast.nodes.items(.tag)[index];
+            // std.log.warn("zig: findNodeIdentifier {} {s}", .{index, @tagName(tag)});
+            return switch (tag) {
+                // Data lhs is the identifier
+                .call,
+                .call_comma,
+                .call_one,
+                .call_one_comma,
+                .async_call,
+                .async_call_comma,
+                .async_call_one,
+                .async_call_one_comma,
+                .struct_init_one,
+                .struct_init_one_comma,
+                .struct_init,
+                .struct_init_comma,
+                .fn_decl => ast_node_name_token(ast, ast.nodes.items(.data)[index].lhs),
+
+                // Data rhs is the identifier
+                .field_access => ast.nodes.items(.data)[index].rhs,
+
+                // Token after main_token is the name for all these
+                .fn_proto_simple,
+                .fn_proto_multi,
+                .fn_proto_one,
+                .fn_proto,
+                .global_var_decl,
+                .local_var_decl,
+                .simple_var_decl,
+                .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
+
+                // Main token is identifier
+                .identifier,
+                .string_literal,
+                .builtin_call,
+                .builtin_call_comma,
+                .builtin_call_two,
+                .builtin_call_two_comma,
+                .container_field,
+                .container_field_init,
+                .container_field_align => ast.nodes.items(.main_token)[index],
+                .test_decl => ast.nodes.items(.data)[index].lhs,
+                else => INVALID_TOKEN,
+            };
         }
-        const tag = ast.nodes.items(.tag)[index];
-        // std.log.warn("zig: findNodeIdentifier {} {s}", .{index, @tagName(tag)});
-        return switch (tag) {
-            // Data lhs is the identifier
-            .call,
-            .call_comma,
-            .call_one,
-            .call_one_comma,
-            .async_call,
-            .async_call_comma,
-            .async_call_one,
-            .async_call_one_comma,
-            .struct_init_one,
-            .struct_init_one_comma,
-            .struct_init,
-            .struct_init_comma,
-            .fn_decl => ast_node_name_token(ast, ast.nodes.items(.data)[index].lhs),
-
-            // Data rhs is the identifier
-            .field_access => ast.nodes.items(.data)[index].rhs,
-
-            // Token after main_token is the name for all these
-            .fn_proto_simple,
-            .fn_proto_multi,
-            .fn_proto_one,
-            .fn_proto,
-            .global_var_decl,
-            .local_var_decl,
-            .simple_var_decl,
-            .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
-
-            // Main token is identifier
-            .identifier,
-            .string_literal,
-            .builtin_call,
-            .builtin_call_comma,
-            .builtin_call_two,
-            .builtin_call_two_comma,
-            .container_field,
-            .container_field_init,
-            .container_field_align => ast.nodes.items(.main_token)[index],
-            .test_decl => ast.nodes.items(.data)[index].lhs,
-            else => 0,
-        };
     }
-    return 0;
+    return INVALID_TOKEN;
 }
 
 fn indexOfNodeWithTag(ast: Ast, start_token: Index, tag: Tag) ?Index {
@@ -856,8 +857,8 @@ export fn ast_array_type_sentinel(ptr: ?*Ast, node: Index) ArrayTypeSentinel {
 }
 
 const IfData = extern struct {
-    payload_token: Index = 0,
-    error_token: Index = 0,
+    payload_token: Index = INVALID_TOKEN,
+    error_token: Index = INVALID_TOKEN,
     cond_expr: Index = 0,
     then_expr: Index = 0,
     else_expr: Index = 0,
@@ -868,8 +869,8 @@ export fn ast_if_data(ptr: ?*Ast, node: Index) IfData {
         if (node < ast.nodes.len) {
             if (ast.fullIf(node)) |data| {
                 return IfData{
-                    .payload_token = data.payload_token orelse 0,
-                    .error_token = data.error_token orelse 0,
+                    .payload_token = data.payload_token orelse INVALID_TOKEN,
+                    .error_token = data.error_token orelse INVALID_TOKEN,
                     .cond_expr = data.ast.cond_expr,
                     .then_expr = data.ast.then_expr,
                     .else_expr = data.ast.else_expr,
@@ -890,7 +891,7 @@ const VarDataInfo = packed struct {
 };
 
 const VarData = extern struct {
-    lib_name: Index = 0,
+    lib_name: Index = INVALID_TOKEN,
     type_node: Index = 0,
     align_node: Index = 0,
     addrspace_node: Index = 0,
@@ -904,7 +905,7 @@ export fn ast_var_data(ptr: ?*Ast, node: Index) VarData {
         if (node < ast.nodes.len) {
             if (ast.fullVarDecl(node)) |data| {
                 return VarData{
-                    .lib_name = data.lib_name orelse 0,
+                    .lib_name = data.lib_name orelse INVALID_TOKEN,
                     .type_node = data.ast.type_node,
                     .align_node = data.ast.align_node,
                     .addrspace_node = data.ast.addrspace_node,

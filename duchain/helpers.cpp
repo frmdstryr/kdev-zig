@@ -69,14 +69,25 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     }
 
     if (auto s = accessed.dynamicCast<StructureType>()) {
-        const auto isModule = s->modifiers() & ModuleModifier;
-        // Lookup in the original declaration's module context
         DUChainReadLocker lock;
-        const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext;
-        if (auto ctx = s->internalContext(moduleContext)) {
+
+        //qCDebug(KDEV_ZIG) << "access attr" << attribute << "on" << s->toString() << "top context"
+        //    << (topContext->owner() ? topContext->owner()->toString() : "none");
+
+        // If declaration is an alias in the current context
+        // walk the alias and read the attribute in the aliased decls context
+        if (auto decl = s->declaration(topContext)) {
+            if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
+                auto d = alias->aliasedDeclaration();
+                return accessAttribute(d.declaration()->abstractType(), attribute, d.indexedTopContext().data());
+            }
+        }
+
+        if (auto ctx = s->internalContext(topContext)) {
             auto decls = ctx->findDeclarations(
-                attribute, CursorInRevision::invalid(),
-                topContext,
+                attribute,
+                CursorInRevision::invalid(),
+                nullptr,
                 DUContext::DontSearchInParent
             );
             if (!decls.isEmpty()) {

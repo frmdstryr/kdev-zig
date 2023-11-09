@@ -19,16 +19,20 @@
 #define DUCHAINTEST_H
 
 #include <QObject>
+#include <QDir>
 
 class DUChainTest : public QObject
 {
     Q_OBJECT
+public:
+    explicit DUChainTest(QObject* parent = nullptr);
+    ~DUChainTest() override = default;
 
 private Q_SLOTS:
     void initTestCase();
     void sanityCheckFn();
     void sanityCheckVar();
-    void sanityCheckImport();
+    void sanityCheckStdImport();
     void cleanupTestCase();
     void testVarBindings();
     void testVarBindings_data();
@@ -36,7 +40,10 @@ private Q_SLOTS:
     void testVarUsage_data();
     void testVarType();
     void testVarType_data();
+    void sanityCheckImportStruct();
 
+private:
+    QDir assetsDir;
 
 };
 

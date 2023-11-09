@@ -36,6 +36,15 @@ using namespace KDevelop;
 
 QTEST_MAIN(DUChainTest)
 
+DUChainTest::DUChainTest(QObject* parent): QObject(parent)
+{
+    assetsDir = QDir(DUCHAIN_ZIG_DATA_DIR);
+    if (!assetsDir.cd("data")) {
+        qFatal("Failed find data directory for test files. Aborting");
+    }
+}
+
+
 // Parse start_line,start_col,end_line,end_col into range
 static RangeInRevision rangeFromString(const QString &values) {
     if (values.trimmed() == "invalid") {
@@ -52,33 +61,40 @@ static RangeInRevision rangeFromString(const QString &values) {
 ReferencedTopDUContext parseCode(QString code, QString name)
 {
     using namespace Zig;
-
+    qDebug() << "\nparse" << name << "\n";
     IndexedString document(name);
     ParseSessionData *sessionData = new ParseSessionData(document, code.toUtf8());
     ParseSession session(ParseSessionData::Ptr(nullptr));
     session.setData(ParseSessionData::Ptr(sessionData));
     session.parse();
 
+    qDebug() << "Building decls";
     ZigNode root = {session.ast(), 0};
     DeclarationBuilder declarationBuilder;
-    UseBuilder useBuilder(document);
-
     declarationBuilder.setParseSession(&session);
-    useBuilder.setParseSession(&session);
-
     ReferencedTopDUContext context = declarationBuilder.build(document, &root);
+
+    qDebug() << "Building uses";
+    UseBuilder useBuilder(document);
+    useBuilder.setParseSession(&session);
     useBuilder.buildUses(&root);
 
     return context;
 }
 
-ReferencedTopDUContext parseStdCode(QString path)
+ReferencedTopDUContext parseFile(QString filename)
 {
-    QString filename = Zig::Helper::stdLibPath(nullptr) + "/" + path;
     QFile f(filename);
     Q_ASSERT(f.open(QIODevice::ReadOnly));
     return parseCode(f.readAll(), filename);
 }
+
+ReferencedTopDUContext parseStdCode(QString path)
+{
+    QString filename = Zig::Helper::stdLibPath(nullptr) + "/" + path;
+    return parseFile(filename);
+}
+
 
 DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, bool firstChildContext=false)
 {
@@ -125,7 +141,7 @@ void DUChainTest::initTestCase()
 void DUChainTest::sanityCheckFn()
 {
     QString code("fn main() !void {}");
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -140,7 +156,7 @@ void DUChainTest::sanityCheckFn()
 void DUChainTest::sanityCheckVar()
 {
     QString code("const X = 1;");
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -152,14 +168,14 @@ void DUChainTest::sanityCheckVar()
     QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int"));
 }
 
-void DUChainTest::sanityCheckImport()
+void DUChainTest::sanityCheckStdImport()
 {
-    return; // Disable/
+    // return; // Disable/
     // FIXME: This only works if modules imported inside std are already parsed...
     ReferencedTopDUContext timecontext = parseStdCode("time.zig");
     ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
     QString code("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;");
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier("std"));
@@ -177,6 +193,36 @@ void DUChainTest::sanityCheckImport()
     QCOMPARE(decl->abstractType()->toString(), QString("comptime_int"));
 }
 
+void DUChainTest::sanityCheckImportStruct()
+{
+    ReferencedTopDUContext moda = parseFile(assetsDir.filePath("a.zig"));
+    ReferencedTopDUContext modb = parseFile(assetsDir.filePath("b.zig"));
+    QVERIFY(modb.data());
+    DUChainReadLocker lock;
+
+    qDebug() << "moda decls are:";
+    for (const KDevelop::Declaration *decl : moda->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+    qDebug() << "modb decls are:";
+    for (const KDevelop::Declaration *decl : modb->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+    auto decls = modb->findDeclarations(Identifier("a"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig"));
+    QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
+    decls = modb->findDeclarations(Identifier("A"));
+    QCOMPARE(decls.size(), 1);
+    //QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig") + "::A");
+
+    decls = modb->findDeclarations(Identifier("c"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), "u8");
+}
+
 
 void DUChainTest::cleanupTestCase()
 {
@@ -189,7 +235,7 @@ void DUChainTest::testVarBindings()
     QFETCH(QString, bindings);
     QFETCH(QString, contextName);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -238,7 +284,7 @@ void DUChainTest::testVarUsage()
     QFETCH(QString, container);
     QFETCH(QString, uses);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -316,7 +362,7 @@ void DUChainTest::testVarType()
     QFETCH(QString, container);
 
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
     QVERIFY(context.data());
 
     DUChainReadLocker lock;

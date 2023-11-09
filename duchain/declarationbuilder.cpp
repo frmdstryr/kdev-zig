@@ -22,6 +22,7 @@
 
 #include <language/duchain/problem.h>
 #include <language/duchain/duchainlock.h>
+#include <language/duchain/aliasdeclaration.h>
 #include <language/editor/documentrange.h>
 
 #include "expressionvisitor.h"
@@ -66,7 +67,7 @@ ReferencedTopDUContext DeclarationBuilder::build(
 VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeKind kind = node.kind();
-    // qDebug() << "DeclarationBuilder::visitNode" << node.index << "kind" << kind;
+    // qCDebug(KDEV_ZIG) << "DeclarationBuilder::visitNode" << node.index << "kind" << kind << "tag" << node.tag();
     switch (kind) {
     case Module:
        return buildDeclaration<Module>(node, parent);
@@ -83,7 +84,7 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
     case FieldDecl:
         return buildDeclaration<FieldDecl>(node, parent);
     case VarDecl:
-        return buildDeclaration<VarDecl>(node, parent);
+        return visitVarDecl(node, parent);
     case ErrorDecl:
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
@@ -203,7 +204,8 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     closeType();
     // {
     //     lock.lock();
-    //     qDebug()  << "Create decl node:" << node.index << " name:" << identifier.toString() << " range:" << declRange << " kind:" << Kind << "type" << type->toString();
+    //     qCDebug(KDEV_ZIG)  << "Create decl node:" << node.index << "name:" << identifier.toString() << "range:" << declRange << "kind:" << Kind << "type:" << type->toString()
+    //         << "context:" << (currentContext()->owner() ? currentContext()->owner()->toString() : "none");
     // }
     return decl;
 }
@@ -251,6 +253,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         ExpressionVisitor v(session, currentContext());
         v.startVisiting(arg, parent);
         return v.lastType();
+
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
         // const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
@@ -463,6 +466,37 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
 
         closeDeclaration();
     }
+}
+
+VisitResult DeclarationBuilder::visitVarDecl(const ZigNode &node, const ZigNode &parent)
+{
+    if (node.mainToken() == "const") {
+        // qCDebug(KDEV_ZIG) << "decl" << node.spellingName() << "is const";
+        ZigNode valueNode = node.varValue();
+        if (!valueNode.isRoot()) {
+            ExpressionVisitor v(session, currentContext());
+            v.startVisiting(valueNode, node);
+            if (v.lastTopContext() != topContext()) {
+                // eg const Foo = @import("foo.zig").Foo;
+                QString name = node.spellingName();
+                auto range = editorFindSpellingRange(node, name);
+                DUChainWriteLocker lock;
+                auto *decl = createDeclaration<AliasDecl>(node, parent, name, false, range);
+                Q_ASSERT(decl);
+                if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
+                    IndexedDeclaration d(v.lastDeclaration().data());
+                    alias->setAliasedDeclaration(d);
+                    // qCDebug(KDEV_ZIG) <<
+                    //     "Create alias " << name << "to" << v.lastDeclaration()->toString()
+                    //     << "in" << v.lastTopContext()->owner()->toString()
+                    //     << "from" << topContext()->owner()->toString();
+                }
+                closeDeclaration();
+                return Continue;
+            }
+        }
+    }
+    return buildDeclaration<VarDecl>(node, parent);
 }
 
 VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
