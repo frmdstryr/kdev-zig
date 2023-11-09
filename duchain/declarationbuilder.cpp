@@ -491,6 +491,8 @@ VisitResult DeclarationBuilder::visitVarDecl(const ZigNode &node, const ZigNode 
                     //     << "in" << v.lastTopContext()->owner()->toString()
                     //     << "from" << topContext()->owner()->toString();
                 }
+                // Must visit children
+                ContextBuilder::visitChildren(node, parent);
                 closeDeclaration();
                 return Continue;
             }
