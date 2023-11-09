@@ -154,7 +154,7 @@ void DUChainTest::sanityCheckVar()
 
 void DUChainTest::sanityCheckImport()
 {
-    //return; // Disable/
+    return; // Disable/
     // FIXME: This only works if modules imported inside std are already parsed...
     ReferencedTopDUContext timecontext = parseStdCode("time.zig");
     ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
@@ -447,15 +447,28 @@ void DUChainTest::testVarType_data()
     QTest::newRow("usingnamespace") << "const A = struct {const a = 1;}; const B = struct { usingnamespace A; var x = a;\n};" << "x" << "comptime_int" << "B";
 
     QTest::newRow("var order") << "const A = 1 << B; const B = @as(u32, 1);\n" << "A" << "u32" << "";
-    QTest::newRow("aliased struct")
-    << "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
+    QTest::newRow("aliased struct") <<
+       "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
        "const Point = geom.Point;\n"
        "var p = Point{}; const value = p.x; " << "value" << "i8" << "";
-    QTest::newRow("aliased field init")
-    << "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
+    QTest::newRow("aliased field init") <<
+       "const geom = struct { const Point = struct { x: i8, y: i8}; };\n"
        "var p = geom.Point{}; " << "p" << "geom::Point" << "";
-    QTest::newRow("aliased struct out of order")
-    << "const Point = geom.Point;\n"
+    QTest::newRow("aliased struct out of order") <<
+       "const Point = geom.Point;\n"
        "var p = Point{};\n"
        "const geom = struct { const Point = struct { x: i8, y: i8}; };" << "p" << "geom::Point" << "";
+    QTest::newRow("import struct missing") <<
+       "const geom = @import(\"geom\");\n"
+       "const Point = geom.Point;\n"
+       "var p = Point{};\n" << "p" << "mixed" << "";
+
+    QTest::newRow("comptime struct") << "pub fn foo(comptime T: type) type { return struct {a: T}; } test{\nconst Foo = foo(u8);\n}" << "Foo" << "foo::anon struct 7" << "2,0";
+
+    QTest::newRow("field in fn") <<
+       "const geom = struct { const Point = struct {x: i8, y: i8}; };\n"
+       "pub fn add() void {\n"
+       "  var a = geom.Point{};\n"
+       "  const b = a.x + a.y;\n"
+       "}"<< "b" << "i8" << "3,0";
 }

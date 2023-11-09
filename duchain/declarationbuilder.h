@@ -119,7 +119,8 @@ private:
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 
     // Before children are visited
-    void updateFunctionDecl(const ZigNode &node);
+    void updateFunctionDeclArgs(const ZigNode &node);
+    void updateFunctionDeclReturnType(const ZigNode &node);
 
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);

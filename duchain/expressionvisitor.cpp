@@ -3,6 +3,7 @@
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/duchainutils.h>
 #include <language/duchain/duchain.h>
+#include <language/duchain/functiondeclaration.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -16,7 +17,7 @@
 namespace Zig
 {
 
-static VisitResult expressionVistorCallback(ZAst* ast, NodeIndex node, NodeIndex parent, void *data)
+static VisitResult expressionVisitorCallback(ZAst* ast, NodeIndex node, NodeIndex parent, void *data)
 {
     ExpressionVisitor *visitor = static_cast<ExpressionVisitor *>(data);
     Q_ASSERT(visitor);
@@ -26,7 +27,7 @@ static VisitResult expressionVistorCallback(ZAst* ast, NodeIndex node, NodeIndex
 }
 
 
-ExpressionVisitor::ExpressionVisitor(ParseSession* session, KDevelop::DUContext* context)
+ExpressionVisitor::ExpressionVisitor(ParseSession* session, const KDevelop::DUContext* context)
     : DynamicLanguageExpressionVisitor(context)
     , m_session(session)
 {
@@ -48,7 +49,7 @@ ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::
 void ExpressionVisitor::visitChildren(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    ast_visit(node.ast, node.index, expressionVistorCallback, this);
+    ast_visit(node.ast, node.index, expressionVisitorCallback, this);
 }
 
 void ExpressionVisitor::startVisiting(const ZigNode &node, const ZigNode &parent)
@@ -169,6 +170,9 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_if:
     //case NodeTag_if_simple: // not expr?
         return visitIf(node, parent);
+    case NodeTag_return:
+        visitChildren(node, parent);
+        return Continue;
     case NodeTag_switch:
     case NodeTag_switch_comma:
     case NodeTag_switch_case:
@@ -385,14 +389,23 @@ VisitResult ExpressionVisitor::visitContainerDecl(const ZigNode &node, const Zig
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
-            encounter(decl->abstractType(), DeclarationPointer(decl));
-        } else {
-            encounterUnknown();
+            encounterLvalue(DeclarationPointer(decl));
+            return Continue;
         }
-    } else {
-        encounterUnknown();
     }
-    return Recurse;
+
+    DUChainReadLocker lock;
+    auto contexts = context()->childContexts();
+    if (!contexts.isEmpty()) {
+        auto bodyContext = contexts.first();
+        auto decls = bodyContext->findLocalDeclarations(Identifier(node.containerName()));
+        if (!decls.isEmpty()) {
+            encounterLvalue(DeclarationPointer(decls.last()));
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNode &parent)
@@ -558,6 +571,19 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
+    if (auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>()) {
+        auto fn = decl->type<FunctionType>();
+        Q_ASSERT(fn);
+        if (auto builtin = fn->returnType().dynamicCast<BuiltinType>()) {
+            // If the fn returns type attempt to look inside and get the
+            if (builtin->toString() == QLatin1String("type")) {
+
+                return Continue;
+            }
+        }
+        encounter(fn->returnType());
+        return Continue;
+    }
     if (auto func = v.lastType().dynamicCast<FunctionType>()) {
         encounter(func->returnType());
     } else {

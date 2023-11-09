@@ -3,6 +3,7 @@ set(kdevzigduchain_SRC
     contextbuilder.cpp
     declarationbuilder.cpp
     expressionvisitor.cpp
+    functionvisitor.cpp
     usebuilder.cpp
     zignode.cpp
     zigducontext.cpp

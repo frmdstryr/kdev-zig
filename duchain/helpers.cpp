@@ -121,22 +121,6 @@ static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
     );
 }
 
-static bool declarationIsInDirectParentUsingnamespace(const Declaration* decl, const DUContext* ctx)
-{
-    // var/field/function
-    return (decl->context() == ctx->parentContext());
-        //return true;
-    // usingnamespace
-    //return true;
-    // This is slow
-    // for (const auto &imp: ctx->importedParentContexts()) {
-    //     if (decl->context() == imp.context(nullptr))
-    //         return true;
-    // }
-    //return false;
-}
-
-
 /**
  * In Zig order does not matter in container bodies
  */
@@ -177,11 +161,11 @@ Declaration* Helper::declarationForName(
             declarations = currentContext->findDeclarations(identifier, findUntil);
 
             for (Declaration* declaration: declarations) {
-                // qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
+                //qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
                 if (declaration->context()->type() != DUContext::Class
                     || (
                         contextTypeIsFnOrClass(currentContext)
-                        // && declarationIsInDirectParentUsingnamespace(declaration, currentContext)
+                        && declaration->context() == currentContext->parentContext()
                     )
                 ) {
                      // Declarations from struct decls must be referenced through `self.<foo>`, except

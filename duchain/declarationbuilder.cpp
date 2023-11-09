@@ -33,6 +33,7 @@
 #include "zigdebug.h"
 #include "types/optionaltype.h"
 #include "types/slicetype.h"
+#include "functionvisitor.h"
 
 namespace Zig
 {
@@ -108,7 +109,7 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
 
     switch (kind) {
     case FunctionDecl:
-        updateFunctionDecl(node);
+        updateFunctionDeclArgs(node);
         break;
 #define BUILD_CAPTURE_FOR(K) case K: maybeBuildCapture<K>(node, parent); break
         BUILD_CAPTURE_FOR(If);
@@ -121,6 +122,10 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
         break;
     }
     ContextBuilder::visitChildren(node, parent);
+
+    if (kind == FunctionDecl) {
+        updateFunctionDeclReturnType(node);
+    }
 
 
 }
@@ -142,7 +147,6 @@ VisitResult DeclarationBuilder::buildDeclaration(const ZigNode &node, const ZigN
         DUChainWriteLocker lock;
         topContext()->setOwner(decl);
     }
-
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) {
         eventuallyAssignInternalContext();
@@ -162,7 +166,14 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         //QStringList parts = session->document().str().split("/");
         //identifier = Identifier("@import " + parts.last().replace(".zig", ""));
         identifier = Identifier(session->document().str());
-    } else if (Kind == TestDecl) {
+    }
+    else if (Kind == ContainerDecl) {
+        if (name.isEmpty()) {
+            identifier = Identifier(node.containerName());
+            declRange = node.mainTokenRange();
+        }
+    }
+    else if (Kind == TestDecl) {
         if (name.isEmpty()) {
             // include space so it cannot be referenced as a variable
             identifier = Identifier("test 0");
@@ -324,7 +335,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     Q_UNUSED(decl);
 }
 
-void DeclarationBuilder::updateFunctionDecl(const ZigNode &node)
+void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
 {
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
@@ -353,14 +364,39 @@ void DeclarationBuilder::updateFunctionDecl(const ZigNode &node)
 
         }
     }
+    DUChainWriteLocker lock;
+    //fn->setReturnType(returnType);
+    decl->setAbstractType(fn);
+}
 
+void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
+{
+    Q_ASSERT(hasCurrentDeclaration());
+    auto *decl = currentDeclaration();
+    auto fn = decl->type<FunctionType>();
     ZigNode typeNode = node.returnType();
     Q_ASSERT(!typeNode.isRoot());
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(typeNode, node);
-
     // Zig does not use error_union for inferred return types...
     auto returnType = v.lastType();
+
+    if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
+        if (builtin->toString() == QLatin1String("type")) {
+            NodeData data = node.data();
+            ZigNode bodyNode = {node.ast, data.rhs};
+            FunctionVisitor f(session, currentContext());
+            f.startVisiting(bodyNode, node);
+            //if (f.returnType()) {
+            //    // TODO: Should wrap in some special type that tells
+            //    // can be filled in later at call sites?
+            returnType = f.returnType();
+            //} else {
+            //    qCDebug(KDEV_ZIG) << "Return type null";
+            //}
+        }
+    }
+
     if (node.returnsInferredError()) {
         auto *errType = new ErrorType();
         errType->setBaseType(returnType);

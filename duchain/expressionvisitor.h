@@ -22,7 +22,7 @@ namespace Zig
 class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor
 {
 public:
-    explicit ExpressionVisitor(ParseSession* session, KDevelop::DUContext* context);
+    explicit ExpressionVisitor(ParseSession* session, const KDevelop::DUContext* context);
 
     /// Use this to construct the expression-visitor recursively
     ExpressionVisitor(Zig::ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext=nullptr);

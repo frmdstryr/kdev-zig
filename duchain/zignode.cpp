@@ -168,11 +168,18 @@ QString ZigNode::mainToken() const
     return "";
 }
 
+KDevelop::RangeInRevision ZigNode::mainTokenRange() const
+{
+    TokenIndex tok = ast_node_main_token(ast, index);
+    return tokenRange(tok);
+}
+
+
 
 QString ZigNode::containerName() const
 {
     if (kind() == ContainerDecl) {
-        return QString("%1_anon_%2").arg(mainToken()).arg(index);
+        return QString("anon %1 %2").arg(mainToken()).arg(index);
     }
     return "";
 }

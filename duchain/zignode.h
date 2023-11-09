@@ -59,6 +59,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     SourceRange extent() const;
     QString spellingName() const;
     QString mainToken() const;
+    // Create an anon name for a container
     QString containerName() const;
     QString tokenSlice(TokenIndex i) const;
 
@@ -79,6 +80,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;
     KDevelop::RangeInRevision range() const;
+    KDevelop::RangeInRevision mainTokenRange() const;
 
     inline bool isRoot() const { return index == 0; }
 };
