@@ -47,7 +47,7 @@ constexpr bool hasContext(NodeKind kind)
 
 constexpr bool hasChildren(NodeKind kind)
 {
-    return hasContext(kind) || (kind == Module || kind == VarDecl);
+    return hasContext(kind) || (kind == Module || kind == VarDecl || kind == FieldDecl);
 }
 
 constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
@@ -61,7 +61,8 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == ErrorDecl      ? DUContext::Enum
         :  kind == TestDecl       ? DUContext::Other
         :  kind == BlockDecl      ? DUContext::Other
-        // :  kind == VarDecl        ? DUContext::Other
+        :  kind == VarDecl        ? DUContext::Other
+        :  kind == FieldDecl      ? DUContext::Other
         :  kind == If             ? DUContext::Other
         :  kind == For            ? DUContext::Other
         :  kind == While          ? DUContext::Other

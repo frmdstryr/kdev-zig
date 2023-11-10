@@ -65,18 +65,27 @@ public:
      * @param accessed Type (Structure or Unsure) that should have this attribute.
      * @param attribute Which attribute to look for.
      * @param topContext Top context (for this file?)
+     * @param excludedRange Exclude declarations at this range
      * @return Declaration* of the attribute, or null.
      *  If UnsureType with >1 matching attributes, returns an arbitrary choice.
      **/
-    static KDevelop::Declaration* accessAttribute(const KDevelop::AbstractType::Ptr accessed,
-                                                  const KDevelop::IndexedIdentifier& attribute,
-                                                  const KDevelop::TopDUContext* topContext);
+    static KDevelop::Declaration* accessAttribute(
+        const KDevelop::AbstractType::Ptr accessed,
+        const KDevelop::IndexedIdentifier& attribute,
+        const KDevelop::TopDUContext* topContext
+    );
 
-    static KDevelop::Declaration* accessAttribute(const KDevelop::AbstractType::Ptr accessed,
-                                                  const QString& attribute,
-                                                  const KDevelop::TopDUContext* topContext)
+    static KDevelop::Declaration* accessAttribute(
+        const KDevelop::AbstractType::Ptr accessed,
+        const QString& attribute,
+        const KDevelop::TopDUContext* topContext
+    )
     {
-        return accessAttribute(accessed, KDevelop::IndexedIdentifier(KDevelop::Identifier(attribute)), topContext);
+        return accessAttribute(
+            accessed,
+            KDevelop::IndexedIdentifier(KDevelop::Identifier(attribute)),
+            topContext
+        );
     }
 
 
@@ -93,10 +102,17 @@ public:
      * Shortcut that finds the declaration if the type casts to an Identified
      * type. May return null
      */
-    static KDevelop::Declaration*  declForIdentifiedType(
+    static KDevelop::Declaration*  declarationForIdentifiedType(
         const KDevelop::AbstractType::Ptr type,
         const KDevelop::TopDUContext* topContext);
 
+
+    /**
+     * Find top context/file from declaration.
+     * TODO: Is there an existing fn that does this???
+     */
+    static KDevelop::TopDUContext* declarationTopContext(
+        const KDevelop::Declaration* declaration);
 };
 
 }

@@ -125,7 +125,6 @@ private:
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult visitVarDecl(const ZigNode &node, const ZigNode &parent);
     VisitResult visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
 };
 

@@ -302,7 +302,7 @@ VisitResult UseBuilder::visitUnwrapOptional(const ZigNode &node, const ZigNode &
     }
     auto useRange = node.range();
     if (auto s = T.dynamicCast<OptionalType>()) {
-        auto decl = Helper::declForIdentifiedType(s->baseType(), nullptr);
+        auto decl = Helper::declarationForIdentifiedType(s->baseType(), nullptr);
         if (decl && decl->range() != useRange) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }
@@ -328,7 +328,7 @@ VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
     v.startVisiting(owner, node);
     auto useRange = node.range();
     if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
-        auto decl = Helper::declForIdentifiedType(ptr->baseType(), nullptr);
+        auto decl = Helper::declarationForIdentifiedType(ptr->baseType(), nullptr);
         if (decl && decl->range() != useRange) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
         }

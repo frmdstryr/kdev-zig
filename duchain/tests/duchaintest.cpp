@@ -197,6 +197,7 @@ void DUChainTest::sanityCheckImportStruct()
 {
     ReferencedTopDUContext moda = parseFile(assetsDir.filePath("a.zig"));
     ReferencedTopDUContext modb = parseFile(assetsDir.filePath("b.zig"));
+    ReferencedTopDUContext modc = parseFile(assetsDir.filePath("c.zig"));
     QVERIFY(modb.data());
     DUChainReadLocker lock;
 
@@ -210,6 +211,11 @@ void DUChainTest::sanityCheckImportStruct()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
+    qDebug() << "modc decls are:";
+    for (const KDevelop::Declaration *decl : modc->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
     auto decls = modb->findDeclarations(Identifier("a"));
     QCOMPARE(decls.size(), 1);
     QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig"));
@@ -219,6 +225,18 @@ void DUChainTest::sanityCheckImportStruct()
     //QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig") + "::A");
 
     decls = modb->findDeclarations(Identifier("c"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), "u8");
+
+    decls = modc->findDeclarations(Identifier("x"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), "B");
+
+    decls = modc->findDeclarations(Identifier("y"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), "A");
+
+    decls = modc->findDeclarations(Identifier("z"));
     QCOMPARE(decls.size(), 1);
     QCOMPARE(decls.first()->abstractType()->toString(), "u8");
 }

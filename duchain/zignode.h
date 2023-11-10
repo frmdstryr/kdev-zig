@@ -58,6 +58,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     ZigNode nextChild() const;
     SourceRange extent() const;
     QString spellingName() const;
+    KDevelop::RangeInRevision spellingRange() const;
     QString mainToken() const;
     // Create an anon name for a container
     QString containerName() const;

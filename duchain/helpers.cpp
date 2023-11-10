@@ -55,9 +55,10 @@ void Helper::scheduleDependency(const IndexedString& dependency, int betterThanP
     }
 }
 
-Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
-                                     const KDevelop::IndexedIdentifier& attribute,
-                                     const KDevelop::TopDUContext* topContext)
+Declaration* Helper::accessAttribute(
+    const AbstractType::Ptr accessed,
+    const KDevelop::IndexedIdentifier& attribute,
+    const KDevelop::TopDUContext* topContext)
 {
     if ( ! accessed || !topContext ) {
         return nullptr;
@@ -70,28 +71,17 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
 
     if (auto s = accessed.dynamicCast<StructureType>()) {
         DUChainReadLocker lock;
-
-        //qCDebug(KDEV_ZIG) << "access attr" << attribute << "on" << s->toString() << "top context"
-        //    << (topContext->owner() ? topContext->owner()->toString() : "none");
-
-        // If declaration is an alias in the current context
-        // walk the alias and read the attribute in the aliased decls context
-        if (auto decl = s->declaration(topContext)) {
-            if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
-                auto d = alias->aliasedDeclaration();
-                return accessAttribute(d.declaration()->abstractType(), attribute, d.indexedTopContext().data());
-            }
-        }
-
-        if (auto ctx = s->internalContext(topContext)) {
-            auto decls = ctx->findDeclarations(
+        const bool isModule = s->modifiers() & ModuleModifier;
+        if (auto ctx = s->internalContext(isModule ? nullptr : topContext)) {
+            auto decls = ctx->findLocalDeclarations(
                 attribute,
                 CursorInRevision::invalid(),
-                nullptr,
+                topContext,
+                AbstractType::Ptr(),
                 DUContext::DontSearchInParent
             );
             if (!decls.isEmpty()) {
-                return decls.first();
+                return decls.last();
             }
         }
     }
@@ -113,7 +103,7 @@ Declaration* Helper::accessAttribute(const AbstractType::Ptr accessed,
     return nullptr;
 }
 
-Declaration* Helper::declForIdentifiedType(
+Declaration* Helper::declarationForIdentifiedType(
         const KDevelop::AbstractType::Ptr type,
         const KDevelop::TopDUContext* topContext)
 {
@@ -176,7 +166,7 @@ Declaration* Helper::declarationForName(
                 if (declaration->context()->type() != DUContext::Class
                     || (
                         contextTypeIsFnOrClass(currentContext)
-                        && declaration->context() == currentContext->parentContext()
+                        //&& declaration->context() == currentContext->parentContext()
                     )
                 ) {
                      // Declarations from struct decls must be referenced through `self.<foo>`, except
@@ -202,6 +192,29 @@ Declaration* Helper::declarationForName(
     return nullptr;
 }
 
+
+KDevelop::TopDUContext* Helper::declarationTopContext(const KDevelop::Declaration* decl)
+{
+    if (!decl)
+        return nullptr;
+
+    if (auto alias = dynamic_cast<const AliasDeclaration*>(decl)) {
+        auto d = alias->aliasedDeclaration();
+        return d.indexedTopContext().data();
+    }
+    if (auto s = decl->abstractType().dynamicCast<StructureType>()) {
+        if (s->modifiers() & ModuleModifier) {
+            DUChainReadLocker lock;
+            if (auto ctx = s->internalContext(nullptr)) {
+                return ctx->topContext();
+            }
+        }
+    }
+    // if (decl->internalContext()) {
+    //     return decl->internalContext()->topContext();
+    // }
+    return nullptr;
+}
 
 KDevelop::DUContext* Helper::thisContext(
         const KDevelop::CursorInRevision& location,

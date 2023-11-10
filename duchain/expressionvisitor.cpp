@@ -352,15 +352,13 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
-            if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
-                auto d = alias->aliasedDeclaration();
-                //qCDebug(KDEV_ZIG) << name << "is alias";
-                encounterTopContext(d.indexedTopContext().data());
+            if (auto top = Helper::declarationTopContext(decl)) {
+                encounterTopContext(top);
+                // {
+                //     DUChainReadLocker lock;
+                //     qCDebug(KDEV_ZIG) << "found top for" << decl->toString();
+                // }
             }
-            // {
-            //     DUChainReadLocker lock;
-            //     qCDebug(KDEV_ZIG) << "found" << decl->toString();
-            // }
             encounterLvalue(DeclarationPointer(decl));
         } else {
             // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
@@ -370,6 +368,53 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             //encounter(AbstractType::Ptr(delayedType));
             encounterUnknown();
         }
+    }
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ExpressionVisitor v(this);
+    NodeData data = node.data();
+    ZigNode owner = {node.ast, data.lhs};
+    v.visitNode(owner, node);
+    QString attr = node.tokenSlice(data.rhs);
+    const auto T = v.lastType();
+    // {
+    //     DUChainReadLocker lock; // Needed if printing debug statement
+    //     const auto isModule = T->modifiers() & ModuleModifier;
+    //     qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
+    // }
+
+    if (auto s = T.dynamicCast<SliceType>()) {
+        // Slices have builtin len / ptr types
+        if (attr == "len") {
+            encounter(BuiltinType::newFromName("usize"));
+        } else if (attr == "ptr") {
+            auto ptr = new PointerType();
+            ptr->setModifiers(s->modifiers());
+            ptr->setBaseType(s->elementType());
+            encounter(AbstractType::Ptr(ptr));
+        } else {
+            encounterUnknown();
+        }
+        return Continue;
+    }
+
+    if (auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext())) {
+        //DUChainReadLocker lock; // Needed if printing debug statement
+        //qCDebug(KDEV_ZIG) << " result " << decl->toString();
+        if (auto top = Helper::declarationTopContext(decl)) {
+            encounterTopContext(top);
+        } else if (v.lastTopContext() != topContext()) {
+            encounterTopContext(v.lastTopContext());
+        }
+        encounterLvalue(DeclarationPointer(decl));
+    }
+    else {
+        //qCDebug(KDEV_ZIG) << " no result ";
+        encounterUnknown();
     }
     return Continue;
 }
@@ -590,7 +635,6 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
         if (auto builtin = fn->returnType().dynamicCast<BuiltinType>()) {
             // If the fn returns type attempt to look inside and get the
             if (builtin->toString() == QLatin1String("type")) {
-
                 return Continue;
             }
         }
@@ -606,56 +650,6 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
-{
-    Q_UNUSED(parent);
-    ExpressionVisitor v(this);
-    NodeData data = node.data();
-    ZigNode owner = {node.ast, data.lhs};
-    v.visitNode(owner, node);
-    QString attr = node.tokenSlice(data.rhs);
-    const auto T = v.lastType();
-    // Root modules have a ModuleModifier set
-    // {
-    //     DUChainReadLocker lock; // Needed if printing debug statement
-    //     const auto isModule = T->modifiers() & ModuleModifier;
-    //     qCDebug(KDEV_ZIG) << "Access " << attr << " on" << (isModule ? "module" : "") << v.lastType()->toString() ;
-    // }
-
-    if (auto s = T.dynamicCast<SliceType>()) {
-        // Slices have builtin len / ptr types
-        if (attr == "len") {
-            encounter(BuiltinType::newFromName("usize"));
-        } else if (attr == "ptr") {
-            auto ptr = new PointerType();
-            ptr->setModifiers(s->modifiers());
-            ptr->setBaseType(s->elementType());
-            encounter(AbstractType::Ptr(ptr));
-        } else {
-            encounterUnknown();
-        }
-        return Continue;
-    }
-
-    if (auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext())) {
-        //DUChainReadLocker lock; // Needed if printing debug statement
-        //qCDebug(KDEV_ZIG) << " result " << decl->toString();
-        if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
-            auto d = alias->aliasedDeclaration();
-            //qCDebug(KDEV_ZIG) << " attr is alias";
-            encounterTopContext(d.indexedTopContext().data());
-        } else if (v.lastTopContext() != topContext()) {
-            // qCDebug(KDEV_ZIG) << " attr is not alias";
-            encounterTopContext(v.lastTopContext());
-        }
-        encounterLvalue(DeclarationPointer(decl));
-    }
-    else {
-        //qCDebug(KDEV_ZIG) << " no result ";
-        encounterUnknown();
-    }
-    return Continue;
-}
 
 VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNode &parent)
 {

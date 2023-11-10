@@ -165,6 +165,11 @@ KDevelop::RangeInRevision ZigNode::mainTokenRange() const
     return tokenRange(tok);
 }
 
+KDevelop::RangeInRevision ZigNode::spellingRange() const
+{
+    TokenIndex tok = ast_node_name_token(ast, index);
+    return tokenRange(tok);
+}
 
 
 QString ZigNode::containerName() const

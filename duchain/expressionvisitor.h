@@ -19,7 +19,6 @@
 namespace Zig
 {
 
-
 class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor
 {
 public:

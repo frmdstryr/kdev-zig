@@ -84,7 +84,8 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
     case FieldDecl:
         return buildDeclaration<FieldDecl>(node, parent);
     case VarDecl:
-        return visitVarDecl(node, parent);
+        //return visitVarDecl(node, parent);
+        return buildDeclaration<VarDecl>(node, parent);
     case ErrorDecl:
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
@@ -128,6 +129,12 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
         updateFunctionDeclReturnType(node);
     }
 
+    if (kind == VarDecl|| kind == ParamDecl || kind  == FieldDecl) {
+        if (auto s = lastType().dynamicCast<StructureType>()) {
+            DUChainWriteLocker lock;
+            currentContext()->addImportedParentContext(s->internalContext(nullptr));
+        }
+    }
 
 }
 
@@ -300,6 +307,7 @@ void DeclarationBuilder::setType(Declaration *decl, IdentifiedType *type)
 template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 {
+    // (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl)
     decl->setAbstractType(AbstractType::Ptr(type));
 }
 
@@ -466,39 +474,6 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
 
         closeDeclaration();
     }
-}
-
-VisitResult DeclarationBuilder::visitVarDecl(const ZigNode &node, const ZigNode &parent)
-{
-    if (node.mainToken() == "const") {
-        // qCDebug(KDEV_ZIG) << "decl" << node.spellingName() << "is const";
-        ZigNode valueNode = node.varValue();
-        if (!valueNode.isRoot()) {
-            ExpressionVisitor v(session, currentContext());
-            v.startVisiting(valueNode, node);
-            if (v.lastTopContext() != topContext()) {
-                // eg const Foo = @import("foo.zig").Foo;
-                QString name = node.spellingName();
-                auto range = editorFindSpellingRange(node, name);
-                DUChainWriteLocker lock;
-                auto *decl = createDeclaration<AliasDecl>(node, parent, name, false, range);
-                Q_ASSERT(decl);
-                if (auto alias = dynamic_cast<AliasDeclaration*>(decl)) {
-                    IndexedDeclaration d(v.lastDeclaration().data());
-                    alias->setAliasedDeclaration(d);
-                    // qCDebug(KDEV_ZIG) <<
-                    //     "Create alias " << name << "to" << v.lastDeclaration()->toString()
-                    //     << "in" << v.lastTopContext()->owner()->toString()
-                    //     << "from" << topContext()->owner()->toString();
-                }
-                // Must visit children
-                ContextBuilder::visitChildren(node, parent);
-                closeDeclaration();
-                return Continue;
-            }
-        }
-    }
-    return buildDeclaration<VarDecl>(node, parent);
 }
 
 VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
