@@ -72,6 +72,7 @@ ReferencedTopDUContext parseCode(QString code, QString name)
     ZigNode root = {session.ast(), 0};
     DeclarationBuilder declarationBuilder;
     declarationBuilder.setParseSession(&session);
+    declarationBuilder.setAstAfterPrebuilding(true);
     ReferencedTopDUContext context = declarationBuilder.build(document, &root);
 
     qDebug() << "Building uses";
@@ -460,6 +461,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("array access") << "var x: [2]u8 = undefined; var y = x[0];" << "y" << "u8" << "";
     QTest::newRow("array len") << "var x: [2]u8 = undefined; var y = x.len;" << "y" << "usize" << "";
     QTest::newRow("array slice") << "var x: [2]u8 = undefined; var y = x[0..];" << "y" << "[]u8" << "";
+    QTest::newRow("array init") << "var x = [_]u8{1, 2};" << "x" << "[2]u8" << "";
+    QTest::newRow("array init comma") << "var x = [_]u8{1, 2, 3,};" << "x" << "[3]u8" << "";
+    QTest::newRow("array init one") << "var x = [_]u8{1};" << "x" << "[1]u8" << "";
+    QTest::newRow("array init one comma") << "var x = [_]u8{1,};" << "x" << "[1]u8" << "";
     QTest::newRow("array ptr struct fn") << "const A = struct { pub fn foo() bool{} }; var x: [2]*A = undefined; var y = x[0].foo();" << "y" << "bool" << "";
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
     QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
@@ -527,12 +532,23 @@ void DUChainTest::testVarType_data()
        "const Point = geom.Point;\n"
        "var p = Point{};\n" << "p" << "mixed" << "";
 
-    QTest::newRow("comptime struct") << "pub fn foo(comptime T: type) type { return struct {a: T}; } test{\nconst Foo = foo(u8);\n}" << "Foo" << "foo::anon struct 7" << "2,0";
-
     QTest::newRow("field in fn") <<
        "const geom = struct { const Point = struct {x: i8, y: i8}; };\n"
        "pub fn add() void {\n"
        "  var a = geom.Point{};\n"
        "  const b = a.x + a.y;\n"
        "}"<< "b" << "i8" << "3,0";
+
+    QTest::newRow("comptime type simple") << "pub fn Foo() type { return u8; } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
+    QTest::newRow("comptime struct") <<
+        "pub fn Foo(comptime T: type) type { return struct {a: T}; }\n"
+        "test{const x = Foo(u8);\n}" << "x" << "Foo::anon struct 7" << "2,0";
+    QTest::newRow("comptime struct fn") <<
+        "pub fn Bar() type { return Foo(u8); } \n"
+        "pub fn Foo(comptime T: type) type { return struct {a: T}; } \n"
+        "test{\nconst B = Bar(u8);\n}" << "B" << "Foo::anon struct 15" << "3,0";
+    QTest::newRow("recursive comptime struct fn") <<
+        "pub fn Foo(comptime T: ?type) type { if (T == null) {return Foo(u8);} return struct {a: T}; } \n"
+        "test{\nconst F = Foo(null);\n}" << "F" << "Foo::anon struct 17" << "3,0";
 }

@@ -33,6 +33,7 @@ private Q_SLOTS:
     void sanityCheckFn();
     void sanityCheckVar();
     void sanityCheckStdImport();
+    void sanityCheckImportStruct();
     void cleanupTestCase();
     void testVarBindings();
     void testVarBindings_data();
@@ -40,7 +41,7 @@ private Q_SLOTS:
     void testVarUsage_data();
     void testVarType();
     void testVarType_data();
-    void sanityCheckImportStruct();
+
 
 private:
     QDir assetsDir;

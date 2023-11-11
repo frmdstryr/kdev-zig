@@ -35,6 +35,7 @@ ParseSessionData::~ParseSessionData()
 {
     if (m_ast != nullptr) {
         destroy_ast(m_ast);
+        m_ast = nullptr;
     }
 }
 

@@ -63,12 +63,18 @@ public:
      */
     void setPrebuilding(bool prebuilding) {m_prebuilding = prebuilding;}
 
+    // Currently testing only seems to mess up highlighting
+    void setAstAfterPrebuilding(bool enable) {
+        m_setAstAfterPrebuilding = enable;
+    }
+
     VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
     virtual void visitChildren(const ZigNode &node, const ZigNode &parent) override;
 
-private:
+protected:
     // true if the first of the two performed passes is currently active
     bool m_prebuilding = false;
+    bool m_setAstAfterPrebuilding = false;
 
     template <NodeKind Kind>
     VisitResult buildDeclaration(const ZigNode &node, const ZigNode &parent);

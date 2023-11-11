@@ -19,11 +19,8 @@ namespace Zig
 class KDEVZIGDUCHAIN_EXPORT FunctionVisitor
 {
 public:
-    explicit FunctionVisitor(ParseSession* session, KDevelop::DUContext* context);
-
-    /// Use this to construct the expression-visitor recursively
-    explicit FunctionVisitor(FunctionVisitor* parent, const KDevelop::DUContext* overrideContext=nullptr);
-    ~FunctionVisitor() = default;
+    explicit FunctionVisitor(ParseSession* session, const KDevelop::DUContext* context);
+    ~FunctionVisitor();
 
     ParseSession* session() {return m_session;}
 
@@ -63,12 +60,12 @@ public:
     }
 
     /**
-     * @brief Retrieve this visitor's last encountered type.
+     * @brief Retrieve this visitor's last return type.
      * This is never a null type.
      */
     inline KDevelop::AbstractType::Ptr returnType() const
     {
-        if (!m_returnType || m_returnCount != 1) {
+        if (!m_returnType) { // || m_returnCount != 1) {
             return unknownType();
         }
         return m_returnType;
@@ -89,13 +86,24 @@ public:
 
     KDevelop::AbstractType::Ptr unknownType() const;
 
+
+    // This function is already being visited
+    inline bool alreadyVisiting() const
+    {
+        return !m_canVisit;
+    }
+
 protected:
+    bool m_canVisit = true;
     const KDevelop::DUContext* m_context;
     ParseSession* m_session;
-    FunctionVisitor* m_parentVisitor = nullptr;
     uint32_t m_returnCount = 0;
     KDevelop::AbstractType::Ptr m_returnType;
     KDevelop::DeclarationPointer m_returnDeclaration;
+
+    // Track contexts entered to avoid stack overflow from recursion...
+    static QMutex recursionLock;
+    static QSet<const KDevelop::DUContext*> recursionContexts;
 
 };
 

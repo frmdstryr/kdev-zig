@@ -628,6 +628,7 @@ uint32_t ast_extra_data(const ZAst *tree, ExtraDataIndex index);
 ArrayTypeSentinel ast_array_type_sentinel(const ZAst *tree, NodeIndex node);
 IfData ast_if_data(const ZAst *tree, NodeIndex node);
 VarData ast_var_data(const ZAst *tree, NodeIndex node);
+uint32_t ast_array_init_size(const ZAst *tree, NodeIndex node);
 NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);
@@ -637,7 +638,7 @@ uint32_t ast_fn_param_count(const ZAst *tree, NodeIndex node);
 NodeIndex ast_fn_param_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
 
-// NOTE: These return INVALID_TOKEN on error, 0 is a valid token
+// NOTE: These return INVALID_TOKEN on error 0 is a valid token
 TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType capture);

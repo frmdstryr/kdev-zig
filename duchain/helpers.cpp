@@ -72,11 +72,12 @@ Declaration* Helper::accessAttribute(
     if (auto s = accessed.dynamicCast<StructureType>()) {
         DUChainReadLocker lock;
         const bool isModule = s->modifiers() & ModuleModifier;
-        if (auto ctx = s->internalContext(isModule ? nullptr : topContext)) {
+        const auto moduleContext = isModule ? nullptr : topContext;
+        if (auto ctx = s->internalContext(moduleContext)) {
             auto decls = ctx->findLocalDeclarations(
                 attribute,
                 CursorInRevision::invalid(),
-                topContext,
+                moduleContext,
                 AbstractType::Ptr(),
                 DUContext::DontSearchInParent
             );

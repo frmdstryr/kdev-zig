@@ -42,6 +42,8 @@ public:
 
     ~ParseSessionData() override;
 
+    ZAst *ast() const { return m_ast; }
+
 private:
     friend class ParseSession;
 

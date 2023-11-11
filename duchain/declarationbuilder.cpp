@@ -35,6 +35,7 @@
 #include "types/optionaltype.h"
 #include "types/slicetype.h"
 #include "functionvisitor.h"
+#include "types/comptimetype.h"
 
 namespace Zig
 {
@@ -47,7 +48,6 @@ ReferencedTopDUContext DeclarationBuilder::build(
 {
     ReferencedTopDUContext ctx(updateContext);
     //m_correctionHelper.reset(new CorrectionHelper(url, this));
-
     // The declaration builder needs to run twice,
     // so it can resolve uses of structs, functions, etc
     // which are used before they are defined .
@@ -57,6 +57,13 @@ ReferencedTopDUContext DeclarationBuilder::build(
         prebuilder.setPrebuilding(true);
         ctx = prebuilder.build(url, node, updateContext);
         qCDebug(KDEV_ZIG) << "Second declarationbuilder pass";
+
+        if (m_setAstAfterPrebuilding) {
+            Q_ASSERT(ctx);
+            Q_ASSERT(session->data());
+            DUChainWriteLocker lock;
+            ctx->setAst(IAstContainer::Ptr(session->data()));
+        }
     }
     else {
         qCDebug(KDEV_ZIG) << "Prebuilding declarations";
@@ -84,7 +91,6 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
     case FieldDecl:
         return buildDeclaration<FieldDecl>(node, parent);
     case VarDecl:
-        //return visitVarDecl(node, parent);
         return buildDeclaration<VarDecl>(node, parent);
     case ErrorDecl:
         return buildDeclaration<ErrorDecl>(node, parent);
@@ -132,7 +138,11 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
     if (kind == VarDecl|| kind == ParamDecl || kind  == FieldDecl) {
         if (auto s = lastType().dynamicCast<StructureType>()) {
             DUChainWriteLocker lock;
-            currentContext()->addImportedParentContext(s->internalContext(nullptr));
+            if (auto decl = s->declaration(nullptr)) {
+                if (decl->topContext() != currentDeclaration()->topContext()) {
+                    currentContext()->addImportedParentContext(decl->internalContext());
+                }
+            }
         }
     }
 
@@ -394,17 +404,8 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
 
     if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
         if (builtin->toString() == QLatin1String("type")) {
-            NodeData data = node.data();
-            ZigNode bodyNode = {node.ast, data.rhs};
-            FunctionVisitor f(session, currentContext());
-            f.startVisiting(bodyNode, node);
-            //if (f.returnType()) {
-            //    // TODO: Should wrap in some special type that tells
-            //    // can be filled in later at call sites?
-            returnType = f.returnType();
-            //} else {
-            //    qCDebug(KDEV_ZIG) << "Return type null";
-            //}
+            // DUChainWriteLocker lock;
+            returnType = new ComptimeType(node.index, decl);
         }
     }
 

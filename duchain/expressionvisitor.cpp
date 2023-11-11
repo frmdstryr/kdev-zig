@@ -15,6 +15,8 @@
 #include "helpers.h"
 #include "zigdebug.h"
 #include "nodetraits.h"
+#include "types/comptimetype.h"
+#include "functionvisitor.h"
 
 namespace Zig
 {
@@ -157,6 +159,12 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitOrelse(node, parent);
     case NodeTag_array_type:
         return visitArrayType(node, parent);
+    case NodeTag_array_init:
+    case NodeTag_array_init_comma:
+    case NodeTag_array_init_one:
+    case NodeTag_array_init_one_comma:
+    // TODO: aray_init_dot
+        return visitArrayInit(node, parent);
     case NodeTag_array_access:
         return visitArrayAccess(node, parent);
     case NodeTag_for_range:
@@ -629,19 +637,34 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
-    if (auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>()) {
-        auto fn = decl->type<FunctionType>();
-        Q_ASSERT(fn);
-        if (auto builtin = fn->returnType().dynamicCast<BuiltinType>()) {
-            // If the fn returns type attempt to look inside and get the
-            if (builtin->toString() == QLatin1String("type")) {
+    if (auto func = v.lastType().dynamicCast<FunctionType>()) {
+        if (auto comptimeType = func->returnType().dynamicCast<ComptimeType>()) {
+            // Chain must be locked the whole time here
+            // or the ast ptr may become invalid
+
+            DUChainReadLocker lock;
+            auto fnDecl = comptimeType->valueDeclaration();
+            if (!fnDecl.isValid() || !comptimeType->ast()) {
+                encounterUnknown();
                 return Continue;
             }
+            ZigNode fnNode = {comptimeType->ast(), comptimeType->node()};
+            if (fnNode.tag() != NodeTag_fn_decl) {
+                // TODO: Handle fn not in same file
+                qCWarning(KDEV_ZIG) << "Invalid fn node when resolving comptime type";
+                encounterUnknown();
+                return Continue;
+            }
+
+            NodeData data = fnNode.data();
+            ZigNode bodyNode = {fnNode.ast, data.rhs};
+            FunctionVisitor f(session(), fnDecl.declaration()->internalContext());
+            // TODO: Fill in arguments?
+            f.startVisiting(bodyNode, fnNode);
+            //qCDebug(KDEV_ZIG) << "Fn return " << f.returnType()->toString();
+            encounter(f.returnType());
+            return Continue;
         }
-        encounter(fn->returnType());
-        return Continue;
-    }
-    if (auto func = v.lastType().dynamicCast<FunctionType>()) {
         encounter(func->returnType());
     } else {
         // TODO: Handle builtins?
@@ -829,6 +852,30 @@ VisitResult ExpressionVisitor::visitArrayType(const ZigNode &node, const ZigNode
     }
 
     encounter(AbstractType::Ptr(sliceType));
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitArrayInit(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    //ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor v(this);
+    v.visitNode(lhs, node);
+    if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+        uint32_t n = ast_array_init_size(node.ast, node.index);
+        if (n && static_cast<uint32_t>(slice->dimension()) != n) {
+            auto newSlice = static_cast<SliceType*>(slice->clone());
+            Q_ASSERT(newSlice);
+            newSlice->setDimension(n);
+            encounter(AbstractType::Ptr(newSlice));
+        } else {
+            encounter(slice);
+        }
+    } else {
+        encounterUnknown();
+    }
     return Continue;
 }
 

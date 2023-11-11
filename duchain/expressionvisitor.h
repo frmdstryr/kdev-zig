@@ -19,6 +19,7 @@
 namespace Zig
 {
 
+
 class KDEVZIGDUCHAIN_EXPORT ExpressionVisitor : public KDevelop::DynamicLanguageExpressionVisitor
 {
 public:
@@ -63,6 +64,7 @@ public:
 
     VisitResult visitPointerTypeAligned(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSlice(const ZigNode &node, const ZigNode &parent);
     VisitResult visitForRange(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
@@ -87,6 +89,7 @@ public:
 protected:
     ParseSession* m_session;
     const KDevelop::TopDUContext* m_lastTopContext = nullptr;
+    const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
 
 };
 

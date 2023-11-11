@@ -90,8 +90,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         }
     }
 
+    setMinimumFeatures(minimumFeatures() | TopDUContext::AllDeclarationsContextsUsesAndAST);
 
-   {
+    {
         UrlParseLock urlLock(document());
         if (abortRequested() || !isUpdateRequired(ParseSession::languageString())) {
             return;
@@ -192,13 +193,11 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         }
     }
 
-    if (minimumFeatures() & TopDUContext::AST) {
-        DUChainWriteLocker lock;
-        context->setAst(IAstContainer::Ptr(session.data()));
-    }
-
     {
         DUChainWriteLocker lock;
+        if (minimumFeatures() & TopDUContext::AST) {
+            context->setAst(session.data());
+        }
         context->setFeatures(minimumFeatures());
         ParsingEnvironmentFilePointer file = context->parsingEnvironmentFile();
         Q_ASSERT(file);

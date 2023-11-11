@@ -377,7 +377,7 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
                 .EnumDecl
             else
                 .ContainerDecl,
-        .block, .block_semicolon, .block_two, .block_two_semicolon => .BlockDecl,
+        .block, .block_semicolon, .block_two, .block_two_semicolon, .@"comptime" => .BlockDecl,
         .container_field_init, .container_field_align, .container_field => .FieldDecl,
         .error_set_decl => .ErrorDecl,
         // TODO: Param? Import? Detect if template
@@ -923,6 +923,19 @@ export fn ast_var_data(ptr: ?*Ast, node: Index) VarData {
         }
     }
     return VarData{};
+}
+
+
+export fn ast_array_init_size(ptr: ?*Ast, node: Index) u32 {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            var nodes: [2]Index = undefined;
+            if (ast.fullArrayInit(&nodes, node)) |array_data| {
+                return @intCast(array_data.ast.elements.len);
+            }
+        }
+    }
+    return 0;
 }
 
 fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
