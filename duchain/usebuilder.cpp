@@ -99,7 +99,7 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 VisitResult UseBuilder::visitBuiltinCall(const ZigNode &node, const ZigNode &parent)
 {
     QString functionName = node.spellingName();
-    if (functionName == "@import") {
+    if (functionName == QLatin1String("@import")) {
         // Show use range on the string
         ZigNode child = node.nextChild();
         QString importName = child.spellingName();
@@ -224,7 +224,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     v.startVisiting(owner, node);
     const auto T = v.lastType();
     if (auto s = T.dynamicCast<SliceType>()) {
-        if (attr == "len" || attr == "ptr") {
+        if (attr == QLatin1String("len") || attr == QLatin1String("ptr")) {
             return Continue; // Builtins
         }
     }
@@ -353,7 +353,8 @@ VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
         name.isEmpty()
         || BuiltinType::isBuiltinVariable(name)
         || BuiltinType::isBuiltinType(name)
-        || name == "." // TODO
+        || name == QLatin1String("_")
+        || name == QLatin1String(".") // TODO
     ) {
         return Continue;
     }

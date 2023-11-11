@@ -70,7 +70,7 @@ VisitResult FunctionVisitor::visitNode(const ZigNode &node, const ZigNode &paren
 {
     NodeTag tag = node.tag();
     Q_ASSERT(m_canVisit);
-    qCDebug(KDEV_ZIG) << "Function visitor node" << node.index << "tag" << tag;
+    // qCDebug(KDEV_ZIG) << "Function visitor node" << node.index << "tag" << tag;
     switch (tag) {
     case NodeTag_return:
         return visitReturn(node, parent);

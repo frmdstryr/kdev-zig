@@ -53,6 +53,9 @@ public:
     int perProjectConfigPages() const override;
     KDevelop::ConfigPage* perProjectConfigPage(int number, const KDevelop::ProjectConfigOptions& options, QWidget* parent) override;
 
+private Q_SLOTS:
+    void documentActivated(KDevelop::IDocument* doc);
+
 private:
     Highlighting *m_highlighting;
     static LanguageSupport* m_self;

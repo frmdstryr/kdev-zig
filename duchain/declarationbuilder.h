@@ -68,6 +68,11 @@ public:
         m_setAstAfterPrebuilding = enable;
     }
 
+    void setModificationRevision(KDevelop::ModificationRevision revision)
+    {
+        m_revision = revision;
+    }
+
     VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
     virtual void visitChildren(const ZigNode &node, const ZigNode &parent) override;
 
@@ -75,6 +80,7 @@ protected:
     // true if the first of the two performed passes is currently active
     bool m_prebuilding = false;
     bool m_setAstAfterPrebuilding = false;
+    KDevelop::ModificationRevision m_revision;
 
     template <NodeKind Kind>
     VisitResult buildDeclaration(const ZigNode &node, const ZigNode &parent);

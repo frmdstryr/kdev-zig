@@ -192,6 +192,7 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_block_semicolon:
     case NodeTag_grouped_expression:
     case NodeTag_await:
+    case NodeTag_comptime:
         visitChildren(node, parent);
         return Continue;
     }
@@ -211,7 +212,7 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
     Q_ASSERT(ptrType);
     ptrType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(ptrType));
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitAddressOf(const ZigNode &node, const ZigNode &parent)
@@ -225,7 +226,7 @@ VisitResult ExpressionVisitor::visitAddressOf(const ZigNode &node, const ZigNode
     Q_ASSERT(ptrType);
     ptrType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(ptrType));
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitDeref(const ZigNode &node, const ZigNode &parent)
@@ -240,7 +241,7 @@ VisitResult ExpressionVisitor::visitDeref(const ZigNode &node, const ZigNode &pa
     } else {
         encounterUnknown(); // TODO: Set error?
     }
-    return Recurse;
+    return Continue;
 }
 
 
@@ -254,7 +255,7 @@ VisitResult ExpressionVisitor::visitOptionalType(const ZigNode &node, const ZigN
     auto optionalType = new OptionalType();
     optionalType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(optionalType));
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const ZigNode &parent)
@@ -275,7 +276,7 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const Zi
     } else {
         encounterUnknown(); // TODO: Set error?
     }
-    return Recurse;
+    return Continue;
 
 }
 
@@ -397,9 +398,9 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
 
     if (auto s = T.dynamicCast<SliceType>()) {
         // Slices have builtin len / ptr types
-        if (attr == "len") {
+        if (attr == QLatin1String("len")) {
             encounter(BuiltinType::newFromName("usize"));
-        } else if (attr == "ptr") {
+        } else if (attr == QLatin1String("ptr")) {
             auto ptr = new PointerType();
             ptr->setModifiers(s->modifiers());
             ptr->setBaseType(s->elementType());
@@ -438,7 +439,7 @@ VisitResult ExpressionVisitor::visitStructInit(const ZigNode &node, const ZigNod
     } else {
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 
@@ -477,40 +478,40 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
 {
     Q_UNUSED(parent);
     QString name = node.mainToken();
-    if (name == "@This") {
+    if (name == QLatin1String("@This")) {
         return callBuiltinThis(node);
     }
-    else if (name == "@import") {
+    else if (name == QLatin1String("@import")) {
        return callBuiltinImport(node);
     }
-    else if (name == "@fieldParentPtr") {
+    else if (name == QLatin1String("@fieldParentPtr")) {
         return callBuiltinFieldParentPtr(node);
     }
     // todo @Type
     else if (
         // These return the type of the first argument
-        name == "@as"
-        || name == "@sqrt"
-        || name == "@sin"
-        || name == "@cos"
-        || name == "@tan"
-        || name == "@exp"
-        || name == "@exp2"
-        || name == "@log"
-        || name == "@log2"
-        || name == "@log10"
-        || name == "@floor"
-        || name == "@ceil"
-        || name == "@trunc"
-        || name == "@round"
-        || name == "@min"
-        || name == "@max"
-        || name == "@mod"
-        || name == "@rem"
-        || name == "@abs"
-        || name == "@shlExact"
-        || name == "@shrExact"
-        || name == "@mulAdd"
+        name == QLatin1String("@as")
+        || name == QLatin1String("@sqrt")
+        || name == QLatin1String("@sin")
+        || name == QLatin1String("@cos")
+        || name == QLatin1String("@tan")
+        || name == QLatin1String("@exp")
+        || name == QLatin1String("@exp2")
+        || name == QLatin1String("@log")
+        || name == QLatin1String("@log2")
+        || name == QLatin1String("@log10")
+        || name == QLatin1String("@floor")
+        || name == QLatin1String("@ceil")
+        || name == QLatin1String("@trunc")
+        || name == QLatin1String("@round")
+        || name == QLatin1String("@min")
+        || name == QLatin1String("@max")
+        || name == QLatin1String("@mod")
+        || name == QLatin1String("@rem")
+        || name == QLatin1String("@abs")
+        || name == QLatin1String("@shlExact")
+        || name == QLatin1String("@shrExact")
+        || name == QLatin1String("@mulAdd")
     ) {
         ZigNode typeNode = node.nextChild();
         if (typeNode.isRoot()) {
@@ -521,44 +522,44 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
             encounter(v.lastType());
         }
     } else if (
-        name == "@errorName"
-        || name == "@tagName"
-        || name == "@typeName"
-        || name == "@embedFile"
+        name == QLatin1String("@errorName")
+        || name == QLatin1String("@tagName")
+        || name == QLatin1String("@typeName")
+        || name == QLatin1String("@embedFile")
     ) {
         auto slice = new SliceType();
         slice->setSentinel(0);
-        auto elemType = new BuiltinType("u8");
+        auto elemType = BuiltinType::newFromName("u8");
         elemType->setModifiers(BuiltinType::CommonModifiers::ConstModifier);
         slice->setElementType(AbstractType::Ptr(elemType));
         encounter(AbstractType::Ptr(slice));
     } else if (
-        name == "@intFromPtr"
-        || name == "@returnAddress"
+        name == QLatin1String("@intFromPtr")
+        || name == QLatin1String("@returnAddress")
     ) {
         encounter(BuiltinType::newFromName("usize"));
     } else if (
-        name == "@memcpy"
-        || name == "@memset"
-        || name == "@setCold"
-        || name == "@setAlignStack"
-        || name == "@setEvalBranchQuota"
-        || name == "@setFloatMode"
-        || name == "@setRuntimeSafety"
+        name == QLatin1String("@memcpy")
+        || name == QLatin1String("@memset")
+        || name == QLatin1String("@setCold")
+        || name == QLatin1String("@setAlignStack")
+        || name == QLatin1String("@setEvalBranchQuota")
+        || name == QLatin1String("@setFloatMode")
+        || name == QLatin1String("@setRuntimeSafety")
     ) {
         encounter(BuiltinType::newFromName("void"));
     } else if (
-        name == "@alignOf"
-        || name == "@sizeOf"
-        || name == "@bitOffsetOf"
-        || name == "@bitSizeOf"
-        || name == "@offsetOf"
+        name == QLatin1String("@alignOf")
+        || name == QLatin1String("@sizeOf")
+        || name == QLatin1String("@bitOffsetOf")
+        || name == QLatin1String("@bitSizeOf")
+        || name == QLatin1String("@offsetOf")
     ) {
         encounter(BuiltinType::newFromName("comptime_int"));
     } else {
         encounterUnknown();
     }
-    return Recurse;
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::callBuiltinThis(const ZigNode &node)
@@ -986,13 +987,13 @@ VisitResult ExpressionVisitor::visitPointerTypeAligned(const ZigNode &node, cons
 
     ExpressionVisitor typeVisitor(this);
     typeVisitor.visitNode(rhs, node);
-    if (mainToken == "[") {
+    if (mainToken == QLatin1String("[")) {
         // TODO: slice alignment
         auto sliceType = new SliceType();
         Q_ASSERT(sliceType);
         sliceType->setElementType(typeVisitor.lastType());
         encounter(AbstractType::Ptr(sliceType));
-    } else if (mainToken == "*") {
+    } else if (mainToken == QLatin1String("*")) {
         auto ptrType = new PointerType();
         Q_ASSERT(ptrType);
         ptrType->setBaseType(typeVisitor.lastType());
@@ -1000,7 +1001,7 @@ VisitResult ExpressionVisitor::visitPointerTypeAligned(const ZigNode &node, cons
             ptrType->setAlignOf(align);
         }
         auto next_token = ast_node_main_token(node.ast, node.index) + 1;
-        if (node.tokenSlice(next_token) == "]") {
+        if (node.tokenSlice(next_token) == QLatin1String("]")) {
             ptrType->setModifiers(ArrayModifier);
         }
         encounter(AbstractType::Ptr(ptrType));

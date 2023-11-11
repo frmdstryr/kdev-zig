@@ -62,7 +62,8 @@ ReferencedTopDUContext DeclarationBuilder::build(
             Q_ASSERT(ctx);
             Q_ASSERT(session->data());
             DUChainWriteLocker lock;
-            ctx->setAst(IAstContainer::Ptr(session->data()));
+            qCDebug(KDEV_ZIG) << "Attaching AST";
+            ctx->setAst(session->data());
         }
     }
     else {

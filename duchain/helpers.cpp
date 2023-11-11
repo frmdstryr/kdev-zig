@@ -358,7 +358,7 @@ QString Helper::packagePath(const QString &name, const QString& currentFile)
     if (projectPackages.contains(name)) {
         return *projectPackages.constFind(name);
     }
-    if (name == "std") {
+    if (name == QLatin1String("std")) {
         lock.unlock();
         return QDir::cleanPath(stdLibPath(project) + "/std.zig");
     }

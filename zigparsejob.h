@@ -35,18 +35,23 @@ class ParseJob : public KDevelop::ParseJob
 {
     Q_OBJECT
 public:
-    enum {
-        Rescheduled = (KDevelop::TopDUContext::LastFeature << 1),
-    };
 
     ParseJob(const KDevelop::IndexedString &url, KDevelop::ILanguageSupport *languageSupport);
 
+    enum CustomFeatures {
+        Rescheduled = (KDevelop::TopDUContext::LastFeature << 1),
+        AttachASTWithoutUpdating = (Rescheduled << 1), ///< Used when context is up to date, but has no AST attached.
+        UpdateHighlighting = (AttachASTWithoutUpdating << 1) ///< Used when we only need to update highlighting
+    };
+
+    static ParseSessionData::Ptr findParseSessionData(const KDevelop::IndexedString &url);
 protected:
     void run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread) override;
 
 private:
+    QExplicitlySharedDataPointer<ParseSessionData> createSessionData() const;
     LanguageSupport *zig() const;
-    ParseSessionData::Ptr findParseSessionData(const KDevelop::IndexedString &url);
+
 };
 
 }

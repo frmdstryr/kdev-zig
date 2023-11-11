@@ -71,6 +71,11 @@ ParseSessionData::Ptr ParseJob::findParseSessionData(const IndexedString &url)
     return {};
 }
 
+ParseSessionData::Ptr ParseJob::createSessionData() const
+{
+    return ParseSessionData::Ptr(new ParseSessionData(document(), contents().contents, parsePriority()));
+}
+
 
 void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 {
@@ -82,15 +87,36 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     }
 
     qCDebug(KDEV_ZIG) << "Parse job starting for: " << document().toUrl();
-    {
-        QMutexLocker l(&Helper::projectPathLock);
-        Helper::projectSearchPaths.clear();
-        foreach  (KDevelop::IProject* project, ICore::self()->projectController()->projects() ) {
-            Helper::projectSearchPaths.append(QUrl::fromLocalFile(project->path().path()));
-        }
-    }
+    // {
+    //     QMutexLocker l(&Helper::projectPathLock);
+    //     Helper::projectSearchPaths.clear();
+    //     foreach  (KDevelop::IProject* project, ICore::self()->projectController()->projects() ) {
+    //         Helper::projectSearchPaths.append(QUrl::fromLocalFile(project->path().path()));
+    //     }
+    // }
 
-    setMinimumFeatures(minimumFeatures() | TopDUContext::AllDeclarationsContextsUsesAndAST);
+    setMinimumFeatures(minimumFeatures() | TopDUContext::AllDeclarationsContextsAndUses);
+
+    if (minimumFeatures() & AttachASTWithoutUpdating) {
+        // The context doesn't need to be updated, but has no AST attached (restored from disk),
+        // so attach AST to it, without updating DUChain
+        //ParseSession session(createSessionData());
+
+        DUChainWriteLocker lock;
+        auto context = DUChainUtils::standardContextForUrl(document().toUrl());
+        if (!context) {
+            qCDebug(KDEV_ZIG) << "Lost context while attaching AST";
+            return;
+        }
+        //context->setAst(IAstContainer::Ptr(session.data()));
+
+        // This must be done if setAst is called
+        if (minimumFeatures() & UpdateHighlighting) {
+            lock.unlock();
+            languageSupport()->codeHighlighting()->highlightDUChain(context);
+        }
+        return;
+    }
 
     {
         UrlParseLock urlLock(document());
@@ -105,10 +131,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
     ParseSession session(findParseSessionData(document()));
     if (!session.data()) {
-        session.setData(ParseSessionData::Ptr(
-            new ParseSessionData(document(), contents().contents, parsePriority())
-        ));
+        session.setData(createSessionData());
     }
+    session.parse();
 
     if (abortRequested()) {
         return;
@@ -126,8 +151,6 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         toUpdate->clearProblems();
     }
 
-    session.parse();
-
     if (abortRequested()) {
         return;
     }
@@ -139,8 +162,12 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
         DeclarationBuilder builder;
         builder.setParseSession(&session);
-        context = builder.build(document(), &root, toUpdate);
 
+        // For reasons I don't understand when using setAst the highlighting
+        // breaks and the UpdateHighlighting hack used by the clangparsejob
+        // must be used
+        builder.setAstAfterPrebuilding(minimumFeatures() & TopDUContext::AST);
+        context = builder.build(document(), &root, toUpdate);
         setDuChain(context);
 
         if (abortRequested()) {
@@ -161,7 +188,7 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
             context->clearProblems();
         } else {
             ParsingEnvironmentFile *file = new ParsingEnvironmentFile(document());
-            file->setLanguage(IndexedString(LanguageSupport::self()->name()));
+            file->setLanguage(ParseSession::languageString());
 
             context = new TopDUContext(document(), RangeInRevision(0, 0, INT_MAX, INT_MAX), file);
             DUChain::self()->addDocumentChain(context);
@@ -195,9 +222,9 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 
     {
         DUChainWriteLocker lock;
-        if (minimumFeatures() & TopDUContext::AST) {
-            context->setAst(session.data());
-        }
+        // if (minimumFeatures() & TopDUContext::AST) {
+        //     context->setAst(IAstContainer::Ptr(session.data()));
+        // }
         context->setFeatures(minimumFeatures());
         ParsingEnvironmentFilePointer file = context->parsingEnvironmentFile();
         Q_ASSERT(file);

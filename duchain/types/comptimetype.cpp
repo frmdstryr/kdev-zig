@@ -76,7 +76,7 @@ ZAst* ComptimeType::ast() const
         return nullptr;
     if (!topContext->ast())
         return nullptr;
-    if (auto session = dynamic_cast<const ParseSessionData*>(topContext->ast().data())) {
+    if (auto session = ParseSessionData::Ptr(dynamic_cast<ParseSessionData*>(topContext->ast().data()))) {
         return session->ast();
     }
     return nullptr;

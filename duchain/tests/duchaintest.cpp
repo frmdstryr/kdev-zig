@@ -47,7 +47,7 @@ DUChainTest::DUChainTest(QObject* parent): QObject(parent)
 
 // Parse start_line,start_col,end_line,end_col into range
 static RangeInRevision rangeFromString(const QString &values) {
-    if (values.trimmed() == "invalid") {
+    if (values.trimmed() == QLatin1String("invalid")) {
         return RangeInRevision::invalid();
     }
     auto parts = values.trimmed().split(",");
@@ -541,6 +541,7 @@ void DUChainTest::testVarType_data()
 
     QTest::newRow("comptime type simple") << "pub fn Foo() type { return u8; } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
     QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
+    QTest::newRow("comptime type simple block") << "pub fn Foo() type { comptime {return u8;} } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
     QTest::newRow("comptime struct") <<
         "pub fn Foo(comptime T: type) type { return struct {a: T}; }\n"
         "test{const x = Foo(u8);\n}" << "x" << "Foo::anon struct 7" << "2,0";
