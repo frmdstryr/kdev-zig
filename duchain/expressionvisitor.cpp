@@ -568,7 +568,7 @@ VisitResult ExpressionVisitor::callBuiltinThis(const ZigNode &node)
     DUChainReadLocker lock;
     if (auto thisCtx = Helper::thisContext(range.start, topContext())) {
         if (auto owner = thisCtx->owner()) {
-            encounter(owner->abstractType(), DeclarationPointer(owner));
+            encounterLvalue(DeclarationPointer(owner));
             return Recurse;
         }
     }

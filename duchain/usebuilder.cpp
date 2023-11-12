@@ -378,7 +378,7 @@ VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
         return Continue;
     }
 
-    qCDebug(KDEV_ZIG) << "Undefined variable " << name;
+    // qCDebug(KDEV_ZIG) << "Undefined variable " << name;
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
