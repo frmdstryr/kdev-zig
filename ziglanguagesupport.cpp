@@ -59,8 +59,6 @@ LanguageSupport::LanguageSupport(QObject *parent, const QVariantList &args)
 
     new CodeCompletion(this, new CompletionModel(this), name());
 
-    connect(ICore::self()->documentController(), &IDocumentController::documentActivated,
-            this, &LanguageSupport::documentActivated);
 }
 
 LanguageSupport::~LanguageSupport()
@@ -119,55 +117,6 @@ KDevelop::ConfigPage* LanguageSupport::perProjectConfigPage(int number, const KD
     }
     return nullptr;
 }
-
-void LanguageSupport::documentActivated(IDocument* doc)
-{
-    TopDUContext::Features features;
-    {
-        DUChainReadLocker lock;
-        auto ctx = DUChainUtils::standardContextForUrl(doc->url());
-        if (!ctx) {
-            return;
-        }
-
-        auto file = ctx->parsingEnvironmentFile();
-        if (!file) {
-            return;
-        }
-
-        if (file->language() != ParseSession::languageString()) {
-            return;
-        }
-
-        if (file->needsUpdate()) {
-            return;
-        }
-
-        features = ctx->features();
-    }
-
-    const auto indexedUrl = IndexedString(doc->url());
-
-    auto sessionData = ParseJob::findParseSessionData(indexedUrl);
-    if (sessionData) {
-        return;
-    }
-
-    if ((features & TopDUContext::AllDeclarationsContextsAndUses) != TopDUContext::AllDeclarationsContextsAndUses) {
-        // the file was parsed in simplified mode, we need to reparse it to get all data
-        // now that its opened in the editor
-        features = TopDUContext::AllDeclarationsContextsAndUses;
-    } else {
-        features = static_cast<TopDUContext::Features>(ParseJob::AttachASTWithoutUpdating | features);
-        if (ICore::self()->languageController()->backgroundParser()->isQueued(indexedUrl)) {
-            // The document is already scheduled for parsing (happens when opening a project with an active document)
-            // The background parser will optimize the previous request out, so we need to update highlighting
-            features = static_cast<TopDUContext::Features>(ParseJob::UpdateHighlighting | features);
-        }
-    }
-    ICore::self()->languageController()->backgroundParser()->addDocument(indexedUrl, features);
-}
-
 
 }
 

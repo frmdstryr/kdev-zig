@@ -5,6 +5,7 @@
 */
 #pragma once
 #include <language/duchain/ducontext.h>
+#include <language/duchain/types/functiontype.h>
 #include "zignode.h"
 #include "parsesession.h"
 
@@ -86,25 +87,24 @@ public:
 
     KDevelop::AbstractType::Ptr unknownType() const;
 
+    /**
+     * Passed to expression visitor to check for recursion
+     */
+    void setCurrentFunction(const KDevelop::FunctionType::Ptr& fn) {
+        m_currentFunction = fn;
+    }
 
-    // This function is already being visited
-    inline bool alreadyVisiting() const
-    {
-        return !m_canVisit;
+    const KDevelop::FunctionType::Ptr& currentFunction() const {
+        return m_currentFunction;
     }
 
 protected:
-    bool m_canVisit = true;
     const KDevelop::DUContext* m_context;
     ParseSession* m_session;
     uint32_t m_returnCount = 0;
+    KDevelop::FunctionType::Ptr m_currentFunction;
     KDevelop::AbstractType::Ptr m_returnType;
     KDevelop::DeclarationPointer m_returnDeclaration;
-
-    // Track contexts entered to avoid stack overflow from recursion...
-    static QMutex recursionLock;
-    static QSet<const KDevelop::DUContext*> recursionContexts;
-
 };
 
 }

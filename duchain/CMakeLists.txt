@@ -15,7 +15,6 @@ set(kdevzigduchain_SRC
     types/optionaltype.cpp
     types/errortype.cpp
     types/slicetype.cpp
-    types/comptimetype.cpp
 )
 
 find_package(Zig MODULE REQUIRED)

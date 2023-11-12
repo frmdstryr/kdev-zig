@@ -35,7 +35,6 @@
 #include "types/optionaltype.h"
 #include "types/slicetype.h"
 #include "functionvisitor.h"
-#include "types/comptimetype.h"
 
 namespace Zig
 {
@@ -57,14 +56,6 @@ ReferencedTopDUContext DeclarationBuilder::build(
         prebuilder.setPrebuilding(true);
         ctx = prebuilder.build(url, node, updateContext);
         qCDebug(KDEV_ZIG) << "Second declarationbuilder pass";
-
-        if (m_setAstAfterPrebuilding) {
-            Q_ASSERT(ctx);
-            Q_ASSERT(session->data());
-            DUChainWriteLocker lock;
-            qCDebug(KDEV_ZIG) << "Attaching AST";
-            ctx->setAst(session->data());
-        }
     }
     else {
         qCDebug(KDEV_ZIG) << "Prebuilding declarations";
@@ -141,7 +132,9 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
             DUChainWriteLocker lock;
             if (auto decl = s->declaration(nullptr)) {
                 if (decl->topContext() != currentDeclaration()->topContext()) {
-                    currentContext()->addImportedParentContext(decl->internalContext());
+                    if (auto ctx = decl->internalContext()) {
+                        currentContext()->addImportedParentContext(ctx);
+                    }
                 }
             }
         }
@@ -387,7 +380,8 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
         }
     }
     DUChainWriteLocker lock;
-    //fn->setReturnType(returnType);
+    // Set the return type to mixed, it will be updated later
+    fn->setReturnType(AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed)));
     decl->setAbstractType(fn);
 }
 
@@ -406,7 +400,15 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
     if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
         if (builtin->toString() == QLatin1String("type")) {
             // DUChainWriteLocker lock;
-            returnType = new ComptimeType(node.index, decl);
+            FunctionVisitor f(session, currentContext());
+            NodeData data = node.data();
+            ZigNode bodyNode = {node.ast, data.rhs};
+            f.setCurrentFunction(fn);
+            f.startVisiting(bodyNode, node);
+            //qCDebug(KDEV_ZIG) << "Fn return " << f.returnType()->toString();
+            auto comptimeType = f.returnType()->clone();
+            comptimeType->setModifiers(ComptimeModifier);
+            returnType = comptimeType;
         }
     }
 

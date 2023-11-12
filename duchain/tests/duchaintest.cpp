@@ -72,7 +72,6 @@ ReferencedTopDUContext parseCode(QString code, QString name)
     ZigNode root = {session.ast(), 0};
     DeclarationBuilder declarationBuilder;
     declarationBuilder.setParseSession(&session);
-    declarationBuilder.setAstAfterPrebuilding(true);
     ReferencedTopDUContext context = declarationBuilder.build(document, &root);
 
     qDebug() << "Building uses";

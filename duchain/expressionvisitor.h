@@ -86,8 +86,28 @@ public:
         return m_lastTopContext ? m_lastTopContext: topContext();
     }
 
+    /**
+     * Set the current function being visited. This is used by the
+     * function visitor to avoid accessing the return type of a recursive
+     * function call.
+     */
+    void setCurrentFunction(const KDevelop::FunctionType::Ptr& fn) {
+        m_currentFunction = fn;
+    }
+
+    const KDevelop::FunctionType::Ptr& currentFunction() const {
+        return m_currentFunction;
+    }
+
+    /**
+     * Check if the given function is being visited in this or any
+     * parent visitor.
+     */
+    bool isFunctionBeingVisited(const KDevelop::FunctionType::Ptr& fn);
+
 protected:
     ParseSession* m_session;
+    KDevelop::FunctionType::Ptr m_currentFunction;
     const KDevelop::TopDUContext* m_lastTopContext = nullptr;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
 

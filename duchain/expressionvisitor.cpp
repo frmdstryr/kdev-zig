@@ -15,7 +15,6 @@
 #include "helpers.h"
 #include "zigdebug.h"
 #include "nodetraits.h"
-#include "types/comptimetype.h"
 #include "functionvisitor.h"
 
 namespace Zig
@@ -627,6 +626,7 @@ VisitResult ExpressionVisitor::callBuiltinFieldParentPtr(const ZigNode &node)
     return Continue;
 }
 
+
 VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
@@ -639,31 +639,10 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
     if (auto func = v.lastType().dynamicCast<FunctionType>()) {
-        if (auto comptimeType = func->returnType().dynamicCast<ComptimeType>()) {
-            // Chain must be locked the whole time here
-            // or the ast ptr may become invalid
-
-            DUChainReadLocker lock;
-            auto fnDecl = comptimeType->valueDeclaration();
-            if (!fnDecl.isValid() || !comptimeType->ast()) {
-                encounterUnknown();
-                return Continue;
-            }
-            ZigNode fnNode = {comptimeType->ast(), comptimeType->node()};
-            if (fnNode.tag() != NodeTag_fn_decl) {
-                // TODO: Handle fn not in same file
-                qCWarning(KDEV_ZIG) << "Invalid fn node when resolving comptime type";
-                encounterUnknown();
-                return Continue;
-            }
-
-            NodeData data = fnNode.data();
-            ZigNode bodyNode = {fnNode.ast, data.rhs};
-            FunctionVisitor f(session(), fnDecl.declaration()->internalContext());
-            // TODO: Fill in arguments?
-            f.startVisiting(bodyNode, fnNode);
-            //qCDebug(KDEV_ZIG) << "Fn return " << f.returnType()->toString();
-            encounter(f.returnType());
+        if (func->returnType()->modifiers() & ComptimeModifier) {
+            auto comptimeType = func->returnType();
+            // TODO: Specialize fn decl
+            encounter(comptimeType);
             return Continue;
         }
         encounter(func->returnType());
