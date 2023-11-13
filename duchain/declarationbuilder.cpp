@@ -210,6 +210,13 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         }
     }
 
+    if (NodeTraits::shouldSetComment(Kind)) {
+        QString comment = node.comment();
+        if (!comment.isEmpty()) {
+            setComment(comment.toUtf8());
+        }
+    }
+
     DUChainWriteLocker lock;
     typename DeclType<Kind>::Type *decl = openDeclaration<typename DeclType<Kind>::Type>(
         identifier,

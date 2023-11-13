@@ -645,8 +645,9 @@ TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType 
 TokenIndex ast_fn_param_token(const ZAst *tree, NodeIndex node, uint32_t i);
 
 
-// NOTE: The caller must free with destroy_string
+// NOTE: The caller must free these with destroy_string
 const char *ast_token_slice(const ZAst *tree, TokenIndex token);
+const char *ast_node_comment(const ZAst *tree, NodeIndex node);
 void destroy_string(const char *str);
 
 // NOTE: Lines are 0 indexed so the first line is 0 not 1

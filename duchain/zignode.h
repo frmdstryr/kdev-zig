@@ -57,6 +57,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     NodeData data() const;
     ZigNode nextChild() const;
     SourceRange extent() const;
+    QString comment() const;
     QString spellingName() const;
     KDevelop::RangeInRevision spellingRange() const;
     QString mainToken() const;

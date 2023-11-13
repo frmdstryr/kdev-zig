@@ -171,6 +171,16 @@ KDevelop::RangeInRevision ZigNode::spellingRange() const
     return tokenRange(tok);
 }
 
+QString ZigNode::comment() const
+{
+    ZigString name = ZigString(ast_node_comment(ast, index));
+    if (name.data()) {
+        return QString::fromUtf8(name.data());
+    }
+    return "";
+
+}
+
 
 QString ZigNode::containerName() const
 {

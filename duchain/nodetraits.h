@@ -113,6 +113,16 @@ constexpr bool canHaveCapture(NodeKind kind)
         || kind == Catch;
 }
 
+constexpr bool shouldSetComment(NodeKind kind)
+{
+    return kind == ContainerDecl
+        || kind == VarDecl
+        || kind == FieldDecl
+        || kind == FunctionDecl
+    ;
+
+}
+
 constexpr bool shouldUseParentName(NodeKind kind, NodeKind parentKind)
 {
     return parentKind == VarDecl && (

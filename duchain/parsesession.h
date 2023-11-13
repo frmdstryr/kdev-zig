@@ -43,6 +43,7 @@ public:
     ~ParseSessionData() override;
 
     ZAst *ast() const { return m_ast; }
+    const QByteArray& source() const { return m_contents; }
 
 private:
     friend class ParseSession;

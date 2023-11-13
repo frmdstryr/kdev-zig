@@ -434,6 +434,136 @@ export fn ast_token_slice(ptr: ?*Ast, token: Index) ?[*]const u8 {
     return null;
 }
 
+fn findNodeComment(ast: *const Ast, node: Index) ?[]const u8 {
+    const first_token = ast.firstToken(node);
+    const loc = ast.tokenLocation(0, first_token);
+    // std.log.warn("node start: {}", .{loc});
+    const comment_end = loc.line_start -| 1;
+    var comment_start: usize = comment_end;
+
+    while (comment_start > 3) {
+        // Find previous next line
+        const remaining = ast.source[0..comment_start];
+        // std.log.warn("remaining: '{s}'", .{remaining});
+        const previous_line_start = std.mem.lastIndexOfScalar(u8, remaining, '\n') orelse 0;
+        // std.log.warn("previous_line_start: '{}'", .{previous_line_start});
+
+        const comment = std.mem.trimLeft(u8, ast.source[previous_line_start..comment_end], " \t\n");
+        if (std.mem.startsWith(u8, comment, "//")) {
+            comment_start = previous_line_start;
+        } else {
+            break;
+        }
+    }
+    const comment = std.mem.trim(u8, ast.source[comment_start..comment_end], " \t\r\n");
+    if (comment.len < 3 or comment.len > 1000) {
+        return null;
+    }
+    return comment;
+}
+
+fn testNodeComment(source: [:0]const u8, tag: Tag, expected: ?[]const u8) !void {
+    const allocator = std.testing.allocator;
+    var ast = try Ast.parse(allocator, source, .zig);
+    defer ast.deinit(allocator);
+
+    var stdout = std.io.getStdOut().writer();
+    try stdout.print("-----------\n{s}\n--------\n", .{source});
+    if (ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+    try std.testing.expect(ast.errors.len == 0);
+
+    const n = indexOfNodeWithTag(ast, 0, tag);
+    if (n == null) {
+        try dumpAstFlat(&ast, stdout);
+        try std.testing.expect(n != null);
+    }
+    const r = findNodeComment(&ast, n.?);
+    if (expected) |value| {
+        try std.testing.expect(r != null);
+        try std.testing.expectEqualSlices(u8, value, r.?);
+    } else {
+        try std.testing.expect(r == null);
+    }
+}
+
+test "node-comment" {
+    try testNodeComment(
+        \\// Test 1
+        \\pub fn foo() void {}
+        , .fn_decl, "// Test 1");
+    try testNodeComment(
+        \\
+        \\// Test 2
+        \\pub fn foo() void {}
+        , .fn_decl, "// Test 2");
+    try testNodeComment(
+        \\
+        \\  // Test 3
+        \\pub fn foo() void {}
+        , .fn_decl, "// Test 3");
+    try testNodeComment(
+        \\
+        \\// Line 1
+        \\// Line 2
+        \\pub fn foo() void {}
+        , .fn_decl, "// Line 1\n// Line 2");
+    try testNodeComment(
+        \\
+        \\// Comment not on fn
+        \\var x = 1;
+        \\pub fn foo() void {}
+        , .fn_decl, null);
+    try testNodeComment(
+        \\// Comment not on fn at start
+        \\var x = 1;
+        \\
+        \\pub fn foo() void {}
+        , .fn_decl, null);
+    try testNodeComment(
+        \\const Foo = struct {
+        \\   // Comment in struct
+        \\   pub fn foo() void {}
+        \\};
+        , .fn_decl, "// Comment in struct");
+    try testNodeComment(
+        \\const Foo = struct {
+        \\   // Comment in struct
+        \\   pub fn foo() void {}
+        \\};
+        , .container_decl_two, null);
+    try testNodeComment(
+        \\// Struct comment
+        \\const Foo = struct {
+        \\   // Comment in struct
+        \\   pub fn foo() void {}
+        \\};
+        , .container_decl_two, "// Struct comment");
+    try testNodeComment(
+        \\const Foo = struct {
+        \\   /// This field is a u8
+        \\   field: u8 = 0,
+        \\};
+        , .container_field_init, "/// This field is a u8");
+}
+
+// Caller must free with destroy_string
+export fn ast_node_comment(ptr: ?*Ast, node: Index) ?[*]const u8 {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (findNodeComment(ast, node)) |comment| {
+                const copy = gpa.allocator().dupeZ(u8, comment) catch {
+                    return null;
+                };
+                return copy.ptr;
+            }
+        }
+    }
+    return null;
+}
+
 export fn ast_token_range(ptr: ?*Ast, token: Index) SourceRange {
     if (ptr) |ast| {
         if (token < ast.tokens.len) {
