@@ -100,13 +100,6 @@ public:
         const KDevelop::AbstractType::Ptr type,
         const KDevelop::TopDUContext* topContext);
 
-
-    /**
-     * Find top context/file from declaration.
-     * TODO: Is there an existing fn that does this???
-     */
-    static KDevelop::TopDUContext* declarationTopContext(
-        const KDevelop::Declaration* declaration);
 };
 
 }

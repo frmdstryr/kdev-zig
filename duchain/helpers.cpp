@@ -208,30 +208,6 @@ Declaration* Helper::declarationForName(
     return nullptr;
 }
 
-
-KDevelop::TopDUContext* Helper::declarationTopContext(const KDevelop::Declaration* decl)
-{
-    if (!decl)
-        return nullptr;
-
-    if (auto alias = dynamic_cast<const AliasDeclaration*>(decl)) {
-        auto d = alias->aliasedDeclaration();
-        return d.indexedTopContext().data();
-    }
-    if (auto s = decl->abstractType().dynamicCast<StructureType>()) {
-        if (s->modifiers() & ModuleModifier) {
-            DUChainReadLocker lock;
-            if (auto ctx = s->internalContext(nullptr)) {
-                return ctx->topContext();
-            }
-        }
-    }
-    // if (decl->internalContext()) {
-    //     return decl->internalContext()->topContext();
-    // }
-    return nullptr;
-}
-
 KDevelop::DUContext* Helper::thisContext(
         const KDevelop::CursorInRevision& location,
         const KDevelop::TopDUContext* topContext)
@@ -404,7 +380,7 @@ QString Helper::qualifierPath(const QString& currentFile)
 {
     QString f = currentFile.endsWith(".zig") ? currentFile.mid(0, currentFile.size()-3) : currentFile;
     if (QDir::isRelativePath(f)) {
-        return ""; f.replace(QDir::separator(), '.');
+        return ""; // f.replace(QDir::separator(), '.');
     }
     auto project = ICore::self()->projectController()->findProjectForUrl(
             QUrl::fromLocalFile(currentFile));
@@ -425,10 +401,14 @@ QString Helper::qualifierPath(const QString& currentFile)
         QDir pkgRoot(pkg.absolutePath());
         QString relPath = pkgRoot.relativeFilePath(f);
         if (relPath.isEmpty() || relPath == '.') {
-            return pkgName + '.';
+            return pkgName;
         }
         if (!relPath.startsWith("..")) {
-            return pkgName + '.' + relPath.replace(QDir::separator(), '.');
+            QString subPkg = relPath.replace(QDir::separator(), '.');
+            if (subPkg.endsWith('.')) {
+                return pkgName + '.' + subPkg.mid(0, subPkg.size()-1);
+            }
+            return pkgName + '.' + subPkg;
         }
     }
     if (project) {

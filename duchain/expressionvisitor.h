@@ -74,18 +74,6 @@ public:
     VisitResult callBuiltinImport(const ZigNode &node);
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
 
-    // Imported contexts
-    void encounterTopContext(const KDevelop::TopDUContext* ctx)
-    {
-        // qCDebug(KDEV_ZIG) << "Encounter top context" << ctx;
-        m_lastTopContext = ctx;
-    }
-
-    const KDevelop::TopDUContext* lastTopContext() const
-    {
-        return m_lastTopContext ? m_lastTopContext: topContext();
-    }
-
     /**
      * Set the current function being visited. This is used by the
      * function visitor to avoid accessing the return type of a recursive
@@ -108,7 +96,6 @@ public:
 protected:
     ParseSession* m_session;
     KDevelop::FunctionType::Ptr m_currentFunction;
-    const KDevelop::TopDUContext* m_lastTopContext = nullptr;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
 
 };

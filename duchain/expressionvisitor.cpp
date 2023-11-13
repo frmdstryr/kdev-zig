@@ -40,7 +40,6 @@ ExpressionVisitor::ExpressionVisitor(ParseSession* session, const KDevelop::DUCo
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
     : DynamicLanguageExpressionVisitor(parent)
     , m_session(parent->session())
-    , m_lastTopContext(parent->m_lastTopContext)
 {
     if ( overrideContext ) {
         m_context = overrideContext;
@@ -287,7 +286,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const Zig
     auto sliceType = new SliceType();
     Q_ASSERT(sliceType);
     sliceType->setSentinel(0);
-    sliceType->setDimension(value.size());
+    sliceType->setDimension(value.size() - 2); // Main token inclues quotes
     sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
 
@@ -360,13 +359,6 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
-            if (auto top = Helper::declarationTopContext(decl)) {
-                encounterTopContext(top);
-                // {
-                //     DUChainReadLocker lock;
-                //     qCDebug(KDEV_ZIG) << "found top for" << decl->toString();
-                // }
-            }
             encounterLvalue(DeclarationPointer(decl));
         } else {
             // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
@@ -410,14 +402,9 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
         return Continue;
     }
 
-    if (auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext())) {
+    if (auto *decl = Helper::accessAttribute(T, attr, topContext())) {
         // DUChainReadLocker lock; // Needed if printing debug statement
         //qCDebug(KDEV_ZIG) << " result " << decl->toString() << "from" << decl->url();
-        if (auto top = Helper::declarationTopContext(decl)) {
-            encounterTopContext(top);
-        } else if (v.lastTopContext() != topContext()) {
-            encounterTopContext(v.lastTopContext());
-        }
         encounterLvalue(DeclarationPointer(decl));
     }
     else {
@@ -602,7 +589,6 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
         if (auto mod = importedModule->owner()) {
             Q_ASSERT(mod->abstractType()->modifiers() & ModuleModifier);
             qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString() << "ctx" << importedModule;
-            encounterTopContext(importedModule);
             encounterLvalue(DeclarationPointer(mod));
             return Continue;
         }
