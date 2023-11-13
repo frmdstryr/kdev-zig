@@ -71,13 +71,14 @@ Declaration* Helper::accessAttribute(
 
     if (auto s = accessed.dynamicCast<StructureType>()) {
         DUChainReadLocker lock;
-        const bool isModule = s->modifiers() & ModuleModifier;
-        const auto moduleContext = isModule ? nullptr : topContext;
-        if (auto ctx = s->internalContext(moduleContext)) {
+        // const bool isModule = s->modifiers() & ModuleModifier;
+        // Context from another file?
+        if (auto ctx = s->internalContext(topContext)) {
+            // qCDebug(KDEV_ZIG) << "access " << attribute << "on" << s->toString() << "from" << ctx->url();
             auto decls = ctx->findLocalDeclarations(
                 attribute,
                 CursorInRevision::invalid(),
-                moduleContext,
+                topContext,
                 AbstractType::Ptr(),
                 DUContext::DontSearchInParent
             );
@@ -85,6 +86,20 @@ Declaration* Helper::accessAttribute(
                 return decls.last();
             }
         }
+        if (auto ctx = s->internalContext(nullptr)) {
+            // qCDebug(KDEV_ZIG) << "access " << attribute << "on" << s->toString() << "from" << ctx->url();
+            auto decls = ctx->findLocalDeclarations(
+                attribute,
+                CursorInRevision::invalid(),
+                nullptr,
+                AbstractType::Ptr(),
+                DUContext::DontSearchInParent
+            );
+            if (!decls.isEmpty()) {
+                return decls.last();
+            }
+        }
+
     }
 
     if (auto s = accessed.dynamicCast<EnumerationType>()) {
@@ -389,7 +404,7 @@ QString Helper::qualifierPath(const QString& currentFile)
 {
     QString f = currentFile.endsWith(".zig") ? currentFile.mid(0, currentFile.size()-3) : currentFile;
     if (QDir::isRelativePath(f)) {
-        return "";
+        return ""; f.replace(QDir::separator(), '.');
     }
     auto project = ICore::self()->projectController()->findProjectForUrl(
             QUrl::fromLocalFile(currentFile));
@@ -421,7 +436,7 @@ QString Helper::qualifierPath(const QString& currentFile)
         QString relPath = projectRoot.relativeFilePath(f);
         return relPath.replace(QDir::separator(), '.');
     }
-    return "";
+    return ""; // f.mid(1).replace(QDir::separator(), '.');
 }
 
 } // namespace zig

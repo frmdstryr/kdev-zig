@@ -411,8 +411,8 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
     }
 
     if (auto *decl = Helper::accessAttribute(T, attr, v.lastTopContext())) {
-        //DUChainReadLocker lock; // Needed if printing debug statement
-        //qCDebug(KDEV_ZIG) << " result " << decl->toString();
+        // DUChainReadLocker lock; // Needed if printing debug statement
+        //qCDebug(KDEV_ZIG) << " result " << decl->toString() << "from" << decl->url();
         if (auto top = Helper::declarationTopContext(decl)) {
             encounterTopContext(top);
         } else if (v.lastTopContext() != topContext()) {
@@ -421,7 +421,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
         encounterLvalue(DeclarationPointer(decl));
     }
     else {
-        //qCDebug(KDEV_ZIG) << " no result ";
+        // qCDebug(KDEV_ZIG) << " no result ";
         encounterUnknown();
     }
     return Continue;
@@ -596,13 +596,17 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
     DUChainReadLocker lock;
     auto *importedModule = DUChain::self()->chainForDocument(importPath);
     if (importedModule) {
+        //auto decls = importedModule->localDeclarations();
+        //if (!decls.isEmpty()) {
+        //    auto mod = decls.first();
         if (auto mod = importedModule->owner()) {
+            Q_ASSERT(mod->abstractType()->modifiers() & ModuleModifier);
             qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString() << "ctx" << importedModule;
             encounterTopContext(importedModule);
             encounterLvalue(DeclarationPointer(mod));
             return Continue;
         }
-        qCDebug(KDEV_ZIG) << "Module has no owner" << importPath.toString();
+        qCDebug(KDEV_ZIG) << "Module has no declarations" << importPath.toString();
     } else {
         Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
         // Also reschedule reparsing of this

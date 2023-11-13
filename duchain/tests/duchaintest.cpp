@@ -58,6 +58,19 @@ static RangeInRevision rangeFromString(const QString &values) {
     return range;
 }
 
+DUContextPointer moduleInternalContext(ReferencedTopDUContext topContext) {
+    return DUContextPointer(topContext);
+
+    // If Module context is used in nodetypes.h
+    auto decls = topContext->localDeclarations();
+    Q_ASSERT(decls.size() == 1);
+    auto mod = decls.first();
+    Q_ASSERT(mod);
+    Q_ASSERT(mod->abstractType()->modifiers() & Zig::ModuleModifier);
+    Q_ASSERT(mod->internalContext());
+    return DUContextPointer(mod->internalContext());
+}
+
 ReferencedTopDUContext parseCode(QString code, QString name)
 {
     using namespace Zig;
@@ -168,7 +181,7 @@ void DUChainTest::sanityCheckVar()
     QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int"));
 }
 
-void DUChainTest::sanityCheckStdImport()
+void DUChainTest::sanityCheckStd()
 {
     // return; // Disable/
     // FIXME: This only works if modules imported inside std are already parsed...
@@ -193,52 +206,91 @@ void DUChainTest::sanityCheckStdImport()
     QCOMPARE(decl->abstractType()->toString(), QString("comptime_int"));
 }
 
-void DUChainTest::sanityCheckImportStruct()
+void DUChainTest::sanityCheckBasicImport()
 {
-    ReferencedTopDUContext moda = parseFile(assetsDir.filePath("a.zig"));
-    ReferencedTopDUContext modb = parseFile(assetsDir.filePath("b.zig"));
-    ReferencedTopDUContext modc = parseFile(assetsDir.filePath("c.zig"));
-    QVERIFY(modb.data());
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("basic_import/a.zig"));
+    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath("basic_import/b.zig"));
     DUChainReadLocker lock;
 
-    qDebug() << "moda decls are:";
-    for (const KDevelop::Declaration *decl : moda->localDeclarations()) {
+    qDebug() << "mod_a decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_a)->localDeclarations()) {
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    qDebug() << "modb decls are:";
-    for (const KDevelop::Declaration *decl : modb->localDeclarations()) {
+    qDebug() << "mod_b decls are:";
+    QCOMPARE(mod_b->localDeclarations().size(), 1);
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_b)->localDeclarations()) {
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    qDebug() << "modc decls are:";
-    for (const KDevelop::Declaration *decl : modc->localDeclarations()) {
-        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
-    }
-
-    auto decls = modb->findDeclarations(Identifier("a"));
+    auto decls = mod_b->findDeclarations(Identifier("a"));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig"));
+    QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("basic_import/a.zig"));
     QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
-    decls = modb->findDeclarations(Identifier("A"));
+    decls = mod_b->findDeclarations(Identifier("A"));
     QCOMPARE(decls.size(), 1);
+    Q_ASSERT(decls.first()->internalContext());
+    // auto importedContexts = decls.first()->internalContext()->importedParentContexts();
+    // QVERIFY(importedContexts.size() > 0);
+    // auto importedContext = importedContexts.last().indexedContext().data();
+    // QVERIFY(importedContext);
+    // QVERIFY(importedContext->owner());
+    // QCOMPARE(
+    //     importedContext->owner()->toString(),
+    //     assetsDir.filePath("basic_import/a.zig")
+    // );
     //QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig") + "::A");
 
-    decls = modb->findDeclarations(Identifier("c"));
+    decls = mod_b->findDeclarations(Identifier("c"));
     QCOMPARE(decls.size(), 1);
     QCOMPARE(decls.first()->abstractType()->toString(), "u8");
+}
 
-    decls = modc->findDeclarations(Identifier("x"));
-    QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), "B");
+void DUChainTest::sanityCheckDuplicateImport()
+{
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("duplicate_import/config_a.zig"));
+    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath("duplicate_import/config_b.zig"));
+    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath("duplicate_import/main.zig"));
+    DUChainReadLocker lock;
 
-    decls = modc->findDeclarations(Identifier("y"));
-    QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), "A");
+    qDebug() << "mod a decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_a)->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
 
-    decls = modc->findDeclarations(Identifier("z"));
-    QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), "u8");
+    qDebug() << "mod b decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_b)->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+    qDebug() << "main decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_main)->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+
+    auto config_decls_a = mod_a->findDeclarations(Identifier("Config"));
+    QCOMPARE(config_decls_a.size(), 1);
+    QCOMPARE(config_decls_a.first()->abstractType()->toString(), "Config");
+    auto config_decls_b = mod_b->findDeclarations(Identifier("Config"));
+    QCOMPARE(config_decls_b.size(), 1);
+    QCOMPARE(config_decls_b.first()->abstractType()->toString(), "Config");
+
+    auto config_a = mod_main->findDeclarations(Identifier("config_a"));
+    QCOMPARE(config_a.size(), 1);
+    auto config_b = mod_main->findDeclarations(Identifier("config_b"));
+    QCOMPARE(config_b.size(), 1);
+
+    QVERIFY(config_a.first()->abstractType() != config_b.first()->abstractType());
+
+    auto x = mod_main->findDeclarations(Identifier("x"));
+    QCOMPARE(x.size(), 1);
+    QCOMPARE(x.first()->abstractType()->toString(), "bool");
+    auto y = mod_main->findDeclarations(Identifier("y"));
+    QCOMPARE(y.size(), 1);
+    QCOMPARE(y.first()->abstractType()->toString(), "i8");
+
+
 }
 
 
@@ -471,6 +523,9 @@ void DUChainTest::testVarType_data()
     QTest::newRow("ptr type aligned array ptr") << "var x: [*]u8 = undefined;" << "x" << "[*]u8" << "";
     QTest::newRow("for range") << "test{for (0..10) |y| {\n}}" << "y" << "usize" << "1,0";
     QTest::newRow("for slice") << "test{var x: [2]i8 = undefined; for (x) |y| {\n}}" << "y" << "i8" << "1,0";
+    QTest::newRow("for slice ptr") << "test{var x: [2]i8 = undefined; for (x[0..]) |*y| {\n}}" << "y" << "*i8" << "1,0";
+    QTest::newRow("for ptr") << "test{var x: [2]i8 = undefined; for (&x) |*y| {\n}}" << "y" << "*i8" << "1,0";
+    QTest::newRow("for ptr const") << "test{var x: [2]i8 = undefined; for (&x) |y| {\n}}" << "y" << "i8" << "1,0";
 
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";

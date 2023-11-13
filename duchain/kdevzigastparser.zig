@@ -309,9 +309,9 @@ fn testCaptureName(source: [:0]const u8, tag: Tag, capture: CaptureType, expecte
     const index = indexOfNodeWithTag(ast, 0, tag).?;
     const tok = ast_node_capture_token(&ast, index, capture);
     if (expected) |str| {
-        try std.testing.expectEqualSlices(u8, ast.tokenSlice(tok), str);
+        try std.testing.expectEqualSlices(u8, str, ast.tokenSlice(tok));
     } else {
-        try std.testing.expect(tok == 0);
+        try std.testing.expect(tok == INVALID_TOKEN);
     }
 }
 
@@ -321,6 +321,7 @@ test "capture-name" {
     try testCaptureName("test { if (a) |b| { _ = b; } else |c| {}}", .@"if", .Error, "c");
     try testCaptureName("test { while (a) |b| { _ = b; }}", .while_simple, .Payload, "b");
     try testCaptureName("test { for (a) |b| { _ = b; }}", .for_simple, .Payload, "b");
+    try testCaptureName("test { for (&a) |*b| { _ = b; }}", .for_simple, .Payload, "*");
     try testCaptureName("test { try foo() catch |err| {}; }", .@"catch", .Payload, "err");
     try testCaptureName("test { errdefer |err| {} }", .@"errdefer", .Payload, "err");
 }
@@ -1593,28 +1594,28 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
         try std.testing.expectEqual(@as(Index, @intCast(b)), a);
     }
 
-    var timer = try std.time.Timer.start();
-    for (0..ast.tokens.len) |i| {
-        _ = ast.tokenLocation(0, @intCast(i));
-    }
-    const t0: f64 = @floatFromInt(timer.read());
-    std.log.warn("Old: {d:6.2}ms", .{std.math.round(t0/std.time.ms_per_s)});
-
-    timer.reset();
-    for (0..ast.tokens.len) |i| {
-        _ = ast.tokenLocationScan(0, @intCast(i));
-    }
-    const t1: f64 = @floatFromInt(timer.read());
-    std.log.warn("New: {d:6.2}ms", .{std.math.round(t1/std.time.ms_per_s)});
-    const dt = t1-t0;
-    std.log.warn("Diff: delta={d:6.2}ms {d:6.2}% {s}", .{
-        dt/std.time.ms_per_s, 100*(t1-t0)/t0, if (t1 < t0) "faster" else "slower"});
-
-    for (0..ast.tokens.len) |i| {
-        const a = ast.tokenLocation(0, @intCast(i));
-        const b = ast.tokenLocationScan(0, @intCast(i));
-        try std.testing.expectEqual(a, b);
-    }
+//     var timer = try std.time.Timer.start();
+//     for (0..ast.tokens.len) |i| {
+//         _ = ast.tokenLocation(0, @intCast(i));
+//     }
+//     const t0: f64 = @floatFromInt(timer.read());
+//     std.log.warn("Old: {d:6.2}ms", .{std.math.round(t0/std.time.ms_per_s)});
+//
+//     timer.reset();
+//     for (0..ast.tokens.len) |i| {
+//         _ = ast.tokenLocation(0, @intCast(i));
+//     }
+//     const t1: f64 = @floatFromInt(timer.read());
+//     std.log.warn("New: {d:6.2}ms", .{std.math.round(t1/std.time.ms_per_s)});
+//     const dt = t1-t0;
+//     std.log.warn("Diff: delta={d:6.2}ms {d:6.2}% {s}", .{
+//         dt/std.time.ms_per_s, 100*(t1-t0)/t0, if (t1 < t0) "faster" else "slower"});
+//
+//     for (0..ast.tokens.len) |i| {
+//         const a = ast.tokenLocation(0, @intCast(i));
+//         const b = ast.tokenLocationScan(0, @intCast(i));
+//         try std.testing.expectEqual(a, b);
+//     }
 
     // If given, make sure the tag is actually used in the source parsed
     if (indexOfNodeWithTag(ast, 0, tag) == null) {

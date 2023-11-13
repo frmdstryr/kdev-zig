@@ -32,8 +32,9 @@ private Q_SLOTS:
     void initTestCase();
     void sanityCheckFn();
     void sanityCheckVar();
-    void sanityCheckStdImport();
-    void sanityCheckImportStruct();
+    void sanityCheckStd();
+    void sanityCheckBasicImport();
+    void sanityCheckDuplicateImport();
     void cleanupTestCase();
     void testVarBindings();
     void testVarBindings_data();

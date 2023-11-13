@@ -30,7 +30,6 @@ namespace NodeTraits
 
 constexpr bool hasContext(NodeKind kind)
 {
-    // Module uses topLevel as it's context so do not include it here
     return kind == ContainerDecl
         || kind == EnumDecl
         || kind == FunctionDecl
@@ -42,12 +41,16 @@ constexpr bool hasContext(NodeKind kind)
         || kind == While
         || kind == Switch
         || kind == Defer
+        //|| kind == Module // Module uses top context
+        // var/field need to have internal context if they use @import
+        || kind == VarDecl
+        || kind == FieldDecl
     ;
 }
 
 constexpr bool hasChildren(NodeKind kind)
 {
-    return hasContext(kind) || (kind == Module || kind == VarDecl || kind == FieldDecl);
+    return hasContext(kind) || (kind == Module); // || kind == FieldDecl || kind == Module);
 }
 
 constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
@@ -68,6 +71,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == While          ? DUContext::Other
         :  kind == Switch         ? DUContext::Other
         :  kind == Defer          ? DUContext::Other
+
         // TODO: Template decl?
         : static_cast<DUContext::ContextType>(-1);
 }

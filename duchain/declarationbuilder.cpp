@@ -25,16 +25,19 @@
 #include <language/duchain/aliasdeclaration.h>
 #include <language/editor/documentrange.h>
 
-#include "expressionvisitor.h"
 #include "types/builtintype.h"
 #include "types/errortype.h"
 #include "types/declarationtypes.h"
+#include "types/optionaltype.h"
+#include "types/slicetype.h"
+#include "types/pointertype.h"
+
+#include "expressionvisitor.h"
+#include "functionvisitor.h"
 #include "nodetraits.h"
 #include "helpers.h"
 #include "zigdebug.h"
-#include "types/optionaltype.h"
-#include "types/slicetype.h"
-#include "functionvisitor.h"
+
 
 namespace Zig
 {
@@ -133,6 +136,16 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
             if (auto decl = s->declaration(nullptr)) {
                 if (decl->topContext() != currentDeclaration()->topContext()) {
                     if (auto ctx = decl->internalContext()) {
+                        // qCDebug(KDEV_ZIG) << " import context" << ctx
+                        //     << "from " << decl->toString()
+                        //     << "in (" << decl->topContext()->url() << ")";
+                        // qCDebug(KDEV_ZIG) << "   into"
+                        //     << currentDeclaration()->toString()
+                        //     << "in (" << currentDeclaration()->topContext()->url() << ")";
+                        // for (auto d: ctx->localDeclarations()) {
+                        //     auto alias = new AliasDeclaration(RangeInRevision::invalid(), currentContext());
+                        //     alias->setAliasedDeclaration(d);
+                        // }
                         currentContext()->addImportedParentContext(ctx);
                     }
                 }
@@ -177,12 +190,15 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         // FIXME: Relative module name?
         //QStringList parts = session->document().str().split("/");
         //identifier = Identifier("@import " + parts.last().replace(".zig", ""));
-        identifier = Identifier(session->document().str());
+        QString filename = session->document().str();
+        identifier = Identifier(filename);
     }
     else if (Kind == ContainerDecl) {
         if (name.isEmpty()) {
             identifier = Identifier(node.containerName());
             declRange = node.mainTokenRange();
+        } else {
+            // identifier = Identifier(session->document().str() + name);
         }
     }
     else if (Kind == TestDecl) {
@@ -319,6 +335,8 @@ template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, StructureType *type)
 {
     type->setDeclaration(decl);
+    // Required for Helper::accessAttibute to find the right declaration
+    decl->setAlwaysForceDirect(true);
     decl->setAbstractType(AbstractType::Ptr(type));
 }
 
@@ -426,11 +444,15 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
 template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)>>
 void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &parent)
 {
-    QString captureName = node.captureName(CaptureType::Payload);
+    TokenIndex tok = ast_node_capture_token(node.ast, node.index, CaptureType::Payload);
+    QString captureName = node.tokenSlice(tok);
     if (!captureName.isEmpty()) {
-        auto range = node.captureRange(CaptureType::Payload);
-        // FIXME: Get type node of capture ???
-        auto decl = createDeclaration<VarDecl>(node, parent, captureName, true, range);
+        const bool isPtr = captureName == QLatin1String("*");
+        const TokenIndex nameToken = isPtr ? tok+1 : tok;
+        QString name = node.tokenSlice(nameToken);
+        auto range = node.tokenRange(nameToken);
+
+        auto decl = createDeclaration<VarDecl>(node, parent, name, true, range);
         if (Kind == If || Kind == While) {
             // If and While captures unwrap the optional type
             ZigNode optionalType = node.nextChild();
@@ -452,21 +474,64 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
         }
         else if (Kind == For) {
             if (node.tag() == NodeTag_for_simple) {
-                ZigNode sliceType = node.nextChild();
+                // qCDebug(KDEV_ZIG) << "Create for loop capture "<< (isPtr ? "*" + name: name);
+                ZigNode child = node.nextChild();
                 ExpressionVisitor v(session, currentContext());
-                v.startVisiting(sliceType, node);
-                if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+                v.startVisiting(child, node);
+                if (auto arrayPtr = v.lastType().dynamicCast<Zig::PointerType>()) {
+                    // qCDebug(KDEV_ZIG) << "loop type is pointer";
+                    if (auto slice = arrayPtr->baseType().dynamicCast<SliceType>()) {
+                        DUChainWriteLocker lock;
+                        if (isPtr) {
+                            auto ptr = new Zig::PointerType();
+                            Q_ASSERT(ptr);
+                            ptr->setBaseType(slice->elementType());
+                            decl->setAbstractType(AbstractType::Ptr(ptr));
+                        } else {
+                            decl->setAbstractType(slice->elementType());
+                        }
+                    } else {
+                        // Type is known but not an optional type, this is a problem
+                        ProblemPointer p = ProblemPointer(new Problem());
+                        p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+                        p->setSource(IProblem::SemanticAnalysis);
+                        p->setSeverity(IProblem::Hint);
+                        p->setDescription(i18n("Attempt to loop pointer of non-array type"));
+                        DUChainWriteLocker lock;
+                        topContext()->addProblem(p);
+                    }
+                }
+                else if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+                    // qCDebug(KDEV_ZIG) << "loop type is slice";
                     DUChainWriteLocker lock;
-                    decl->setAbstractType(slice->elementType());
-                } else if (v.lastType() != v.unknownType()) {
+                    if (isPtr) {
+                        auto ptr = new Zig::PointerType();
+                        Q_ASSERT(ptr);
+                        ptr->setBaseType(slice->elementType());
+                        decl->setAbstractType(AbstractType::Ptr(ptr));
+                    } else {
+                        decl->setAbstractType(slice->elementType());
+                    }
+                }
+                else if (v.lastType() != v.unknownType()) {
                     // Type is known but not an optional type, this is a problem
+                    // {
+                    //     DUChainReadLocker lock;
+                    //     qCDebug(KDEV_ZIG) << "for loop type is invalid " << v.lastType()->toString();
+                    // }
                     ProblemPointer p = ProblemPointer(new Problem());
                     p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
                     p->setSource(IProblem::SemanticAnalysis);
                     p->setSeverity(IProblem::Hint);
-                    p->setDescription(i18n("Attempt to loop non-array type"));
+                    if (isPtr) {
+                        p->setDescription(i18n("Attempt to capture pointer on non-pointer type"));
+                    } else {
+                        p->setDescription(i18n("Attempt to loop non-array type"));
+                    }
                     DUChainWriteLocker lock;
                     topContext()->addProblem(p);
+                } else {
+                    qCDebug(KDEV_ZIG) << "for loop type is unknown";
                 }
             } else {
                 // TODO: Multiple capture for loop
@@ -492,10 +557,7 @@ VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const Z
         const auto isModule = s->modifiers() & ModuleModifier;
         const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext();
         if (auto ctx = s->internalContext(moduleContext)) {
-            currentContext()->addImportedParentContext(
-                ctx,
-                CursorInRevision::invalid()
-            );
+            currentContext()->addImportedParentContext(ctx);
             return Continue;
         }
     }

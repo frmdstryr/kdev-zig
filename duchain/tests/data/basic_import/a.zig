@@ -1,3 +1,3 @@
 const A = struct {
-    a: u8
+    a: u8,
 };
