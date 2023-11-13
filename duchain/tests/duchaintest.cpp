@@ -463,6 +463,7 @@ void DUChainTest::testVarType_data()
 
     QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8" << "";
     QTest::newRow("const bool") << "const x = true;" << "x" << "bool" << "";
+    QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";

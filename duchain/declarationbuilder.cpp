@@ -191,7 +191,8 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         //QStringList parts = session->document().str().split("/");
         //identifier = Identifier("@import " + parts.last().replace(".zig", ""));
         QString filename = session->document().str();
-        identifier = Identifier(filename);
+        QString package = Helper::qualifierPath(filename);
+        identifier = Identifier(package.isEmpty() ? filename: package);
     }
     else if (Kind == ContainerDecl) {
         if (name.isEmpty()) {
