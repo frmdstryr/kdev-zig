@@ -533,6 +533,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("@sizeOf()") << "const Foo = struct { a: u8, }; test {var x = @sizeOf(Foo);\n}" << "x" << "comptime_int" << "1,0";
     QTest::newRow("@as()") << "test{var x = @as(u8, 1);\n}" << "x" << "u8" << "1,0";
     QTest::newRow("@min()") << "test{var x: u32 = 1; var y = @min(x, 1);\n}" << "x" << "u32" << "1,0";
+    QTest::newRow("@hasField()") << "const Foo = struct {a: u8}; test{var x = @hasField(Foo, \"a\");\n}" << "x" << "bool" << "1,0";
+    QTest::newRow("@field()") << "const Foo = struct {a: u8}; test{var x = Foo{}; var y = @field(x, \"a\");\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
     QTest::newRow("@fieldParentPtr()") <<
         "const Point = struct {x: i32=0, y: i32=0};\n"

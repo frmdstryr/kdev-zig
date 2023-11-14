@@ -73,6 +73,7 @@ public:
     VisitResult callBuiltinThis(const ZigNode &node);
     VisitResult callBuiltinImport(const ZigNode &node);
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
+    VisitResult callBuiltinField(const ZigNode &node);
 
     /**
      * Set the current function being visited. This is used by the

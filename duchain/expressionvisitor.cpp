@@ -473,6 +473,9 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     else if (name == QLatin1String("@fieldParentPtr")) {
         return callBuiltinFieldParentPtr(node);
     }
+    else if (name == QLatin1String("@field")) {
+        return callBuiltinField(node);
+    }
     // todo @Type
     else if (
         // These return the type of the first argument
@@ -542,6 +545,11 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@offsetOf")
     ) {
         encounter(BuiltinType::newFromName("comptime_int"));
+    } else if (
+        name == QLatin1String("@hasField")
+        || name == QLatin1String("@hasDecl")
+    ) {
+        encounter(BuiltinType::newFromName("bool"));
     } else {
         encounterUnknown();
     }
@@ -613,6 +621,29 @@ VisitResult ExpressionVisitor::callBuiltinFieldParentPtr(const ZigNode &node)
     Q_ASSERT(ptr);
     ptr->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(ptr));
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinField(const ZigNode &node)
+{
+    auto tag = node.tag();
+    if (tag == NodeTag_builtin_call_two || tag == NodeTag_builtin_call_two_comma) {
+        NodeData data = node.data();
+        ZigNode rhs = {node.ast, data.rhs};
+        if (rhs.tag() != NodeTag_string_literal) {
+            encounterUnknown();
+            return Continue;
+        }
+        ZigNode lhs = {node.ast, data.lhs};
+        ExpressionVisitor v(this);
+        v.startVisiting(lhs, node);
+        // TODO: lhs may be a type or instance
+        if (auto r = Helper::accessAttribute(v.lastType(), rhs.spellingName(), topContext())) {
+            encounterLvalue(DeclarationPointer(r));
+            return Continue;
+        }
+    }
+    encounterUnknown();
     return Continue;
 }
 

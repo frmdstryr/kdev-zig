@@ -197,7 +197,7 @@ KDevelop::TopDUContext *ContextBuilder::newTopContext(const KDevelop::RangeInRev
 {
     if (!file) {
         file = new ParsingEnvironmentFile(document());
-        file->setLanguage(IndexedString("Zig"));
+        file->setLanguage(ParseSession::languageString());
     }
 
     return new ZigTopDUContext(document(), range, file);
