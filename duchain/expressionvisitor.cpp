@@ -153,6 +153,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitBitNot(node, parent);
     case NodeTag_try:
         return visitTry(node, parent);
+    case NodeTag_catch:
+        return visitCatch(node, parent);
     case NodeTag_orelse:
         return visitOrelse(node, parent);
     case NodeTag_array_type:
@@ -770,6 +772,22 @@ VisitResult ExpressionVisitor::visitTry(const ZigNode &node, const ZigNode &pare
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
+    if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
+        encounter(errorType->baseType());
+    } else {
+        encounterUnknown(); // TODO: Show error?
+    }
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitCatch(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ExpressionVisitor v(this);
+    v.visitNode(lhs, node);
+    // TODO: Check that lhs and rhs are compatable
     if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
         encounter(errorType->baseType());
     } else {

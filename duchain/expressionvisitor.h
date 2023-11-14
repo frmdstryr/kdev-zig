@@ -59,6 +59,7 @@ public:
     VisitResult visitNegation(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBitNot(const ZigNode &node, const ZigNode &parent);
     VisitResult visitTry(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitCatch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
 

@@ -530,6 +530,9 @@ void DUChainTest::testVarType_data()
     QTest::newRow("for ptr") << "test{var x: [2]i8 = undefined; for (&x) |*y| {\n}}" << "y" << "*i8" << "1,0";
     QTest::newRow("for ptr const") << "test{var x: [2]i8 = undefined; for (&x) |y| {\n}}" << "y" << "i8" << "1,0";
     QTest::newRow("catch")
+        << "pub fn write() !u8 {return 1;}\n"
+           "test{const x = write() catch 0;\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("catch capture")
         << "const WriteError = error{EndOfStream};\n"
            "pub fn write() WriteError!void {}\n"
            "test{write() catch |err| {\n}}" << "err" << "WriteError" << "3,0";

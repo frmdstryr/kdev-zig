@@ -120,6 +120,7 @@ constexpr bool shouldSetComment(NodeKind kind)
     return kind == ContainerDecl
         || kind == VarDecl
         || kind == FieldDecl
+        || kind == ParamDecl
         || kind == FunctionDecl
     ;
 
