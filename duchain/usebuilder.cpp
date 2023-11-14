@@ -83,6 +83,10 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_array_access:
             visitArrayAccess(node, parent);
             break;
+        case NodeTag_if:
+        case NodeTag_if_simple:
+            visitIf(node, parent);
+            break;
         // case VarAccess:
         //     visitVarAccess(node, parent);
         //     break;
@@ -386,6 +390,38 @@ VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
     p->setDescription(i18n("Undefined variable %1", name));
     DUChainWriteLocker lock;
     topContext()->addProblem(p);
+    return Continue;
+}
+
+VisitResult UseBuilder::visitIf(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode cond = node.nextChild(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(cond, node);
+    QString capture = node.captureName(CaptureType::Payload);
+    if (capture.isEmpty()) {
+        if (auto builtin = v.lastType().dynamicCast<BuiltinType>()) {
+            if (builtin->isBool()) {
+                return Continue; // Ok
+            }
+        }
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, cond.range().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        if (auto optional = v.lastType().dynamicCast<OptionalType>()) {
+            p->setDescription(i18n("Used if on optional type with no capture or comparison"));
+        } else {
+            p->setDescription(i18n("if condition is not a bool"));
+        }
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+        return Continue;
+
+    }
+    // Error for the non optional case is handled in the declaration builder
+    // when creating the capture decl
     return Continue;
 }
 

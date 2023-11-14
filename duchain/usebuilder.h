@@ -41,6 +41,7 @@ public:
 
 private:
     VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
     VisitResult visitVarAccess(const ZigNode &node, const ZigNode &parent);

@@ -42,7 +42,8 @@ private Q_SLOTS:
     void testVarUsage_data();
     void testVarType();
     void testVarType_data();
-
+    void testProblems();
+    void testProblems_data();
 
 private:
     QDir assetsDir;

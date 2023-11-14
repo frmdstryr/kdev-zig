@@ -469,7 +469,8 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
             if (auto opt = v.lastType().dynamicCast<OptionalType>()) {
                 DUChainWriteLocker lock;
                 decl->setAbstractType(opt->baseType());
-            } else if (v.lastType() != v.unknownType()) {
+            }
+            else if (!m_prebuilding) {
                 // Type is known but not an optional type, this is a problem
                 ProblemPointer p = ProblemPointer(new Problem());
                 p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
@@ -488,7 +489,8 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
             if (auto err = v.lastType().dynamicCast<ErrorType>()) {
                 DUChainWriteLocker lock;
                 decl->setAbstractType(err->errorType());
-            } else if (v.lastType() != v.unknownType()) {
+            }
+            else if (!m_prebuilding) {
                 // Type is known but not an optional type, this is a problem
                 ProblemPointer p = ProblemPointer(new Problem());
                 p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
@@ -517,7 +519,8 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
                         } else {
                             decl->setAbstractType(slice->elementType());
                         }
-                    } else {
+                    }
+                    else if (!m_prebuilding) {
                         // Type is known but not an optional type, this is a problem
                         ProblemPointer p = ProblemPointer(new Problem());
                         p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
@@ -540,7 +543,7 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
                         decl->setAbstractType(slice->elementType());
                     }
                 }
-                else if (v.lastType() != v.unknownType()) {
+                else if (!m_prebuilding) {
                     // Type is known but not an optional type, this is a problem
                     // {
                     //     DUChainReadLocker lock;
@@ -590,13 +593,15 @@ VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const Z
     }
 
     // Type is known but not an optional type, this is a problem
-    ProblemPointer p = ProblemPointer(new Problem());
-    p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
-    p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
-    p->setDescription(i18n("Namespace unknown or not yet resolved"));
-    DUChainWriteLocker lock;
-    topContext()->addProblem(p);
+    if (!m_prebuilding) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Namespace unknown or not yet resolved"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+    }
     return Continue;
 
 }

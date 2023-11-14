@@ -126,6 +126,7 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_greater_or_equal:
     case NodeTag_bool_and:
     case NodeTag_bool_not:
+    case NodeTag_bool_or:
         return visitBoolExpr(node, parent);
 
     case NodeTag_mul:
@@ -321,10 +322,10 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
 VisitResult ExpressionVisitor::visitNumberLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    QString name = node.spellingName();
+    QString tok = node.mainToken();
     // qCDebug(KDEV_ZIG) << "visit number lit" << name;
     encounter(BuiltinType::newFromName(
-        name.contains(".") ? "comptime_float" : "comptime_int"));
+        tok.contains(".") ? "comptime_float" : "comptime_int"));
     return Continue;
 }
 

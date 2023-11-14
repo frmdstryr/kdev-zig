@@ -464,7 +464,9 @@ void DUChainTest::testVarType_data()
     QTest::addColumn<QString>("container");
 
     QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8" << "";
-    QTest::newRow("const bool") << "const x = true;" << "x" << "bool" << "";
+    QTest::newRow("const bool") << "var x = true;" << "x" << "bool" << "";
+    QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int" << "";
+    QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float" << "";
     QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
@@ -618,4 +620,61 @@ void DUChainTest::testVarType_data()
     QTest::newRow("recursive comptime struct fn") <<
         "pub fn Foo(comptime T: ?type) type { if (T == null) {return Foo(u8);} return struct {a: T}; } \n"
         "test{\nconst F = Foo(null);\n}" << "F" << "Foo::anon struct 17" << "3,0";
+}
+
+
+void DUChainTest::testProblems()
+{
+    QFETCH(QString, code);
+    QFETCH(QStringList, problems);
+
+    qDebug() << "Code:" << code;
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
+
+    DUChainReadLocker lock;
+    QVERIFY(context.data());
+    qDebug() << "Locals are:";
+    for (const KDevelop::Declaration *decl : context->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier();
+        if (decl->abstractType()) {
+            qDebug() << " type" << decl->abstractType()->toString();
+        }
+    }
+    qDebug() << "Problems are:";
+    for (const auto &p : context->problems()) {
+        qDebug() << p->description();
+    }
+    QCOMPARE(context->problems().size(), problems.size());
+    for (const auto &problem: problems) {
+        bool found = false;
+        qDebug() << "Checking problem" << problem;
+        for (const auto &p : context->problems()) {
+            if (p->description().contains(problem)) {
+                found = true;
+                break;
+            }
+        }
+        QVERIFY(found);
+    }
+
+}
+
+void DUChainTest::testProblems_data()
+{
+    QTest::addColumn<QString>("code");
+    QTest::addColumn<QStringList>("problems");
+    QTest::newRow("use undefined") << "const x = y;" << QStringList{"Undefined variable y"};
+    QTest::newRow("invalid deref") << "const x = 1; const y = x.*;" << QStringList{"Attempt to dereference non-pointer type"};
+    QTest::newRow("invalid unwrap") << "const x = 1; const y = x.?;" << QStringList{"Attempt to unwrap non-optional type"};
+    QTest::newRow("invalid builtin") << "const x = @intToFloat(f32, 1);" << QStringList{"Undefined builtin"};
+    QTest::newRow("if bool") << "test{ if (1 > 2) {}\n}" << QStringList{};
+    QTest::newRow("if bool or") << "test{ if (false or 1 > 2) {}\n}" << QStringList{};
+    QTest::newRow("if bool and") << "test{ if (true and 1 > 2) {}\n}" << QStringList{};
+    QTest::newRow("if not bool") << "test{ if (1) {}\n}" << QStringList{"if condition is not a bool"};
+    QTest::newRow("if no capture") << "test{ var x: ?u8 = 0; if (x) {}\n}" << QStringList{"optional type with no capture"};
+    QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{"Attempt to unwrap non-optional type"};
+    QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{"Attempt to index non-array type"};
+    QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{"Array index is not an integer type"};
+    QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{"Array index is not an integer type"};
+
 }
