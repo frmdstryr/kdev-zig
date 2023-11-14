@@ -343,6 +343,8 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("struct field") << "const Foo = struct { a: u8, };" << "a" << "Foo";
     QTest::newRow("test decl") << "test \"foo\" {  }" << "test foo"  << "";
     QTest::newRow("if capture") << "test {var opt: ?u8 = null;\n if (opt) |x| {\n_ = x;\n} }" << "x" << "1,13";
+    QTest::newRow("catch capture") << "test {\nsomething() catch |err| {_ = err;}\n} }" << "err" << "1,23";
+    QTest::newRow("catch capture expr") << "test {\nconst n = something() catch |err| { return err;}\n} }" << "err" << "1,23";
     // Interal context ?
     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
 
@@ -527,6 +529,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("for slice ptr") << "test{var x: [2]i8 = undefined; for (x[0..]) |*y| {\n}}" << "y" << "*i8" << "1,0";
     QTest::newRow("for ptr") << "test{var x: [2]i8 = undefined; for (&x) |*y| {\n}}" << "y" << "*i8" << "1,0";
     QTest::newRow("for ptr const") << "test{var x: [2]i8 = undefined; for (&x) |y| {\n}}" << "y" << "i8" << "1,0";
+    QTest::newRow("catch")
+        << "const WriteError = error{EndOfStream};\n"
+           "pub fn write() WriteError!void {}\n"
+           "test{write() catch |err| {\n}}" << "err" << "WriteError" << "3,0";
 
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";

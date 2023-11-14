@@ -454,12 +454,12 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
 {
     TokenIndex tok = ast_node_capture_token(node.ast, node.index, CaptureType::Payload);
     QString captureName = node.tokenSlice(tok);
+    // qCDebug(KDEV_ZIG) << "maybe build capture for" << captureName << "kind" << Kind;
     if (!captureName.isEmpty()) {
         const bool isPtr = captureName == QLatin1String("*");
         const TokenIndex nameToken = isPtr ? tok+1 : tok;
         QString name = node.tokenSlice(nameToken);
         auto range = node.tokenRange(nameToken);
-
         auto decl = createDeclaration<VarDecl>(node, parent, name, true, range);
         if (Kind == If || Kind == While) {
             // If and While captures unwrap the optional type
@@ -476,6 +476,25 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
                 p->setSource(IProblem::SemanticAnalysis);
                 p->setSeverity(IProblem::Hint);
                 p->setDescription(i18n("Attempt to unwrap non-optional type"));
+                DUChainWriteLocker lock;
+                topContext()->addProblem(p);
+            }
+        }
+        else if (Kind == Catch) {
+            // If and While captures unwrap the optional type
+            ZigNode errorType = node.nextChild();
+            ExpressionVisitor v(session, currentContext());
+            v.startVisiting(errorType, node);
+            if (auto err = v.lastType().dynamicCast<ErrorType>()) {
+                DUChainWriteLocker lock;
+                decl->setAbstractType(err->errorType());
+            } else if (v.lastType() != v.unknownType()) {
+                // Type is known but not an optional type, this is a problem
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+                p->setSource(IProblem::SemanticAnalysis);
+                p->setSeverity(IProblem::Hint);
+                p->setDescription(i18n("Attempt to catch non-error type"));
                 DUChainWriteLocker lock;
                 topContext()->addProblem(p);
             }
