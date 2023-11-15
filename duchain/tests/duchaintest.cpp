@@ -693,4 +693,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
 
 
+    QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
+    QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";
+    QTest::newRow("use out of order in fn") << "pub fn foo() void {const x = y; const y = 1;}" << QStringList{"Undefined variable y"} << "";
+    QTest::newRow("use out of order in fn in struct") << "const Foo = struct {pub fn foo() void {const x = y; const y = 1;}};" << QStringList{"Undefined variable y"} << "";
+
 }

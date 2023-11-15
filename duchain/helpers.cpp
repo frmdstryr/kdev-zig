@@ -75,11 +75,10 @@ Declaration* Helper::accessAttribute(
         // Context from another file?
         if (auto ctx = s->internalContext(topContext)) {
             // qCDebug(KDEV_ZIG) << "access " << attribute << "on" << s->toString() << "from" << ctx->url();
-            auto decls = ctx->findLocalDeclarations(
+            auto decls = ctx->findDeclarations(
                 attribute,
                 CursorInRevision::invalid(),
                 topContext,
-                AbstractType::Ptr(),
                 DUContext::DontSearchInParent
             );
             if (!decls.isEmpty()) {
@@ -88,11 +87,10 @@ Declaration* Helper::accessAttribute(
         }
         if (auto ctx = s->internalContext(nullptr)) {
             // qCDebug(KDEV_ZIG) << "access " << attribute << "on" << s->toString() << "from" << ctx->url();
-            auto decls = ctx->findLocalDeclarations(
+            auto decls = ctx->findDeclarations(
                 attribute,
                 CursorInRevision::invalid(),
                 nullptr,
-                AbstractType::Ptr(),
                 DUContext::DontSearchInParent
             );
             if (!decls.isEmpty()) {
@@ -146,8 +144,12 @@ static inline bool canFindBeyondUse(const DUContext* ctx)
 {
     return (
         ctx && ctx->owner() && (
-            ctx->owner()->isFunctionDeclaration()
-            || (ctx->owner()->kind() == Declaration::Kind::Type)
+             ctx->owner()->isFunctionDeclaration()
+             || (ctx->owner()->kind() == Declaration::Kind::Type)
+             || (ctx->owner()->kind() == Declaration::Kind::Instance && (
+                 ctx->parentContext() && ctx->parentContext()->owner() &&
+                 ctx->parentContext()->owner()->kind() == Declaration::Kind::Type
+             ))
         )
     );
 }
