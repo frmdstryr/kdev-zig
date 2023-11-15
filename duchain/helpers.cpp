@@ -102,6 +102,7 @@ Declaration* Helper::accessAttribute(
 
     }
 
+    // const s = enum {...}
     if (auto s = accessed.dynamicCast<EnumerationType>()) {
         DUChainReadLocker lock;
         if (auto ctx = s->internalContext(topContext)) {

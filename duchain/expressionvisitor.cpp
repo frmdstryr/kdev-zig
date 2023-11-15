@@ -362,6 +362,8 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
+            //DUChainReadLocker lock; // For debug statement only
+            // qCDebug(KDEV_ZIG) << "result" << decl->toString();;
             encounterLvalue(DeclarationPointer(decl));
         } else {
             // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
@@ -864,8 +866,7 @@ VisitResult ExpressionVisitor::visitArrayType(const ZigNode &node, const ZigNode
 
     if (lhs.tag() == NodeTag_number_literal) {
         bool ok;
-        QString value = lhs.mainToken();
-        int size = value.toInt(&ok, 0);
+        int size = lhs.mainToken().toInt(&ok, 0);
         if (ok) {
             sliceType->setDimension(size);
         }

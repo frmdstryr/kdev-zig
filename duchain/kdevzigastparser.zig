@@ -624,9 +624,11 @@ export fn ast_var_value(ptr: ?*Ast, index: Index) Index {
                 .simple_var_decl,
                 .aligned_var_decl,
                 .global_var_decl,
-                .local_var_decl => ast.nodes.items(.data)[index].rhs,
-                // All are data.lhs
-                .container_field, .container_field_align, .container_field_init => ast.nodes.items(.data)[index].lhs,
+                .local_var_decl,
+                .container_field_init, => ast.nodes.items(.data)[index].rhs,
+                // TODO:
+                // .container_field,
+                // .container_field_align,
                 else => 0,
             };
         }
@@ -770,7 +772,10 @@ export fn ast_node_name_token(ptr: ?*Ast, index: Index) Index {
                 .container_field,
                 .container_field_init,
                 .container_field_align => ast.nodes.items(.main_token)[index],
-                .test_decl => ast.nodes.items(.data)[index].lhs,
+                .test_decl => blk: {
+                    const v = ast.nodes.items(.data)[index].lhs;
+                    break :blk if (v == 0) INVALID_TOKEN else v;
+                },
                 else => INVALID_TOKEN,
             };
         }

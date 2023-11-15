@@ -277,18 +277,12 @@ FunctionType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
 template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl>>
 AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
-    NodeTag parentTag = parent.tag();
-    if (
-        Kind == FieldDecl
-        && parent.kind() == EnumDecl
-        && (parentTag == NodeTag_container_decl_arg || parentTag == NodeTag_container_decl_arg_trailing)
-    ) {
-        // enum(arg)
-        ZigNode arg = parent.nextChild();
-        ExpressionVisitor v(session, currentContext());
-        v.startVisiting(arg, parent);
-        return v.lastType();
-
+    if (Kind == FieldDecl && parent.kind() == EnumDecl) {
+        DUChainReadLocker lock;
+        auto parentContext = contextFromNode(&parent);
+        Q_ASSERT(parentContext);
+        Q_ASSERT(parentContext->owner());
+        return parentContext->owner()->abstractType();
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
         // const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
@@ -386,7 +380,7 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
 
     if (n > 0) {
         // TODO: Find a better way to do this
-        // params get visited more than once but there is also stuff like
+        // params get Visited more than once but there is also stuff like
         // comptime, linksection, etc
         QString name = node.spellingName();
         for (uint32_t i=0; i < n; i++) {

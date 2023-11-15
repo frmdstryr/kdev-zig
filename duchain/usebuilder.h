@@ -44,12 +44,21 @@ private:
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitAssign(const ZigNode &node, const ZigNode &parent);
     VisitResult visitVarAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
     VisitResult visitUnwrapOptional(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIdent(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitSwitchCase(const ZigNode &node, const ZigNode &parent);
+
+    bool checkAndAddEnumUse(
+        const KDevelop::AbstractType::Ptr &accessed,
+        const QString &enumName,
+        const KDevelop::RangeInRevision &useRange);
 
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;

@@ -414,6 +414,7 @@ void DUChainTest::testVarUsage_data()
 
     QTest::newRow("array access") << "var a = [2]u8;\nconst b = a[1];\n" << "a/1,10,1,11" << "2,0";
     QTest::newRow("array index") << "const i = 0;\nvar a = [2]u8;\nconst b = a[i];\n" << "i/2,12,2,13" << "3,0";
+    // QTest::newRow("enum use") << "const Status = enum {Ok, Error};\nvar status: Status = .Ok;\n" << "Ok/2,22,2,24" << "Status";
 
     // Make sure out of order does not work in fn's or tests
     QTest::newRow("fn var order") << "pub fn main() void {\nconst a = b; const b=1; \n}" << "a/invalid" << "2,0";
@@ -473,6 +474,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
     QTest::newRow("enum") << "const Day = enum{Mon, Tue};" << "Day" << "Day" << "";
     QTest::newRow("enum arg") << "const Day = enum(u8){Mon, Tue}; const mon = Day.Mon;" << "mon" << "u8" << "";
+    QTest::newRow("enum int") << "const Status = enum{Ok = 1, Error = 0};" << "Ok" << "Status" << "";
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
     QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";
@@ -627,17 +629,22 @@ void DUChainTest::testProblems()
 {
     QFETCH(QString, code);
     QFETCH(QStringList, problems);
+    QFETCH(QString, contextName);
 
     qDebug() << "Code:" << code;
     ReferencedTopDUContext context = parseCode(code, "test.zig");
 
+
     DUChainReadLocker lock;
+    DUContext *internalContext = getInternalContext(context, contextName);
+    QVERIFY(internalContext);
+
     QVERIFY(context.data());
-    qDebug() << "Locals are:";
-    for (const KDevelop::Declaration *decl : context->localDeclarations()) {
-        qDebug() << "  name" << decl->identifier();
+    qDebug() << "Decls are:";
+    for (const KDevelop::Declaration *decl : internalContext->localDeclarations()) {
+        qDebug() << " - name" << decl->identifier();
         if (decl->abstractType()) {
-            qDebug() << " type" << decl->abstractType()->toString();
+            qDebug() << "   type" << decl->abstractType()->toString();
         }
     }
     qDebug() << "Problems are:";
@@ -663,18 +670,27 @@ void DUChainTest::testProblems_data()
 {
     QTest::addColumn<QString>("code");
     QTest::addColumn<QStringList>("problems");
-    QTest::newRow("use undefined") << "const x = y;" << QStringList{"Undefined variable y"};
-    QTest::newRow("invalid deref") << "const x = 1; const y = x.*;" << QStringList{"Attempt to dereference non-pointer type"};
-    QTest::newRow("invalid unwrap") << "const x = 1; const y = x.?;" << QStringList{"Attempt to unwrap non-optional type"};
-    QTest::newRow("invalid builtin") << "const x = @intToFloat(f32, 1);" << QStringList{"Undefined builtin"};
-    QTest::newRow("if bool") << "test{ if (1 > 2) {}\n}" << QStringList{};
-    QTest::newRow("if bool or") << "test{ if (false or 1 > 2) {}\n}" << QStringList{};
-    QTest::newRow("if bool and") << "test{ if (true and 1 > 2) {}\n}" << QStringList{};
-    QTest::newRow("if not bool") << "test{ if (1) {}\n}" << QStringList{"if condition is not a bool"};
-    QTest::newRow("if no capture") << "test{ var x: ?u8 = 0; if (x) {}\n}" << QStringList{"optional type with no capture"};
-    QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{"Attempt to unwrap non-optional type"};
-    QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{"Attempt to index non-array type"};
-    QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{"Array index is not an integer type"};
-    QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{"Array index is not an integer type"};
+    QTest::addColumn<QString>("contextName");
+    QTest::newRow("use undefined") << "const x = y;" << QStringList{"Undefined variable y"} << "";
+    QTest::newRow("invalid deref") << "const x = 1; const y = x.*;" << QStringList{"Attempt to dereference non-pointer type"} << "";
+    QTest::newRow("invalid unwrap") << "const x = 1; const y = x.?;" << QStringList{"Attempt to unwrap non-optional type"} << "";
+    QTest::newRow("invalid builtin") << "const x = @intToFloat(f32, 1);" << QStringList{"Undefined builtin"} << "";
+    QTest::newRow("if bool") << "test{ if (1 > 2) {}\n}" << QStringList{} << "";
+    QTest::newRow("if bool or") << "test{ if (false or 1 > 2) {}\n}" << QStringList{} << "";
+    QTest::newRow("if bool and") << "test{ if (true and 1 > 2) {}\n}" << QStringList{} << "";
+    QTest::newRow("if not bool") << "test{ if (1) {}\n}" << QStringList{"if condition is not a bool"} << "";
+    QTest::newRow("if no capture") << "test{ var x: ?u8 = 0; if (x) {}\n}" << QStringList{"optional type with no capture"} << "";
+    QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{"Attempt to unwrap non-optional type"} << "";
+    QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{"Attempt to index non-array type"} << "";
+    QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{"Array index is not an integer type"} << "";
+    QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{"Array index is not an integer type"} << "";
+    QTest::newRow("enum") << "const Status = enum{Ok, Error}; const x: Status = .Ok;" << QStringList{} << "";
+    QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{"Attempted to access enum field on non-enum type"} << "";
+    QTest::newRow("enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Error; \n}" << QStringList{} << "1,0";
+    QTest::newRow("invalid enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
+    QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
+
 
 }

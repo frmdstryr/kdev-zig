@@ -22,6 +22,7 @@
 #include <language/duchain/problem.h>
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
+#include <language/duchain/types/enumerationtype.h>
 #include <language/editor/documentrange.h>
 
 #include "types/builtintype.h"
@@ -86,6 +87,19 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_if:
         case NodeTag_if_simple:
             visitIf(node, parent);
+            break;
+        case NodeTag_enum_literal:
+            visitEnumLiteral(node, parent);
+            break;
+        case NodeTag_switch:
+        case NodeTag_switch_comma:
+            visitSwitch(node, parent);
+            break;
+        case NodeTag_switch_case_one:
+            visitSwitchCase(node, parent);
+            break;
+        case NodeTag_assign:
+            visitAssign(node, parent);
             break;
         // case VarAccess:
         //     visitVarAccess(node, parent);
@@ -215,6 +229,24 @@ VisitResult UseBuilder::visitVarAccess(const ZigNode &node, const ZigNode &paren
     // TODO
     return Continue;
 }
+
+
+VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(lhs, node);
+    if (rhs.tag() == NodeTag_enum_literal) {
+        checkAndAddEnumUse(v.lastType(), rhs.mainToken(), rhs.mainTokenRange());
+        return Continue;
+    }
+    // TODO
+    return Continue;
+}
+
 
 VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
 {
@@ -423,6 +455,118 @@ VisitResult UseBuilder::visitIf(const ZigNode &node, const ZigNode &parent)
     // Error for the non optional case is handled in the declaration builder
     // when creating the capture decl
     return Continue;
+}
+
+VisitResult UseBuilder::visitEnumLiteral(const ZigNode &node, const ZigNode &parent)
+{
+    NodeKind parentKind = parent.kind();
+    if (parentKind == VarDecl || parentKind == FieldDecl) {
+        QString enumName = node.mainToken();
+        auto useRange = node.mainTokenRange();
+        auto target = Helper::declarationForName(
+            parent.spellingName(),
+            useRange.start,
+            DUChainPointer<const DUContext>(currentContext())
+        );
+        if (!target) {
+            // TODO: Report error?
+            return Continue;
+        }
+        checkAndAddEnumUse(target->abstractType(), node.mainToken(), node.mainTokenRange());
+        return Continue;
+    }
+
+    // TODO: Switch, fn values params
+
+    // ProblemPointer p = ProblemPointer(new Problem());
+    // p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    // p->setSource(IProblem::SemanticAnalysis);
+    // p->setSeverity(IProblem::Hint);
+    // p->setDescription(i18n("Attempt to dereference non-pointer type"));
+    // DUChainWriteLocker lock;
+    // topContext()->addProblem(p);
+    return Continue;
+}
+
+
+
+VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode lhs = {node.ast, node.data().lhs};
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(lhs, node);
+
+    if (auto builtin = v.lastType().dynamicCast<BuiltinType>()) {
+        if (builtin->isInteger() || builtin->isBool()) {
+            return Continue; // No problem
+        }
+    }
+    else if (auto enumeration = v.lastType().dynamicCast<EnumerationType>()) {
+        return Continue; // No problem
+    }
+    // TODO: What else can switch?
+    // TODO: Check if all cases handled ?
+
+    auto useRange = lhs.range();
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    p->setDescription(i18n("Switch on invalid type"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+}
+
+VisitResult UseBuilder::visitSwitchCase(const ZigNode &node, const ZigNode &parent)
+{
+    ZigNode lhs = {node.ast, node.data().lhs};
+    if (lhs.tag() == NodeTag_enum_literal) {
+        // TODO: Cache parent switch type somehow
+        ZigNode switchType = {parent.ast, parent.data().lhs};
+        ExpressionVisitor v(session, currentContext()->parentContext());
+        v.startVisiting(switchType, node);
+        checkAndAddEnumUse(v.lastType(), lhs.mainToken(), lhs.mainTokenRange());
+    }
+
+    return Continue;
+}
+
+bool UseBuilder::checkAndAddEnumUse(
+        const KDevelop::AbstractType::Ptr &accessed,
+        const QString &enumName,
+        const KDevelop::RangeInRevision &useRange)
+{
+    auto enumeration = accessed.dynamicCast<EnumerationType>();
+    if (!enumeration){
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Attempted to access enum field on non-enum type"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+        return false;
+    }
+
+    auto decl = Helper::accessAttribute(enumeration, enumName, topContext());
+    // TODO: Verify decl is an enumeration type and not a fn or something
+    if (decl) {
+        if (decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        }
+        return true;
+    } else {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n("Invalid enum field %1", enumName));
+        topContext()->addProblem(p);
+        return false;
+    }
 }
 
 } // end namespace zig
