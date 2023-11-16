@@ -257,7 +257,7 @@ bool Helper::baseTypesEqual(
         if (!bBaseType)
             return false;
     }
-    return aBaseType->equals(bBaseType.data());
+    return typesEqualIgnoringModifiers(aBaseType, bBaseType);
 }
 
 bool Helper::typesEqualIgnoringModifiers(
@@ -340,10 +340,8 @@ bool Helper::canTypeBeAssigned(
             // Else do other cases need to cast?
 
             // Can assign non-const to const but not the other way
-            if (builtinType->modifiers() & AbstractType::ConstModifier) {
-                if (builtinType->toString() == paramType->toString()) {
-                    return true;
-                }
+            if (builtinType->toString() == paramType->toString()) {
+                return true;
             }
         }
 

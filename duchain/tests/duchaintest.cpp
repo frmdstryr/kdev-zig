@@ -755,8 +755,13 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";
     QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{"Struct A has no field b"} << "";
+    QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .Ok}; }" << QStringList{} << "";
+    QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{"Invalid enum field"} << "";
     QTest::newRow("struct dot init") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.a = 0}); }" << QStringList{} << "";
     QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{"Struct A has no field b"} << "";
-
+    QTest::newRow("array init") << "const a = [_]u8{1,2};" << QStringList{} << "";
+    QTest::newRow("array init type invalid") << "const a = [_]u8{1,false};" << QStringList{"Array item type mismatch at index 1"} << "";
+    QTest::newRow("array init struct dot init") << "const A = struct {a: u8}; const b = [_]A{.{.a=2}};" << QStringList{} << "";
+    QTest::newRow("array init struct dot init error") << "const A = struct {a: u8}; const b = [_]A{.{.a=true}};" << QStringList{"Struct field type mismatch"} << "";
 }
 

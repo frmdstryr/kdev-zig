@@ -458,7 +458,7 @@ fn findNodeComment(ast: *const Ast, node: NodeIndex) ?[]const u8 {
         }
     }
     const comment = std.mem.trim(u8, ast.source[comment_start..comment_end], " \t\r\n");
-    if (comment.len < 3 or comment.len > 1000) {
+    if (comment.len < 3 or comment.len > 5000) {
         return null;
     }
     return comment;
@@ -1183,12 +1183,26 @@ export fn ast_ptr_type_data(ptr: ?*Ast, node: NodeIndex) PtrTypeData {
 }
 
 
-export fn ast_array_init_size(ptr: ?*Ast, node: NodeIndex) u32 {
+export fn ast_array_init_item_size(ptr: ?*Ast, node: NodeIndex) u32 {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
             var nodes: [2]Ast.Node.Index = undefined;
             if (ast.fullArrayInit(&nodes, node)) |array_data| {
                 return @intCast(array_data.ast.elements.len);
+            }
+        }
+    }
+    return 0;
+}
+
+export fn ast_array_init_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            var nodes: [2]Ast.Node.Index = undefined;
+            if (ast.fullArrayInit(&nodes, node)) |array_data| {
+                if (i < array_data.ast.elements.len) {
+                    return array_data.ast.elements[i];
+                }
             }
         }
     }

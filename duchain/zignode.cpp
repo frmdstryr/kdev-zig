@@ -92,6 +92,16 @@ FieldInitData ZigNode::structInitAt(uint32_t i) const
     return ast_struct_init_field_at(ast, index, i);
 }
 
+uint32_t ZigNode::arrayInitCount() const
+{
+    return ast_array_init_item_size(ast, index);
+}
+
+ZigNode ZigNode::arrayInitAt(uint32_t i) const
+{
+    return ZigNode{ast, ast_array_init_item_at(ast, index, i)};
+}
+
 QString ZigNode::tokenSlice(TokenIndex i) const
 {
     if (i == INVALID_TOKEN) {

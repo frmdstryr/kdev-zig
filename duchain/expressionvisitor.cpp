@@ -204,16 +204,6 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
 
 VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNode &parent)
 {
-    // Q_UNUSED(parent);
-    // // qCDebug(KDEV_ZIG) << "visit pointer";
-    // ExpressionVisitor v(this);
-    // ZigNode value = node.nextChild();
-    // v.visitNode(value, node);
-    // auto ptrType = new PointerType();
-    // Q_ASSERT(ptrType);
-    // ptrType->setBaseType(v.lastType());
-    // encounter(AbstractType::Ptr(ptrType));
-    // return Continue;
     Q_UNUSED(parent);
     PtrTypeData ptr_info = ast_ptr_type_data(node.ast, node.index);
 
@@ -255,7 +245,7 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
         auto sliceType = new SliceType();
         Q_ASSERT(sliceType);
         sliceType->setElementType(baseType);
-        if (sentinel > 0) {
+        if (sentinel >= 0) {
             sliceType->setSentinel(sentinel);
         }
         encounter(AbstractType::Ptr(sliceType));
@@ -263,7 +253,7 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
         auto ptrType = new PointerType();
         Q_ASSERT(ptrType);
         ptrType->setBaseType(baseType);
-        if (align > 0) {
+        if (align >= 0) {
             ptrType->setAlignOf(align);
         }
         if (ptr_info.info.is_volatile) {
@@ -360,6 +350,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const Zig
     sliceType->setDimension(value.size() - 2); // Main token inclues quotes
     sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
+    // sliceType->setValueNode(node.index);
 
     auto ptrType = new PointerType();
     Q_ASSERT(ptrType);
@@ -379,6 +370,7 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
     // sliceType->setDimension();
     sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
+    // sliceType->setValueNode(node.index);
 
     auto ptrType = new PointerType();
     Q_ASSERT(ptrType);
@@ -958,7 +950,7 @@ VisitResult ExpressionVisitor::visitArrayInit(const ZigNode &node, const ZigNode
     ExpressionVisitor v(this);
     v.visitNode(lhs, node);
     if (auto slice = v.lastType().dynamicCast<SliceType>()) {
-        uint32_t n = ast_array_init_size(node.ast, node.index);
+        uint32_t n = node.arrayInitCount();
         if (n && static_cast<uint32_t>(slice->dimension()) != n) {
             auto newSlice = static_cast<SliceType*>(slice->clone());
             Q_ASSERT(newSlice);

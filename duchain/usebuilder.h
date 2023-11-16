@@ -26,6 +26,7 @@
 
 #include "kdevzigduchain_export.h"
 #include <language/duchain/types/structuretype.h>
+#include "types/slicetype.h"
 
 namespace Zig
 {
@@ -44,6 +45,7 @@ public:
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);
     VisitResult visitAssign(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
@@ -70,6 +72,18 @@ public:
         const QString &fieldName,
         const ZigNode &valueNode,
         const ZigNode &structInitNode,
+        const KDevelop::RangeInRevision &useRange);
+
+    bool checkAndAddArrayInitUse(
+        const SliceType::Ptr &sliceType,
+        const ZigNode &arrayInitNode,
+        const KDevelop::RangeInRevision &useRange);
+
+    bool checkAndAddArrayItemUse(
+        const KDevelop::AbstractType::Ptr &itemType,
+        const uint32_t itemIndex,
+        const ZigNode &valueNode,
+        const ZigNode &arrayInitNode,
         const KDevelop::RangeInRevision &useRange);
 
     bool checkAndAddEnumUse(

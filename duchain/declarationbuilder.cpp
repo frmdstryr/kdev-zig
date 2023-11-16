@@ -323,6 +323,7 @@ void DeclarationBuilder::setType(Declaration *decl, typename IdType<Kind>::Type 
 template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, IdentifiedType *type)
 {
+    decl->setAlwaysForceDirect(true);
     type->setDeclaration(decl);
 }
 

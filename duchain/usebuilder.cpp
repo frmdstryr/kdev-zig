@@ -76,6 +76,12 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_struct_init_one_comma:
             visitStructInit(node, parent);
             break;
+        case NodeTag_array_init:
+        case NodeTag_array_init_comma:
+        case NodeTag_array_init_one:
+        case NodeTag_array_init_one_comma:
+            visitArrayInit(node, parent);
+            break;
         case NodeTag_deref:
             visitDeref(node, parent);
             break;
@@ -275,8 +281,8 @@ VisitResult UseBuilder::visitStructInit(const ZigNode &node, const ZigNode &pare
     if (auto s = v.lastType().dynamicCast<StructureType>()) {
         checkAndAddStructInitUse(s, node, useRange);
     }
+    // TODO: else error ??
     return Continue;
-
 }
 
 bool UseBuilder::checkAndAddStructInitUse(
@@ -336,9 +342,121 @@ bool UseBuilder::checkAndAddStructFieldUse(
         topContext()->addProblem(p);
         return false;
     }
+
+    if (decl->range() != useRange) {
+        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+    }
+
+    // Enum field
+    if (auto enumeration = decl->abstractType().dynamicCast<EnumerationType>()) {
+        if (valueNode.tag() == NodeTag_enum_literal) {
+            return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
+        }
+    }
+
+    // Struct init
+    if (auto nestedStruct = decl->abstractType().dynamicCast<StructureType>()) {
+        if (valueNode.kind() == ContainerInit) {
+            auto range = valueNode.spellingRange();
+            return checkAndAddStructInitUse(nestedStruct, valueNode, range);
+        }
+    }
+
+    // TODO: Array init
+    if (auto sliceType = decl->abstractType().dynamicCast<SliceType>()) {
+        auto tag = valueNode.tag();
+        if (tag == NodeTag_array_init_dot
+            || tag == NodeTag_array_init_dot_comma
+            || tag == NodeTag_array_init_dot_two
+            || tag == NodeTag_array_init_dot_two_comma
+        ) {
+            auto range = valueNode.spellingRange();
+            return checkAndAddArrayInitUse(sliceType, valueNode, range);
+        }
+    }
+
+    // Generic field assignment
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(valueNode, structInitNode);
-    if (Helper::canTypeBeAssigned(decl->abstractType(), v.lastType(), topContext())) {
+    if (!Helper::canTypeBeAssigned(decl->abstractType(), v.lastType(), topContext())) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n(
+            "Struct field type mismatch. Expected %1 got %2",
+            decl->abstractType()->toString(), v.lastType()->toString()));
+        topContext()->addProblem(p);
+        return false;
+    }
+    return true;
+}
+
+VisitResult UseBuilder::visitArrayInit(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode owner = node.nextChild(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(owner, node);
+    auto useRange = editorFindSpellingRange(owner, owner.spellingName());
+    if (auto s = v.lastType().dynamicCast<SliceType>()) {
+        checkAndAddArrayInitUse(s, node, useRange);
+    }
+    // TODO: else error ??
+    return Continue;
+
+}
+
+
+bool UseBuilder::checkAndAddArrayInitUse(
+        const SliceType::Ptr &sliceType,
+        const ZigNode &arrayInitNode,
+        const KDevelop::RangeInRevision &useRange)
+{
+    const auto n = arrayInitNode.arrayInitCount();
+    bool ok = true;
+    for (uint32_t i=0; i < n; i++) {
+        ZigNode valueNode = arrayInitNode.arrayInitAt(i);
+        Q_ASSERT(!valueNode.isRoot());
+        auto itemRange = valueNode.spellingRange();
+        if (!checkAndAddArrayItemUse(sliceType->elementType(), i, valueNode, arrayInitNode, itemRange)) {
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+bool UseBuilder::checkAndAddArrayItemUse(
+        const KDevelop::AbstractType::Ptr &itemType,
+        const uint32_t itemIndex,
+        const ZigNode &valueNode,
+        const ZigNode &arrayInitNode,
+        const KDevelop::RangeInRevision &useRange)
+{
+    if (auto s = itemType.dynamicCast<StructureType>()) {
+        auto tag = valueNode.tag();
+        if (tag == NodeTag_struct_init_dot
+            || tag == NodeTag_struct_init_dot_comma
+            || tag == NodeTag_struct_init_dot_two
+            || tag == NodeTag_struct_init_dot_two_comma
+        ) {
+            TokenIndex tok = ast_node_main_token(valueNode.ast, valueNode.index);
+            auto dotRange = valueNode.tokenRange(tok - 1);
+            return checkAndAddStructInitUse(s, valueNode, dotRange);
+        }
+        // return checkAndAddStructInitUse(s, valueNode, valueNode.spellingRange());
+    }
+
+    if (auto enumeration = itemType.dynamicCast<EnumerationType>()) {
+        if (valueNode.tag() == NodeTag_enum_literal) {
+            return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
+        }
+    }
+
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(valueNode, arrayInitNode);
+    if (Helper::canTypeBeAssigned(itemType, v.lastType(), topContext())) {
         return true;
     }
 
@@ -348,12 +466,11 @@ bool UseBuilder::checkAndAddStructFieldUse(
     p->setSeverity(IProblem::Hint);
     DUChainWriteLocker lock;
     p->setDescription(i18n(
-        "Struct field type mismatch. Expected %1 got %2",
-        decl->abstractType()->toString(), v.lastType()->toString()));
+        "Array item type mismatch at index %1. Expected %2 got %3",
+        itemIndex, itemType->toString(), v.lastType()->toString()));
     topContext()->addProblem(p);
     return false;
 }
-
 
 VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
 {
@@ -363,11 +480,31 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
+    auto target = v.lastType();
     if (rhs.tag() == NodeTag_enum_literal) {
-        checkAndAddEnumUse(v.lastType(), rhs.mainToken(), rhs.mainTokenRange());
+        checkAndAddEnumUse(target, rhs.mainToken(), rhs.mainTokenRange());
         return Continue;
     }
-    // TODO
+
+    // TODO: Check struct dot init, array dot init...
+
+    ExpressionVisitor valueVisitor(session, currentContext());
+    valueVisitor.startVisiting(rhs, node);
+    auto value = valueVisitor.lastType();
+
+    if (!Helper::canTypeBeAssigned(target, value, topContext())) {
+        return Continue;
+    }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    DUChainWriteLocker lock;
+    p->setDescription(i18n(
+        "Assignment type mismatch. Expected %1 got %2",
+        target->toString(), value->toString()));
+    topContext()->addProblem(p);
     return Continue;
 }
 
@@ -599,15 +736,15 @@ VisitResult UseBuilder::visitEnumLiteral(const ZigNode &node, const ZigNode &par
         checkAndAddEnumUse(target->abstractType(), node.mainToken(), node.mainTokenRange());
         return Continue;
     }
-    NodeTag tag = parent.tag();
-    if (tag == NodeTag_array_init) {
-          // TODO: Cache parent type somehow
-        ZigNode arrayType = {parent.ast, parent.data().lhs};
-        ZigNode typeNode = {parent.ast, arrayType.data().rhs};
-        ExpressionVisitor v(session, currentContext()->parentContext());
-        v.startVisiting(typeNode, node);
-        checkAndAddEnumUse(v.lastType(), node.mainToken(), node.mainTokenRange());
-    }
+    // NodeTag tag = parent.tag();
+    // if (tag == NodeTag_array_init) {
+    //       // TODO: Cache parent type somehow
+    //     ZigNode arrayType = {parent.ast, parent.data().lhs};
+    //     ZigNode typeNode = {parent.ast, arrayType.data().rhs};
+    //     ExpressionVisitor v(session, currentContext()->parentContext());
+    //     v.startVisiting(typeNode, node);
+    //     checkAndAddEnumUse(v.lastType(), node.mainToken(), node.mainTokenRange());
+    // }
 
 
     // TODO: Switch, fn values params

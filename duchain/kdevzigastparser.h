@@ -634,7 +634,6 @@ struct PtrTypeData
   PtrTypeInfo info;
 };
 
-
 struct ParamDataInfo
 {
     bool is_comptime : 1;
@@ -672,7 +671,8 @@ ArrayTypeSentinel ast_array_type_sentinel(const ZAst *tree, NodeIndex node);
 IfData ast_if_data(const ZAst *tree, NodeIndex node);
 VarData ast_var_data(const ZAst *tree, NodeIndex node);
 PtrTypeData ast_ptr_type_data(const ZAst *tree, NodeIndex node);
-uint32_t ast_array_init_size(const ZAst *tree, NodeIndex node);
+uint32_t ast_array_init_item_size(const ZAst *tree, NodeIndex node);
+NodeIndex ast_array_init_item_at(const ZAst *tree, NodeIndex node, uint32_t i);
 NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);

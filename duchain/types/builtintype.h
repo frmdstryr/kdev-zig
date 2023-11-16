@@ -1,9 +1,10 @@
 #pragma once
-
+#include <QString>
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
-#include <QString>
+#include "kdevplatform/serialization/indexedstring.h"
 
+#include "kdevzigastparser.h"
 
 namespace Zig
 {
@@ -26,9 +27,9 @@ public:
     ~BuiltinTypeData() = default;
 
     void setData(const QString &name);
-
-    char m_dataType[16];
-    uint8_t m_dataTypeLen = 0;
+    // Either a type name or file
+    IndexedString m_data;
+    NodeIndex m_value = 0;
 };
 
 class KDEVPLATFORMLANGUAGE_EXPORT BuiltinType : public AbstractType
@@ -52,16 +53,20 @@ public:
     QString dataType() const;
     void setDataType(QString &dataType);
 
+    NodeIndex valueNode() const;
+    void setValueNode(NodeIndex node);
+
     bool isSigned() const;
     bool isUnsigned() const;
     bool isFloat() const;
-    bool isComptimeInt() const { return toString() == QLatin1String("comptime_int"); }
-    bool isComptime() const { return toString().startsWith("comptime"); }
+    bool isComptimeInt() const;
+    bool isComptimeFloat() const;
+    bool isComptime() const { return isComptimeInt() || isComptimeFloat(); }
     bool isInteger() const { return isSigned() || isUnsigned(); }
     bool isNumeric() const { return isInteger() || isFloat(); }
-    bool isBool() const { return toString() == QLatin1String("bool"); }
-    bool isNull() const { return toString() == QLatin1String("null"); }
-    bool isUndefined() const { return toString() == QLatin1String("undefined"); }
+    bool isBool() const;
+    bool isNull() const;
+    bool isUndefined() const;
 
     using Data = BuiltinTypeData;
 

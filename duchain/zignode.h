@@ -84,9 +84,14 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     uint32_t callParamCount() const;
     ZigNode callParamAt(uint32_t i) const;
 
-    // For calls
+    // For struct inits
     uint32_t structInitCount() const;
     FieldInitData structInitAt(uint32_t i) const;
+
+    // For array inits
+    uint32_t arrayInitCount() const;
+    ZigNode arrayInitAt(uint32_t i) const;
+
 
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;

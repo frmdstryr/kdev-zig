@@ -57,8 +57,9 @@ bool SliceType::equals(const AbstractType* _rhs) const
     TYPE_D(SliceType);
     if (d->m_dimension != rhs->d_func()->m_dimension)
         return false;
-    if (d->m_sentinel!= rhs->d_func()->m_sentinel)
+    if (d->m_sentinel != rhs->d_func()->m_sentinel)
         return false;
+    // TODO: Should element value be checked?
     return d->m_elementType == rhs->d_func()->m_elementType;
 }
 
@@ -131,6 +132,7 @@ AbstractType::WhichType SliceType::whichType() const
 uint SliceType::hash() const
 {
     return KDevHash(AbstractType::hash())
-           << (elementType() ? elementType()->hash() : 0) << dimension() << sentinel();
+           << (elementType() ? elementType()->hash() : 0)
+           << dimension() << sentinel();
 }
 }
