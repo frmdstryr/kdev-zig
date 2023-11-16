@@ -100,6 +100,33 @@ public:
         const KDevelop::AbstractType::Ptr type,
         const KDevelop::TopDUContext* topContext);
 
+    /**
+     * Check if types are equal factoring out any pointers.
+     * So *Foo and Foo will be considered the same. If either types are null
+     * or pointer base types are nullptr return false.
+     */
+    static bool baseTypesEqual(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b);
+
+    /**
+     * Check if types are equal if modifiers (eg const) are ignored
+     */
+    static bool typesEqualIgnoringModifiers(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b);
+
+    /**
+     * Check if the given value type can be assigned to the target
+     * type without causing an error.
+     */
+    static bool canTypeBeAssigned(
+        const KDevelop::AbstractType::Ptr &target,
+        const KDevelop::AbstractType::Ptr &value,
+        const KDevelop::DUContext* context);
+
+
+
 };
 
 }

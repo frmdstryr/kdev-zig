@@ -55,10 +55,13 @@ public:
     bool isSigned() const;
     bool isUnsigned() const;
     bool isFloat() const;
+    bool isComptimeInt() const { return toString() == QLatin1String("comptime_int"); }
     bool isComptime() const { return toString().startsWith("comptime"); }
     bool isInteger() const { return isSigned() || isUnsigned(); }
     bool isNumeric() const { return isInteger() || isFloat(); }
     bool isBool() const { return toString() == QLatin1String("bool"); }
+    bool isNull() const { return toString() == QLatin1String("null"); }
+    bool isUndefined() const { return toString() == QLatin1String("undefined"); }
 
     using Data = BuiltinTypeData;
 

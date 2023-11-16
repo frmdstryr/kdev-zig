@@ -57,8 +57,9 @@ void ExpressionVisitor::visitChildren(const ZigNode &node, const ZigNode &parent
 
 void ExpressionVisitor::startVisiting(const ZigNode &node, const ZigNode &parent)
 {
-    Q_ASSERT(!node.isRoot());
-    visitNode(node, parent);
+    if (!node.isRoot()) {
+        visitNode(node, parent);
+    }
 }
 
 VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &parent)
@@ -85,6 +86,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitEnumLiteral(node, parent);
     case NodeTag_ptr_type:
     case NodeTag_ptr_type_bit_range:
+    case NodeTag_ptr_type_aligned:
+    case NodeTag_ptr_type_sentinel:
         return visitPointerType(node, parent);
     case NodeTag_container_decl:
     case NodeTag_container_decl_arg_trailing:
@@ -176,9 +179,6 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitSlice(node, parent);
     case NodeTag_array_type_sentinel:
         return visitArrayTypeSentinel(node, parent);
-    case NodeTag_ptr_type_aligned:
-        return visitPointerTypeAligned(node, parent);
-    //case NodeTag_ptr_type_sentinel:
     case NodeTag_if:
     //case NodeTag_if_simple: // not expr?
         return visitIf(node, parent);
@@ -204,15 +204,83 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
 
 VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNode &parent)
 {
+    // Q_UNUSED(parent);
+    // // qCDebug(KDEV_ZIG) << "visit pointer";
+    // ExpressionVisitor v(this);
+    // ZigNode value = node.nextChild();
+    // v.visitNode(value, node);
+    // auto ptrType = new PointerType();
+    // Q_ASSERT(ptrType);
+    // ptrType->setBaseType(v.lastType());
+    // encounter(AbstractType::Ptr(ptrType));
+    // return Continue;
     Q_UNUSED(parent);
-    // qCDebug(KDEV_ZIG) << "visit pointer";
+    PtrTypeData ptr_info = ast_ptr_type_data(node.ast, node.index);
+
+    ZigNode childType = {node.ast, ptr_info.child_type};
     ExpressionVisitor v(this);
-    ZigNode value = node.nextChild();
-    v.visitNode(value, node);
-    auto ptrType = new PointerType();
-    Q_ASSERT(ptrType);
-    ptrType->setBaseType(v.lastType());
-    encounter(AbstractType::Ptr(ptrType));
+    v.visitNode(childType, node);
+
+    auto baseType = v.lastType();
+    if (ptr_info.info.is_const && !(baseType->modifiers() & AbstractType::ConstModifier)) {
+        auto clone = baseType->clone();
+        Q_ASSERT(clone);
+        clone->setModifiers(clone->modifiers() | AbstractType::ConstModifier);
+        baseType = AbstractType::Ptr(clone);
+    }
+
+    int sentinel = -1;
+    if (ptr_info.sentinel) {
+        ZigNode sentinelNode = {node.ast, ptr_info.sentinel};
+        bool ok;
+        if (sentinelNode.tag() == NodeTag_number_literal) {
+            QString value = sentinelNode.mainToken();
+            sentinel = value.toInt(&ok, 0);
+        }
+    }
+
+    int align = -1;
+    if (ptr_info.align_node) {
+        bool ok;
+        ZigNode alignNode = {node.ast, ptr_info.align_node};
+        if (alignNode.tag() == NodeTag_number_literal) {
+            QString value = alignNode.mainToken();
+            align = value.toInt(&ok, 0);
+        }
+    }
+
+    QString mainToken = node.mainToken();
+    if (mainToken == QLatin1String("[")) {
+        // TODO: slice alignment
+        auto sliceType = new SliceType();
+        Q_ASSERT(sliceType);
+        sliceType->setElementType(baseType);
+        if (sentinel > 0) {
+            sliceType->setSentinel(sentinel);
+        }
+        encounter(AbstractType::Ptr(sliceType));
+    } else if (mainToken == QLatin1String("*")) {
+        auto ptrType = new PointerType();
+        Q_ASSERT(ptrType);
+        ptrType->setBaseType(baseType);
+        if (align > 0) {
+            ptrType->setAlignOf(align);
+        }
+        if (ptr_info.info.is_volatile) {
+            ptrType->setModifiers(AbstractType::VolatileModifier);
+        }
+        auto next_token = ast_node_main_token(node.ast, node.index) + 1;
+        if (node.tokenSlice(next_token) == QLatin1String("]")) {
+            ptrType->setModifiers(ptrType->modifiers() | ArrayModifier);
+        }
+        encounter(AbstractType::Ptr(ptrType));
+    } else {
+        // Can this happen ?
+        auto ptrType = new PointerType();
+        Q_ASSERT(ptrType);
+        ptrType->setBaseType(baseType);
+        encounter(AbstractType::Ptr(ptrType));
+    }
     return Continue;
 }
 
@@ -523,7 +591,8 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     ) {
         auto slice = new SliceType();
         slice->setSentinel(0);
-        auto elemType = BuiltinType::newFromName("u8");
+        // Must clone since constness is modified here
+        auto elemType = BuiltinType::newFromName("u8")->clone();
         elemType->setModifiers(BuiltinType::CommonModifiers::ConstModifier);
         slice->setElementType(AbstractType::Ptr(elemType));
         encounter(AbstractType::Ptr(slice));
@@ -665,17 +734,21 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     ZigNode next = node.nextChild();
     v.visitNode(next, node);
     if (auto func = v.lastType().dynamicCast<FunctionType>()) {
-        if (func->returnType()->modifiers() & ComptimeModifier) {
-            auto comptimeType = func->returnType();
-            // TODO: Specialize fn decl
-            encounter(comptimeType);
+        // Return type may temporarily be null when the FunctionVisitor is
+        // visiting a recursive function that returns "type"
+        if (auto returnType = func->returnType()) {
+            if (returnType->modifiers() & ComptimeModifier) {
+                auto comptimeType = func->returnType();
+                // TODO: Specialize fn decl
+                encounter(comptimeType);
+                return Continue;
+            }
+            encounter(returnType);
             return Continue;
         }
-        encounter(func->returnType());
-    } else {
-        // TODO: Handle builtins?
-        encounterUnknown();
     }
+    // TODO: Handle builtins?
+    encounterUnknown();
     return Continue;
 }
 
@@ -989,46 +1062,5 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(const ZigNode &node, const
     return Continue;
 }
 
-VisitResult ExpressionVisitor::visitPointerTypeAligned(const ZigNode &node, const ZigNode &parent)
-{
-    Q_UNUSED(parent);
-    NodeData data = node.data();
-    ZigNode lhs = {node.ast, data.lhs};
-    ZigNode rhs = {node.ast, data.rhs};
-
-    QString mainToken = node.mainToken();
-
-    bool ok;
-    int align = -1;
-    if (lhs.tag() == NodeTag_number_literal) {
-        QString value = lhs.mainToken();
-        align = value.toInt(&ok, 0);
-    }
-
-    ExpressionVisitor typeVisitor(this);
-    typeVisitor.visitNode(rhs, node);
-    if (mainToken == QLatin1String("[")) {
-        // TODO: slice alignment
-        auto sliceType = new SliceType();
-        Q_ASSERT(sliceType);
-        sliceType->setElementType(typeVisitor.lastType());
-        encounter(AbstractType::Ptr(sliceType));
-    } else if (mainToken == QLatin1String("*")) {
-        auto ptrType = new PointerType();
-        Q_ASSERT(ptrType);
-        ptrType->setBaseType(typeVisitor.lastType());
-        if (ok) {
-            ptrType->setAlignOf(align);
-        }
-        auto next_token = ast_node_main_token(node.ast, node.index) + 1;
-        if (node.tokenSlice(next_token) == QLatin1String("]")) {
-            ptrType->setModifiers(ArrayModifier);
-        }
-        encounter(AbstractType::Ptr(ptrType));
-    } else {
-        encounterUnknown();
-    }
-    return Continue;
-}
 
 } // End namespce

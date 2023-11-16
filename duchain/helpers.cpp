@@ -3,23 +3,27 @@
 
     SPDX-License-Identifier: GPL-2.0-or-later
 */
-#include "helpers.h"
 #include <interfaces/icore.h>
 #include <interfaces/iproject.h>
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/types/identifiedtype.h>
 #include <language/backgroundparser/backgroundparser.h>
 #include <interfaces/ilanguagecontroller.h>
+#include <interfaces/iprojectcontroller.h>
 #include <util/path.h>
-#include "types/declarationtypes.h"
-#include "types/pointertype.h"
-#include "types/builtintype.h"
+
 #include <QProcess>
 #include <QRegularExpression>
 #include <kconfiggroup.h>
-#include "zigdebug.h"
-#include <interfaces/iprojectcontroller.h>
 
+#include "types/declarationtypes.h"
+#include "types/pointertype.h"
+#include "types/builtintype.h"
+#include "types/optionaltype.h"
+#include "types/slicetype.h"
+
+#include "helpers.h"
+#include "zigdebug.h"
 
 namespace Zig
 {
@@ -134,6 +138,7 @@ static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
     return (
         ctx->type() == DUContext::Function
         || ctx->type() == DUContext::Class // Also needed for Zig's nested structs
+        || ctx->type() == DUContext::Global
     );
 }
 
@@ -224,6 +229,7 @@ KDevelop::DUContext* Helper::thisContext(
         if (contextType == DUContext::Class
             || contextType == DUContext::Namespace
             || contextType == DUContext::Enum
+            || contextType == DUContext::Global
         ) {
             return currentContext;
         }
@@ -231,6 +237,128 @@ KDevelop::DUContext* Helper::thisContext(
     }
     return nullptr;
 
+}
+
+bool Helper::baseTypesEqual(
+    const KDevelop::AbstractType::Ptr &a,
+    const KDevelop::AbstractType::Ptr &b)
+{
+    if (!a || !b)
+        return false;
+    auto aBaseType = a;
+    auto bBaseType = b;
+    if (auto aPtr = a.dynamicCast<Zig::PointerType>()) {
+        aBaseType = aPtr->baseType();
+        if (!aBaseType)
+            return false;
+    }
+    if (auto bPtr = b.dynamicCast<Zig::PointerType>()) {
+        bBaseType = bPtr->baseType();
+        if (!bBaseType)
+            return false;
+    }
+    return aBaseType->equals(bBaseType.data());
+}
+
+bool Helper::typesEqualIgnoringModifiers(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b)
+{
+    if (!a || !b)
+        return false;
+    if (a->equals(b.data()))
+        return true;
+    auto copy = b->clone();
+    copy->setModifiers(a->modifiers());
+    bool result = a->equals(copy);
+    delete copy;
+    return result;
+}
+
+bool Helper::canTypeBeAssigned(
+        const KDevelop::AbstractType::Ptr &target,
+        const KDevelop::AbstractType::Ptr &value,
+        const KDevelop::DUContext* context)
+{
+    if (!target || !value) {
+        return false;
+    }
+    if (target->equals(value.data())) {
+        return true; // Same type, yes!
+    }
+
+    // Optionals can be assigned to null or value of same type
+    if (auto optional = target.dynamicCast<OptionalType>()) {
+        if (auto builtin = value.dynamicCast<BuiltinType>()) {
+            if (builtin->isNull() || builtin->isUndefined()) {
+                return true; // This is fine
+            }
+        }
+        if (auto v = value.dynamicCast<OptionalType>()) {
+            return canTypeBeAssigned(optional->baseType(), v->baseType(), context);
+        } else {
+            return canTypeBeAssigned(optional->baseType(), value, context);
+        }
+    }
+
+    if (auto ptr = target.dynamicCast<PointerType>()) {
+        if (auto valuePtr = value.dynamicCast<PointerType>()) {
+            // Types not equal, maybe const difference ?
+            if (ptr->modifiers() & AbstractType::ConstModifier) {
+                return canTypeBeAssigned(ptr->baseType(), valuePtr->baseType(), context);
+            }
+            // Else they should be equal which was already checked
+        }
+        return false;
+    }
+
+    // Check for *const [x:0]u8 implicitly casting to []u8
+    // fn foo(arg: []const u8) --> foo("abc")
+    if (auto slice = target.dynamicCast<SliceType>()) {
+        if (slice->dimension() != 0)
+            return false;
+        if (auto elementType = slice->elementType()) {
+            if (elementType->modifiers() & AbstractType::ConstModifier) {
+                if (auto ptr = value.dynamicCast<PointerType>()) {
+                    if (auto valueSlice = ptr->baseType().dynamicCast<SliceType>()) {
+                        // TODO: const and sentinel ?
+                        return typesEqualIgnoringModifiers(elementType, valueSlice->elementType());
+                    }
+                }
+            }
+        }
+    }
+
+    // Resolve auto casts (eg comptime int)
+    if (auto builtinType = target.dynamicCast<BuiltinType>()) {
+        auto paramType = value.dynamicCast<BuiltinType>();
+        if (paramType) {
+            if (builtinType->isInteger() && paramType->isComptimeInt())
+                return true;
+            if (builtinType->isFloat() && paramType->isComptime())
+                return true; // Auto casts
+            // Else do other cases need to cast?
+
+            // Can assign non-const to const but not the other way
+            if (builtinType->modifiers() & AbstractType::ConstModifier) {
+                if (builtinType->toString() == paramType->toString()) {
+                    return true;
+                }
+            }
+        }
+
+        QString builtinName = builtinType->toString();
+        if (builtinName == QLatin1String("type")
+            || builtinName == QLatin1String("anytype")
+        ) {
+            if (paramType && (paramType->isUndefined() || paramType->isNull())) {
+                return false;
+            }
+            return true; // TODO check if context is type or instance
+        }
+    }
+
+    return false;
 }
 
 

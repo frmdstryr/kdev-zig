@@ -293,6 +293,30 @@ void DUChainTest::sanityCheckDuplicateImport()
 
 }
 
+void DUChainTest::sanityCheckThisImport()
+{
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("this_import/A.zig"));
+    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath("this_import/main.zig"));
+    DUChainReadLocker lock;
+
+    qDebug() << "mod A decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_a)->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+    qDebug() << "main decls are:";
+    for (const KDevelop::Declaration *decl : moduleInternalContext(mod_main)->localDeclarations()) {
+        qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
+    }
+
+    auto A = mod_a->findDeclarations(Identifier("A"));
+    QCOMPARE(A.size(), 1);
+    QCOMPARE(A.first()->abstractType()->toString(), assetsDir.filePath("this_import/A.zig"));
+    auto x = mod_main->findDeclarations(Identifier("a"));
+    QCOMPARE(x.size(), 1);
+    QCOMPARE(x.first()->abstractType()->toString(), assetsDir.filePath("this_import/A.zig"));
+}
+
 
 void DUChainTest::cleanupTestCase()
 {
@@ -481,6 +505,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("fn !void") << "pub fn main() !void {}" << "main" << "function !void ()"<< "";
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
     QTest::newRow("fn arg") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)"<< "";
+    QTest::newRow("fn anytype") << "pub fn main(a: anytype) void {}" << "main" << "function void (anytype)"<< "";
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
     QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
     QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
@@ -691,11 +716,47 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
-
+    QTest::newRow("enum array init") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error};" << QStringList{} << "";
+    QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; };" << QStringList{} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";
     QTest::newRow("use out of order in fn") << "pub fn foo() void {const x = y; const y = 1;}" << QStringList{"Undefined variable y"} << "";
     QTest::newRow("use out of order in fn in struct") << "const Foo = struct {pub fn foo() void {const x = y; const y = 1;}};" << QStringList{"Undefined variable y"} << "";
 
+    // QTest::newRow("fn call undefined") << "test {var y = foo(); }" << QStringList{"Undefined function", "Undefined variable foo"} << "";
+    QTest::newRow("fn call builtin") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(0); }" << QStringList{} << "";
+    QTest::newRow("fn call missing arg") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(); }" << QStringList{"Expected 1 argument"} << "";
+    QTest::newRow("fn call missing args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(); }" << QStringList{"Expected 2 arguments"} << "";
+    QTest::newRow("fn call extra arg") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3); }" << QStringList{"Function has an extra argument"} << "";
+    QTest::newRow("fn call extra args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3, 4); }" << QStringList{"Function has 2 extra arguments"} << "";
+    QTest::newRow("fn call enum arg inferred") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Ok); }" << QStringList{} << "";
+    QTest::newRow("fn call enum arg") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(Status.Ok); }" << QStringList{} << "";
+    QTest::newRow("fn call enum arg inferred invalid") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Missing); }" << QStringList{"Invalid enum field Missing"} << "";
+    QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{"Argument 1 type mismatch. Expected u8 got bool"} << "";
+    QTest::newRow("struct fn call") << "const Foo = struct {pub fn foo(self: Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
+    QTest::newRow("struct fn call ptr") << "const Foo = struct {pub fn foo(self: *Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
+    QTest::newRow("struct fn call arg") << "const Foo = struct {pub fn foo(self: Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
+    QTest::newRow("struct fn call ptr arg") << "const Foo = struct {pub fn foo(self: *Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
+    QTest::newRow("struct fn call not self") << "const Foo = struct {pub fn foo(other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
+
+    QTest::newRow("fn opt null") << "pub fn foo(bar: ?u8) void {} test {const y = foo(null); }" << QStringList{} << "";
+    QTest::newRow("fn non-opt null") << "pub fn foo(bar: u8) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn opt base") << "pub fn foo(bar: ?u8) void {} test {var x: ?u8 = 0; const y = foo(x); }" << QStringList{} << "";
+    QTest::newRow("fn opt comptime") << "pub fn foo(bar: ?u8) void {} test {const y = foo(1); }" << QStringList{} << "";
+    QTest::newRow("fn opt base wrong") << "pub fn foo(bar: ?u8) void {} test {var x: ?i8 = 0; const y = foo(x); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn type arg") << "pub fn foo(comptime T: type) void {} test {const y = foo(u8); }" << QStringList{} << "";
+    QTest::newRow("fn type arg null") << "pub fn foo(comptime T: type) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn arg []const u8") << "pub fn foo(bar: []const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
+    QTest::newRow("fn arg [:0]const u8") << "pub fn foo(bar: [:0]const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
+    QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{"type mismatch"} << "";
+
+    QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
+    QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{"Struct A has no field b"} << "";
+    QTest::newRow("struct dot init") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.a = 0}); }" << QStringList{} << "";
+    QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{"Struct A has no field b"} << "";
+
 }
+

@@ -25,6 +25,7 @@
 #include "zignode.h"
 
 #include "kdevzigduchain_export.h"
+#include <language/duchain/types/structuretype.h>
 
 namespace Zig
 {
@@ -39,13 +40,11 @@ public:
 
     virtual VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
 
-private:
     VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
     VisitResult visitAssign(const ZigNode &node, const ZigNode &parent);
-    VisitResult visitVarAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
@@ -54,6 +53,24 @@ private:
     VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitchCase(const ZigNode &node, const ZigNode &parent);
+
+    bool checkAndAddFnArgUse(
+        const KDevelop::AbstractType::Ptr &argType,
+        const uint32_t argIndex,
+        const ZigNode &argValueNode,
+        const ZigNode &callNode);
+
+    bool checkAndAddStructInitUse(
+        const KDevelop::StructureType::Ptr &structType,
+        const ZigNode &structInitNode,
+        const KDevelop::RangeInRevision &useRange);
+
+    bool checkAndAddStructFieldUse(
+        const KDevelop::StructureType::Ptr &structType,
+        const QString &fieldName,
+        const ZigNode &valueNode,
+        const ZigNode &structInitNode,
+        const KDevelop::RangeInRevision &useRange);
 
     bool checkAndAddEnumUse(
         const KDevelop::AbstractType::Ptr &accessed,

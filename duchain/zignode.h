@@ -76,9 +76,18 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     // Get return node if kind is FuncDecl or return root node
     ZigNode returnType() const;
     bool returnsInferredError() const;
-    uint32_t paramCount() const;
-    ZigNode paramType(uint32_t i) const;
-    QString paramName(uint32_t i) const;
+
+    uint32_t fnParamCount() const;
+    ParamData fnParamData(uint32_t i) const;
+
+    // For calls
+    uint32_t callParamCount() const;
+    ZigNode callParamAt(uint32_t i) const;
+
+    // For calls
+    uint32_t structInitCount() const;
+    FieldInitData structInitAt(uint32_t i) const;
+
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;
     KDevelop::RangeInRevision range() const;

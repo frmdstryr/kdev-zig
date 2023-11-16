@@ -19,6 +19,7 @@
 
 #include <language/duchain/ducontext.h>
 #include <language/duchain/declaration.h>
+#include <language/duchain/functiondeclaration.h>
 #include <language/duchain/problem.h>
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
@@ -178,24 +179,89 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     ZigNode child = node.nextChild();
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(child, node);
+    AbstractType::Ptr selfType  = AbstractType::Ptr();
+    if (child.tag() == NodeTag_field_access) {
+        ExpressionVisitor ownerVisitor(session, currentContext());
+        ZigNode lhs = {child.ast, child.data().lhs};
+        ownerVisitor.startVisiting(lhs, node);
+
+        if (ownerVisitor.lastType().dynamicCast<StructureType>()
+            || ownerVisitor.lastType().dynamicCast<EnumerationType>()
+        ) {
+            selfType = ownerVisitor.lastType();
+        }
+    }
+
 
     QString functionName = child.spellingName();
-    RangeInRevision useRange = editorFindSpellingRange(node, functionName);
 
-    if (auto fn = v.lastType().dynamicCast<FunctionType>()) {
-        auto decl = v.lastDeclaration();
-        if (decl && decl->range() != useRange) {
-            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
-        }
+    auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>();
+    RangeInRevision useRange = editorFindSpellingRange(child, functionName);
+    if (!decl) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Undefined function"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
         return Continue;
     }
-    ProblemPointer p = ProblemPointer(new Problem());
-    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-    p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
-    p->setDescription(i18n("Undefined function"));
-    DUChainWriteLocker lock;
-    topContext()->addProblem(p);
+
+    if (decl->range() != useRange) {
+        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+    }
+    auto fn = decl->abstractType().dynamicCast<FunctionType>();
+    Q_ASSERT(fn);
+    const auto n = node.callParamCount();
+    const auto args = fn->arguments();
+
+    // Handle implict "self" arg in struct fns
+    int startArg = 0;
+    if (args.size() > 0 && Helper::baseTypesEqual(args.at(0), selfType)) {
+        startArg = 1;
+    }
+    const auto requiredArgs = static_cast<uint32_t>(args.size() - startArg);
+
+    // Instead of throwing an error for any mismatch like what zig does
+    // still check types for whatever we can
+    if (n == 0 && args.size() > startArg) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        if (requiredArgs == 1) {
+            p->setDescription(i18n("Expected 1 argument"));
+        } else {
+            p->setDescription(i18n("Expected %1 arguments", requiredArgs));
+        }
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+        return Continue;
+    }
+
+    // Check fn arguments
+    uint32_t i = 0;
+    for (const auto &arg: args.mid(startArg)) {
+        ZigNode argValueNode = node.callParamAt(i);
+        checkAndAddFnArgUse(arg, i, argValueNode, node);
+        i += 1;
+    }
+
+    if (n > requiredArgs) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        const auto extra = n - requiredArgs;
+        if (extra == 1) {
+            p->setDescription(i18n("Function has an extra argument"));
+        } else {
+            p->setDescription(i18n("Function has %1 extra arguments", extra));
+        }
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+    }
     return Continue;
 }
 
@@ -207,27 +273,85 @@ VisitResult UseBuilder::visitStructInit(const ZigNode &node, const ZigNode &pare
     v.startVisiting(owner, node);
     auto useRange = editorFindSpellingRange(owner, owner.spellingName());
     if (auto s = v.lastType().dynamicCast<StructureType>()) {
-        auto decl = v.lastDeclaration();
-        if (decl && decl->range() != useRange) {
-            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        checkAndAddStructInitUse(s, node, useRange);
+    }
+    return Continue;
+
+}
+
+bool UseBuilder::checkAndAddStructInitUse(
+    const KDevelop::StructureType::Ptr &structType,
+    const ZigNode &structInitNode,
+    const KDevelop::RangeInRevision &useRange)
+{
+    Declaration* decl;
+    {
+        DUChainReadLocker lock;
+        decl = structType->declaration(nullptr);
+    }
+    if (!decl) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Undefined struct"));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+        return false;
+    }
+    if (decl->range() != useRange) {
+        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+    }
+    // TODO: Check fields
+    const auto n = structInitNode.structInitCount();
+    bool ok = true;
+    for (uint32_t i=0; i < n; i++) {
+        FieldInitData fieldData = structInitNode.structInitAt(i);
+        ZigNode fieldValue = {structInitNode.ast, fieldData.value_expr};
+        QString fieldName = structInitNode.tokenSlice(fieldData.name_token);
+        auto useRange = structInitNode.tokenRange(fieldData.name_token);
+        if (!checkAndAddStructFieldUse(structType, fieldName, fieldValue, structInitNode, useRange)) {
+            ok = false;
         }
-        return Continue;
+    }
+    return ok;
+}
+
+bool UseBuilder::checkAndAddStructFieldUse(
+        const KDevelop::StructureType::Ptr &structType,
+        const QString &fieldName,
+        const ZigNode &valueNode,
+        const ZigNode &structInitNode,
+        const KDevelop::RangeInRevision &useRange)
+{
+    auto decl = Helper::accessAttribute(structType, fieldName, topContext());
+    if (!decl) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(
+            i18n("Struct %1 has no field %2", structType->toString(), fieldName));
+        topContext()->addProblem(p);
+        return false;
+    }
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(valueNode, structInitNode);
+    if (Helper::canTypeBeAssigned(decl->abstractType(), v.lastType(), topContext())) {
+        return true;
     }
 
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
     p->setSeverity(IProblem::Hint);
-    p->setDescription(i18n("Undefined struct"));
     DUChainWriteLocker lock;
+    p->setDescription(i18n(
+        "Struct field type mismatch. Expected %1 got %2",
+        decl->abstractType()->toString(), v.lastType()->toString()));
     topContext()->addProblem(p);
-    return Continue;
-}
-
-VisitResult UseBuilder::visitVarAccess(const ZigNode &node, const ZigNode &parent)
-{
-    // TODO
-    return Continue;
+    return false;
 }
 
 
@@ -475,6 +599,16 @@ VisitResult UseBuilder::visitEnumLiteral(const ZigNode &node, const ZigNode &par
         checkAndAddEnumUse(target->abstractType(), node.mainToken(), node.mainTokenRange());
         return Continue;
     }
+    NodeTag tag = parent.tag();
+    if (tag == NodeTag_array_init) {
+          // TODO: Cache parent type somehow
+        ZigNode arrayType = {parent.ast, parent.data().lhs};
+        ZigNode typeNode = {parent.ast, arrayType.data().rhs};
+        ExpressionVisitor v(session, currentContext()->parentContext());
+        v.startVisiting(typeNode, node);
+        checkAndAddEnumUse(v.lastType(), node.mainToken(), node.mainTokenRange());
+    }
+
 
     // TODO: Switch, fn values params
 
@@ -533,6 +667,79 @@ VisitResult UseBuilder::visitSwitchCase(const ZigNode &node, const ZigNode &pare
     return Continue;
 }
 
+
+bool UseBuilder::checkAndAddFnArgUse(
+        const KDevelop::AbstractType::Ptr &argType,
+        const uint32_t argIndex,
+        const ZigNode &argValueNode,
+        const ZigNode &callNode)
+{
+    if (argValueNode.isRoot()) {
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, callNode.mainTokenRange().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        p->setDescription(i18n("Argument %1 is missing", argIndex + 1));
+        DUChainWriteLocker lock;
+        topContext()->addProblem(p);
+        return false;
+    }
+    NodeTag tag = argValueNode.tag();
+
+    // Check inferred enum literal fields
+    // eg var x = call(.Foo);
+    if (auto enumeration = argType.dynamicCast<EnumerationType>()) {
+        if (tag == NodeTag_enum_literal) {
+            return checkAndAddEnumUse(
+                enumeration,
+                argValueNode.mainToken(),
+                argValueNode.mainTokenRange()
+            );
+        }
+    }
+
+    auto useRange = argValueNode.range();
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(argValueNode, callNode);
+    if (Helper::canTypeBeAssigned(argType, v.lastType(), currentContext())) {
+        return true; // Simple case
+    }
+    if (auto s = argType.dynamicCast<StructureType>()) {
+        if (tag == NodeTag_struct_init_dot
+            || tag == NodeTag_struct_init_dot_comma
+            || tag == NodeTag_struct_init_dot_two
+            || tag == NodeTag_struct_init_dot_two_comma
+        ) {
+            TokenIndex tok = ast_node_main_token(argValueNode.ast, argValueNode.index);
+            auto dotRange = argValueNode.tokenRange(tok - 1);
+            return checkAndAddStructInitUse(s, argValueNode, dotRange);
+        }
+    }
+
+    if (auto s = argType.dynamicCast<SliceType>()) {
+        if (tag == NodeTag_struct_init_dot
+            || tag == NodeTag_array_init_dot
+            || tag == NodeTag_array_init_dot_comma
+            || tag == NodeTag_array_init_dot_two
+            || tag == NodeTag_array_init_dot_two_comma
+        ) {
+            // TODO: Inferred types are always resolved by zig
+            // TODO: Check array element assignments
+            return true;
+        }
+    }
+
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Hint);
+    DUChainWriteLocker lock;
+    p->setDescription(i18n("Argument %1 type mismatch. Expected %2 got %3", argIndex + 1,
+                           argType->toString(), v.lastType()->toString()));
+    topContext()->addProblem(p);
+    return false;
+}
+
 bool UseBuilder::checkAndAddEnumUse(
         const KDevelop::AbstractType::Ptr &accessed,
         const QString &enumName,
@@ -552,21 +759,20 @@ bool UseBuilder::checkAndAddEnumUse(
 
     auto decl = Helper::accessAttribute(enumeration, enumName, topContext());
     // TODO: Verify decl is an enumeration type and not a fn or something
-    if (decl) {
-        if (decl->range() != useRange) {
-            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
-        }
-        return true;
-    } else {
+    if (!decl) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         DUChainWriteLocker lock;
-        p->setDescription(i18n("Invalid enum field %1", enumName));
+        p->setDescription(i18n("Invalid enum field %1 on %2", enumName, enumeration->toString()));
         topContext()->addProblem(p);
         return false;
     }
+    if (decl->range() != useRange) {
+        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+    }
+    return true;
 }
 
 } // end namespace zig

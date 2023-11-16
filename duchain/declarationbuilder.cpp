@@ -376,28 +376,34 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
     auto *decl = currentDeclaration();
     auto fn = decl->type<FunctionType>();
     Q_ASSERT(fn);
-    const auto n = node.paramCount();
-
-    if (n > 0) {
-        // TODO: Find a better way to do this
-        // params get Visited more than once but there is also stuff like
-        // comptime, linksection, etc
-        QString name = node.spellingName();
-        for (uint32_t i=0; i < n; i++) {
-            ZigNode paramType = node.paramType(i);
+    const auto n = node.fnParamCount();
+    for (uint32_t i=0; i < n; i++) {
+        auto paramData = node.fnParamData(i);
+        ZigNode paramType = {node.ast, paramData.type_expr};
+        QString paramName = node.tokenSlice(paramData.name_token);
+        auto paramRange = node.tokenRange(paramData.name_token);
+        if (!(paramData.info.is_anytype || paramData.info.is_vararg)) {
             Q_ASSERT(!paramType.isRoot());
-            QString paramName = node.paramName(i);
-            auto paramRange = node.paramRange(i);
-            auto *param = createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
-            {
-                DUChainWriteLocker lock;
+        }
+        auto *param = createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
+        {
+            DUChainWriteLocker lock;
+            if (paramData.info.is_comptime) {
+                auto t = param->abstractType()->clone();
+                t->setModifiers(ComptimeModifier);
+                fn->addArgument(AbstractType::Ptr(t), i);
+            }
+            else if (paramData.info.is_anytype) {
+                fn->addArgument(BuiltinType::newFromName("anytype"), i);
+            }
+            else {
                 fn->addArgument(param->abstractType(), i);
             }
-            // buildContext<ParamDecl>(paramType, node);
-            // eventuallyAssignInternalContext();
-            closeDeclaration();
-
         }
+        // buildContext<ParamDecl>(paramType, node);
+        // eventuallyAssignInternalContext();
+        closeDeclaration();
+
     }
     DUChainWriteLocker lock;
     // Set the return type to mixed, it will be updated later
@@ -571,6 +577,7 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
 
 VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     QString name = node.spellingName();
     auto range = editorFindSpellingRange(node, name);
     ZigNode child = node.nextChild();

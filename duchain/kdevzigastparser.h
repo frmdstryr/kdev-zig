@@ -614,6 +614,49 @@ struct VarData
   VarDataInfo info;
 };
 
+struct PtrTypeInfo
+{
+    bool is_nullable: 1;
+    bool is_const: 1;
+    bool is_volatile: 1;
+    unsigned reserved: 5;
+};
+
+struct PtrTypeData
+{
+  TokenIndex main_token;
+  NodeIndex align_node;
+  NodeIndex addrspace_node;
+  NodeIndex sentinel;
+  NodeIndex bit_range_start;
+  NodeIndex bit_range_end;
+  NodeIndex child_type;
+  PtrTypeInfo info;
+};
+
+
+struct ParamDataInfo
+{
+    bool is_comptime : 1;
+    bool is_noalias : 1;
+    bool is_anytype : 1;
+    bool is_vararg : 1;
+    unsigned reserved: 4;
+};
+
+struct ParamData
+{
+  TokenIndex name_token;
+  NodeIndex type_expr;
+  ParamDataInfo info;
+};
+
+struct FieldInitData
+{
+  TokenIndex name_token;
+  NodeIndex value_expr;
+};
+
 ZAst *parse_ast(const char *name, const char *source);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
@@ -628,22 +671,30 @@ uint32_t ast_extra_data(const ZAst *tree, ExtraDataIndex index);
 ArrayTypeSentinel ast_array_type_sentinel(const ZAst *tree, NodeIndex node);
 IfData ast_if_data(const ZAst *tree, NodeIndex node);
 VarData ast_var_data(const ZAst *tree, NodeIndex node);
+PtrTypeData ast_ptr_type_data(const ZAst *tree, NodeIndex node);
 uint32_t ast_array_init_size(const ZAst *tree, NodeIndex node);
 NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);
+
+// fn proto/decl
 NodeIndex ast_fn_return_type(const ZAst *tree, NodeIndex node);
 bool ast_fn_returns_inferred_error(const ZAst *tree, NodeIndex node);
 uint32_t ast_fn_param_count(const ZAst *tree, NodeIndex node);
-NodeIndex ast_fn_param_at(const ZAst *tree, NodeIndex node, uint32_t i);
+ParamData ast_fn_param_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
+// fn calls
+uint32_t ast_call_arg_count(const ZAst *tree, NodeIndex node);
+NodeIndex ast_call_arg_at(const ZAst *tree, NodeIndex node, uint32_t i);
+
+// struct init
+uint32_t ast_struct_init_field_count(const ZAst *tree, NodeIndex node);
+FieldInitData ast_struct_init_field_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
 // NOTE: These return INVALID_TOKEN on error 0 is a valid token
 TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType capture);
-TokenIndex ast_fn_param_token(const ZAst *tree, NodeIndex node, uint32_t i);
-
 
 // NOTE: The caller must free these with destroy_string
 const char *ast_token_slice(const ZAst *tree, TokenIndex token);

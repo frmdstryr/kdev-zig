@@ -62,26 +62,34 @@ bool ZigNode::returnsInferredError() const
     return ast_fn_returns_inferred_error(ast, index);
 }
 
-uint32_t ZigNode::paramCount() const
+uint32_t ZigNode::fnParamCount() const
 {
     return ast_fn_param_count(ast, index);
 }
 
-ZigNode ZigNode::paramType(uint32_t i) const
+ParamData ZigNode::fnParamData(uint32_t i) const
 {
-    return ZigNode{ast, ast_fn_param_at(ast, index, i)};
+    return ast_fn_param_at(ast, index, i);
 }
 
-QString ZigNode::paramName(uint32_t i) const
+uint32_t ZigNode::callParamCount() const
 {
-    TokenIndex tok = ast_fn_param_token(ast, index, i);
-    return tokenSlice(tok);
+    return ast_call_arg_count(ast, index);
 }
 
-KDevelop::RangeInRevision ZigNode::paramRange(uint32_t i) const
+ZigNode ZigNode::callParamAt(uint32_t i) const
 {
-    TokenIndex tok = ast_fn_param_token(ast, index, i);
-    return tokenRange(tok);
+    return ZigNode{ast, ast_call_arg_at(ast, index, i)};
+}
+
+uint32_t ZigNode::structInitCount() const
+{
+    return ast_struct_init_field_count(ast, index);
+}
+
+FieldInitData ZigNode::structInitAt(uint32_t i) const
+{
+    return ast_struct_init_field_at(ast, index, i);
 }
 
 QString ZigNode::tokenSlice(TokenIndex i) const

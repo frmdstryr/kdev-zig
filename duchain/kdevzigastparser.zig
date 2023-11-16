@@ -4,10 +4,11 @@ const std = @import("std");
 const Ast = std.zig.Ast;
 const assert = std.debug.assert;
 
-const Index = Ast.Node.Index;
+const TokenIndex = Ast.TokenIndex;
+const NodeIndex = Ast.Node.Index;
 const Tag = Ast.Node.Tag;
 // const VisitResult = Ast.VisitResult;
-const INVALID_TOKEN = std.math.maxInt(Index);
+const INVALID_TOKEN = std.math.maxInt(TokenIndex);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -130,7 +131,7 @@ pub fn dumpAstFlat(ast: *const Ast, stream: anytype) !void {
     try stream.writeAll("\n");
 }
 
-pub fn dumpAstNodes(ast: *const Ast, nodes: []Index, stream: anytype) !void {
+pub fn dumpAstNodes(ast: *const Ast, nodes: []NodeIndex, stream: anytype) !void {
     const tags = ast.nodes.items(.tag);
     const node_data = ast.nodes.items(.data);
     const main_tokens = ast.nodes.items(.main_token);
@@ -248,7 +249,7 @@ export fn destroy_error(ptr: ?*ZError) void {
     }
 }
 
-export fn ast_node_capture_token(ptr: ?*Ast, index: Index, capture: CaptureType) Index {
+export fn ast_node_capture_token(ptr: ?*Ast, index: NodeIndex, capture: CaptureType) TokenIndex {
     if (ptr) |ast| {
         if (index >= ast.nodes.len) {
             return INVALID_TOKEN;
@@ -326,7 +327,7 @@ test "capture-name" {
     try testCaptureName("test { errdefer |err| {} }", .@"errdefer", .Payload, "err");
 }
 
-export fn ast_node_range(ptr: ?*Ast, index: Index) SourceRange {
+export fn ast_node_range(ptr: ?*Ast, index: NodeIndex) SourceRange {
     if (ptr == null) {
         std.log.warn("zig: ast_node_range ast null", .{});
         return SourceRange{};
@@ -355,11 +356,11 @@ export fn ast_node_range(ptr: ?*Ast, index: Index) SourceRange {
 }
 
 // Assumes token is in the valid range
-fn isTokenSliceEql(ast: *Ast, token: Index, value: []const u8) bool {
+fn isTokenSliceEql(ast: *Ast, token: TokenIndex, value: []const u8) bool {
     return std.mem.eql(u8, ast.tokenSlice(token), value);
 }
 
-export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
+export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     if (ptr == null) {
         return .Unknown;
     }
@@ -368,7 +369,8 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
         return .Unknown;
     }
     const main_tokens = ast.nodes.items(.main_token);
-    return switch (ast.nodes.items(.tag)[index]) {
+    const tag: Tag = ast.nodes.items(.tag)[index];
+    return switch (tag) {
         .root => .Module,
         .fn_decl => .FunctionDecl,
         .test_decl => .TestDecl,
@@ -409,7 +411,7 @@ export fn ast_node_kind(ptr: ?*Ast, index: Index) NodeKind {
     };
 }
 
-export fn ast_node_tag(ptr: ?*Ast, index: Index) Ast.Node.Tag {
+export fn ast_node_tag(ptr: ?*Ast, index: NodeIndex) Ast.Node.Tag {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             const tag = ast.nodes.items(.tag)[index];
@@ -421,7 +423,7 @@ export fn ast_node_tag(ptr: ?*Ast, index: Index) Ast.Node.Tag {
 }
 
 // Caller must free with destroy_string
-export fn ast_token_slice(ptr: ?*Ast, token: Index) ?[*]const u8 {
+export fn ast_token_slice(ptr: ?*Ast, token: TokenIndex) ?[*]const u8 {
     if (ptr) |ast| {
         if (token < ast.tokens.len) {
             const name = ast.tokenSlice(token);
@@ -434,7 +436,7 @@ export fn ast_token_slice(ptr: ?*Ast, token: Index) ?[*]const u8 {
     return null;
 }
 
-fn findNodeComment(ast: *const Ast, node: Index) ?[]const u8 {
+fn findNodeComment(ast: *const Ast, node: NodeIndex) ?[]const u8 {
     const first_token = ast.firstToken(node);
     const loc = ast.tokenLocation(0, first_token);
     // std.log.warn("node start: {}", .{loc});
@@ -550,7 +552,7 @@ test "node-comment" {
 }
 
 // Caller must free with destroy_string
-export fn ast_node_comment(ptr: ?*Ast, node: Index) ?[*]const u8 {
+export fn ast_node_comment(ptr: ?*Ast, node: NodeIndex) ?[*]const u8 {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
             if (findNodeComment(ast, node)) |comment| {
@@ -564,7 +566,7 @@ export fn ast_node_comment(ptr: ?*Ast, node: Index) ?[*]const u8 {
     return null;
 }
 
-export fn ast_token_range(ptr: ?*Ast, token: Index) SourceRange {
+export fn ast_token_range(ptr: ?*Ast, token: TokenIndex) SourceRange {
     if (ptr) |ast| {
         if (token < ast.tokens.len) {
             const loc = ast.tokenLocation(0, token);
@@ -584,7 +586,7 @@ export fn ast_token_range(ptr: ?*Ast, token: Index) SourceRange {
     return SourceRange{};
 }
 
-export fn ast_var_is_const(ptr: ?*Ast, index: Index) bool {
+export fn ast_var_is_const(ptr: ?*Ast, index: NodeIndex) bool {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             const tag = ast.nodes.items(.tag)[index];
@@ -598,7 +600,7 @@ export fn ast_var_is_const(ptr: ?*Ast, index: Index) bool {
 }
 
 // Return var / field type or 0
-export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
+export fn ast_var_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             const tag = ast.nodes.items(.tag)[index];
@@ -616,7 +618,7 @@ export fn ast_var_type(ptr: ?*Ast, index: Index) Index {
     return 0;
 }
 
-export fn ast_var_value(ptr: ?*Ast, index: Index) Index {
+export fn ast_var_value(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             const tag = ast.nodes.items(.tag)[index];
@@ -637,7 +639,7 @@ export fn ast_var_value(ptr: ?*Ast, index: Index) Index {
 }
 
 
-export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: Index) bool {
+export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: NodeIndex) bool {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             var buf: [1]Ast.Node.Index = undefined;
@@ -652,7 +654,7 @@ export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: Index) bool {
     return false;
 }
 
-export fn ast_fn_return_type(ptr: ?*Ast, index: Index) Index {
+export fn ast_fn_return_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             const data_items = ast.nodes.items(.data);
@@ -671,25 +673,25 @@ export fn ast_fn_return_type(ptr: ?*Ast, index: Index) Index {
     return 0;
 }
 
-export fn ast_fn_param_count(ptr: ?*Ast, index: Index) u32 {
+export fn ast_call_arg_count(ptr: ?*Ast, index: NodeIndex) u32 {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buffer, index)) |proto| {
-                return @intCast(proto.ast.params.len);
+            if (ast.fullCall(&buffer, index)) |call| {
+                return @intCast(call.ast.params.len);
             }
         }
     }
     return 0;
 }
 
-export fn ast_fn_param_at(ptr: ?*Ast, index: Index, i: u32) Index {
+export fn ast_call_arg_at(ptr: ?*Ast, index: NodeIndex, i: u32) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buffer, index)) |proto| {
-                if (i < proto.ast.params.len) {
-                    return proto.ast.params[i];
+            if (ast.fullCall(&buffer, index)) |call| {
+                if (i < call.ast.params.len) {
+                    return call.ast.params[i];
                 }
             }
         }
@@ -697,27 +699,105 @@ export fn ast_fn_param_at(ptr: ?*Ast, index: Index, i: u32) Index {
     return 0;
 }
 
-export fn ast_fn_param_token(ptr: ?*Ast, index: Index, i: u32) Index {
+
+export fn ast_fn_param_count(ptr: ?*Ast, index: NodeIndex) u32 {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
             if (ast.fullFnProto(&buffer, index)) |proto| {
-                var j: usize = 0;
-                var it = proto.iterate(ast);
-                while (it.next()) |param| {
+                var i: u32 = 0;
+                var iter = proto.iterate(ast);
+                while (iter.next()) |_| {
+                    i += 1;
+                }
+                return i;
+            }
+        }
+    }
+    return 0;
+}
+
+const ParamDataInfo = packed struct {
+    is_comptime: bool = false,
+    is_noalias: bool = false,
+    is_anytype: bool = false,
+    is_vararg: bool = false,
+    reserved: u4 = 0,
+};
+
+const ParamData = extern struct {
+    name_token: TokenIndex = INVALID_TOKEN,
+    type_expr: NodeIndex = 0,
+    info: ParamDataInfo = .{},
+};
+
+export fn ast_fn_param_at(ptr: ?*Ast, index: NodeIndex, i: u32) ParamData {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            var buffer: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buffer, index)) |proto| {
+                var iter = proto.iterate(ast);
+                var j: u32 = 0;
+                while (iter.next()) |param| {
                     if (j == i) {
-                        return param.name_token orelse INVALID_TOKEN;
+                        return ParamData{
+                            .name_token = param.name_token orelse INVALID_TOKEN,
+                            .type_expr = param.type_expr,
+                            .info = ParamDataInfo{
+                                .is_comptime = if (param.comptime_noalias) |tok| isTokenSliceEql(ast, tok, "comptime") else false,
+                                .is_noalias = if (param.comptime_noalias) |tok| isTokenSliceEql(ast, tok, "noalias") else false,
+                                .is_anytype = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(ast, tok, "anytype") else false,
+                                .is_vararg = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(ast, tok, "...") else false,
+                            },
+                        };
                     }
                     j += 1;
                 }
             }
         }
     }
-    return INVALID_TOKEN;
+    return ParamData{};
+}
+
+export fn ast_struct_init_field_count(ptr: ?*Ast, index: NodeIndex) u32 {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            var buffer: [2]Ast.Node.Index = undefined;
+            if (ast.fullStructInit(&buffer, index)) |struct_data| {
+                return @intCast(struct_data.ast.fields.len);
+            }
+        }
+    }
+    return 0;
+}
+
+
+const FieldInitData = extern struct {
+    name_token: TokenIndex = INVALID_TOKEN,
+    value_expr: NodeIndex = 0,
+};
+
+export fn ast_struct_init_field_at(ptr: ?*Ast, index: NodeIndex, i: u32) FieldInitData {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            var buffer: [2]Ast.Node.Index = undefined;
+            if (ast.fullStructInit(&buffer, index)) |struct_data| {
+                if (i < struct_data.ast.fields.len) {
+                    const f = struct_data.ast.fields[i];
+                    return FieldInitData{
+                        // TODO: Is this valid for every case???
+                        .name_token=ast.firstToken(f) -| 2,
+                        .value_expr=f
+                    };
+                }
+            }
+        }
+    }
+    return FieldInitData{};
 }
 
 // Note: 0 is a valid token
-export fn ast_node_main_token(ptr: ?*Ast, index: Index) Index {
+export fn ast_node_main_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
             return ast.nodes.items(.main_token)[index];
@@ -728,10 +808,10 @@ export fn ast_node_main_token(ptr: ?*Ast, index: Index) Index {
 
 
 // Lookup the token index that has the name/identifier for the given node
-export fn ast_node_name_token(ptr: ?*Ast, index: Index) Index {
+export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[index];
+            const tag: Tag = ast.nodes.items(.tag)[index];
             // std.log.warn("zig: findNodeIdentifier {} {s}", .{index, @tagName(tag)});
             return switch (tag) {
                 // Data lhs is the identifier
@@ -783,7 +863,7 @@ export fn ast_node_name_token(ptr: ?*Ast, index: Index) Index {
     return INVALID_TOKEN;
 }
 
-fn indexOfNodeWithTag(ast: Ast, start_token: Index, tag: Tag) ?Index {
+fn indexOfNodeWithTag(ast: Ast, start_token: TokenIndex, tag: Tag) ?NodeIndex {
     if (start_token < ast.nodes.len) {
         const tags = ast.nodes.items(.tag);
         for (start_token..ast.nodes.len) |i| {
@@ -809,7 +889,7 @@ fn isTagVarDecl(tag: Tag) bool {
     };
 }
 
-fn isNodeConstVarDecl(ast: *Ast, index: Index) bool {
+fn isNodeConstVarDecl(ast: *Ast, index: NodeIndex) bool {
     if (index < ast.nodes.len and isTagVarDecl(ast.nodes.items(.tag)[index])) {
         const main_token = ast.nodes.items(.main_token)[index];
         return ast.tokens.items(.tag)[main_token] == .keyword_const;
@@ -946,22 +1026,22 @@ export fn ast_format(
 }
 
 const NodeData = extern struct {
-    lhs: Index = 0,
-    rhs: Index = 0,
+    lhs: NodeIndex = 0,
+    rhs: NodeIndex = 0,
 };
 
 // Visit one child
-export fn ast_node_data(ptr: ?*Ast, node: Index) NodeData {
+export fn ast_node_data(ptr: ?*Ast, node: NodeIndex) NodeData {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
-            const data = ast.nodes.items(.data)[node];
+            const data: Ast.Node.Data = ast.nodes.items(.data)[node];
             return NodeData{.lhs = data.lhs, .rhs = data.rhs};
         }
     }
     return NodeData{};
 }
 
-export fn ast_extra_data(ptr: ?*Ast, index: Index) Index {
+export fn ast_extra_data(ptr: ?*Ast, index: NodeIndex) u32 {
     if (ptr) |ast| {
         if (index < ast.extra_data.len) {
             return ast.extra_data[index];
@@ -971,16 +1051,16 @@ export fn ast_extra_data(ptr: ?*Ast, index: Index) Index {
 }
 
 const ArrayTypeSentinel = extern struct {
-    sentinel: Index = 0,
-    elem_type: Index = 0,
+    sentinel: NodeIndex = 0,
+    elem_type: NodeIndex = 0,
 };
 
-export fn ast_array_type_sentinel(ptr: ?*Ast, node: Index) ArrayTypeSentinel {
+export fn ast_array_type_sentinel(ptr: ?*Ast, node: NodeIndex) ArrayTypeSentinel {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[node];
+            const tag: Tag = ast.nodes.items(.tag)[node];
             if (tag == .array_type_sentinel) {
-                const d = ast.nodes.items(.data)[node];
+                const d: Ast.Node.Data = ast.nodes.items(.data)[node];
                 const array_data = ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
                 return ArrayTypeSentinel{
                     .sentinel = array_data.sentinel,
@@ -993,14 +1073,14 @@ export fn ast_array_type_sentinel(ptr: ?*Ast, node: Index) ArrayTypeSentinel {
 }
 
 const IfData = extern struct {
-    payload_token: Index = INVALID_TOKEN,
-    error_token: Index = INVALID_TOKEN,
-    cond_expr: Index = 0,
-    then_expr: Index = 0,
-    else_expr: Index = 0,
+    payload_token: TokenIndex = INVALID_TOKEN,
+    error_token: TokenIndex = INVALID_TOKEN,
+    cond_expr: NodeIndex = 0,
+    then_expr: NodeIndex = 0,
+    else_expr: NodeIndex = 0,
 };
 
-export fn ast_if_data(ptr: ?*Ast, node: Index) IfData {
+export fn ast_if_data(ptr: ?*Ast, node: NodeIndex) IfData {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
             if (ast.fullIf(node)) |data| {
@@ -1027,16 +1107,16 @@ const VarDataInfo = packed struct {
 };
 
 const VarData = extern struct {
-    lib_name: Index = INVALID_TOKEN,
-    type_node: Index = 0,
-    align_node: Index = 0,
-    addrspace_node: Index = 0,
-    section_node: Index = 0,
-    init_node: Index = 0,
+    lib_name: TokenIndex = INVALID_TOKEN,
+    type_node: NodeIndex = 0,
+    align_node: NodeIndex = 0,
+    addrspace_node: NodeIndex = 0,
+    section_node: NodeIndex = 0,
+    init_node: NodeIndex = 0,
     info: VarDataInfo = .{},
 };
 
-export fn ast_var_data(ptr: ?*Ast, node: Index) VarData {
+export fn ast_var_data(ptr: ?*Ast, node: NodeIndex) VarData {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
             if (ast.fullVarDecl(node)) |data| {
@@ -1061,11 +1141,52 @@ export fn ast_var_data(ptr: ?*Ast, node: Index) VarData {
     return VarData{};
 }
 
+const PtrTypeInfo = packed struct {
+    is_nullable: bool = false,
+    is_const: bool = false,
+    is_volatile: bool = false,
+    reserved: u5 = 0,
+};
 
-export fn ast_array_init_size(ptr: ?*Ast, node: Index) u32 {
+const PtrTypeData = extern struct {
+    main_token: TokenIndex = INVALID_TOKEN,
+    align_node: NodeIndex = 0,
+    addrspace_node: NodeIndex= 0,
+    sentinel: NodeIndex = 0,
+    bit_range_start: NodeIndex = 0,
+    bit_range_end: NodeIndex = 0,
+    child_type: NodeIndex = 0,
+    info: PtrTypeInfo = .{},
+};
+
+export fn ast_ptr_type_data(ptr: ?*Ast, node: NodeIndex) PtrTypeData {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
-            var nodes: [2]Index = undefined;
+            if (ast.fullPtrType(node)) |ptr_data| {
+                return PtrTypeData{
+                    .main_token = ptr_data.ast.main_token,
+                    .align_node = ptr_data.ast.align_node,
+                    .sentinel = ptr_data.ast.sentinel,
+                    .bit_range_start = ptr_data.ast.bit_range_start,
+                    .bit_range_end = ptr_data.ast.bit_range_end,
+                    .child_type = ptr_data.ast.child_type,
+                    .info = PtrTypeInfo{
+                        .is_nullable = ptr_data.allowzero_token != null,
+                        .is_const = ptr_data.const_token != null,
+                        .is_volatile = ptr_data.volatile_token != null,
+                    },
+                };
+            }
+        }
+    }
+    return PtrTypeData{};
+}
+
+
+export fn ast_array_init_size(ptr: ?*Ast, node: NodeIndex) u32 {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            var nodes: [2]Ast.Node.Index = undefined;
             if (ast.fullArrayInit(&nodes, node)) |array_data| {
                 return @intCast(array_data.ast.elements.len);
             }
@@ -1074,7 +1195,7 @@ export fn ast_array_init_size(ptr: ?*Ast, node: Index) u32 {
     return 0;
 }
 
-fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResult {
+fn visitOne(ast: *const Ast, node: NodeIndex, parent: NodeIndex, data: *NodeIndex) VisitResult {
     _ = ast;
     _ = parent;
     data.* = node;
@@ -1082,15 +1203,15 @@ fn visitOne(ast: *const Ast, node: Index, parent: Index, data: *Index) VisitResu
 }
 
 // Visit one child
-export fn ast_visit_one_child(ptr: ?*Ast, node: Index) Index {
-    var result: Index = 0;
+export fn ast_visit_one_child(ptr: ?*Ast, node: NodeIndex) NodeIndex {
+    var result: NodeIndex = 0;
     if (ptr) |ast| {
-        visit(ast, node, *Index, visitOne, &result);
+        visit(ast, node, *NodeIndex, visitOne, &result);
     }
     return result;
 }
 
-fn visitAll(ast: *const Ast, child: Index, parent: Index, nodes: *std.ArrayList(Index)) VisitResult {
+fn visitAll(ast: *const Ast, child: NodeIndex, parent: NodeIndex, nodes: *std.ArrayList(NodeIndex)) VisitResult {
     _ = ast;
     _ = parent;
     const remaining = nodes.unusedCapacitySlice();
@@ -1130,7 +1251,7 @@ test "child-node" {
     try testVisitChild("test { a.main(); }", .field_access, .identifier);
 }
 
-pub fn assertNodeIndexValid(ast: *const Ast, child: Index, parent: Index) void {
+pub fn assertNodeIndexValid(ast: *const Ast, child: NodeIndex, parent: NodeIndex) void {
     if (child == 0 or child > ast.nodes.len) {
         var stderr = std.io.getStdErr().writer();
         dumpAstFlat(ast, stderr) catch {};
@@ -1139,20 +1260,20 @@ pub fn assertNodeIndexValid(ast: *const Ast, child: Index, parent: Index) void {
     }
 }
 
-const CallbackFn = *const fn (ptr: ?*const Ast, node: Index, parent: Index, data: ?*anyopaque) callconv(.C) VisitResult;
+const CallbackFn = *const fn (ptr: ?*const Ast, node: NodeIndex, parent: NodeIndex, data: ?*anyopaque) callconv(.C) VisitResult;
 
 const ExternVisitor = struct {
     const Self = @This();
     delegate: CallbackFn,
     data: ?*anyopaque,
 
-    pub fn callback(ast: *const Ast, node: Index, parent: Index, self: *const ExternVisitor) VisitResult {
+    pub fn callback(ast: *const Ast, node: NodeIndex, parent: NodeIndex, self: *const ExternVisitor) VisitResult {
         return self.delegate(ast, node, parent, self.data);
     }
 };
 
 // Return whether to continue or not
-export fn ast_visit(ptr: ?*Ast, parent: Index, callback: CallbackFn, data: ?*anyopaque) void {
+export fn ast_visit(ptr: ?*Ast, parent: NodeIndex, callback: CallbackFn, data: ?*anyopaque) void {
     if (ptr == null) {
         std.log.warn("zig: ast_visit ast is null", .{});
         return;
@@ -1176,13 +1297,13 @@ export fn ast_visit(ptr: ?*Ast, parent: Index, callback: CallbackFn, data: ?*any
 
 pub fn visit(
     ast: *const Ast,
-    parent: Index,
+    parent: NodeIndex,
     comptime T: type,
-    callback: *const fn (ast: *const Ast, node: Index, parent: Index, data: T) VisitResult,
+    callback: *const fn (ast: *const Ast, node: NodeIndex, parent: NodeIndex, data: T) VisitResult,
     data: T
 ) void {
-    const tag = ast.nodes.items(.tag)[parent];
-    const d = ast.nodes.items(.data)[parent];
+    const tag: Tag = ast.nodes.items(.tag)[parent];
+    const d: Ast.Node.Data = ast.nodes.items(.data)[parent];
     switch (tag) {
         // Leaf nodes have no children
         .@"continue",
@@ -1712,21 +1833,21 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
     }
     // try dumpAstFlat(&ast, stdout);
 
-    var nodes = try std.ArrayList(Index).initCapacity(allocator, ast.nodes.len + 1);
+    var nodes = try std.ArrayList(NodeIndex).initCapacity(allocator, ast.nodes.len + 1);
     nodes.appendAssumeCapacity(0); // Callback does not call on initial node
     defer nodes.deinit();
     // try stdout.writeAll("Visited order\n");
 
-    visit(&ast, 0, *std.ArrayList(Index), visitAll, &nodes);
+    visit(&ast, 0, *std.ArrayList(NodeIndex), visitAll, &nodes);
     const visited = nodes.items[0..nodes.items.len];
 
     // try dumpAstNodes(&ast, visited, stdout);
     try std.testing.expectEqual(ast.nodes.len, visited.len);
 
     // Sort visited nodes and make sure each was hit
-    std.mem.sort(Index, visited, {}, std.sort.asc(Index));
+    std.mem.sort(NodeIndex, visited, {}, std.sort.asc(NodeIndex));
     for (visited, 0..) |a, b| {
-        try std.testing.expectEqual(@as(Index, @intCast(b)), a);
+        try std.testing.expectEqual(@as(NodeIndex, @intCast(b)), a);
     }
 
 //     var timer = try std.time.Timer.start();
