@@ -133,6 +133,101 @@ Declaration* Helper::declarationForIdentifiedType(
     return nullptr;
 }
 
+bool Helper::canMergeNumericBuiltinTypes(
+    const KDevelop::AbstractType::Ptr &aType,
+    const KDevelop::AbstractType::Ptr &bType)
+{
+    if (aType->equals(bType.data()))
+        return true;
+    if (auto a = aType.dynamicCast<BuiltinType>()) {
+        if (auto b = bType.dynamicCast<BuiltinType>()) {
+            if (a->isFloat() && b->isFloat()) {
+                return (a->isComptime() || b->isComptime());
+            }
+            if (a->isInteger() && b->isInteger()) {
+                if (a->isComptime() || b->isComptime()) {
+                    return true;
+                }
+
+                if ((a->isSigned() && b->isSigned())
+                    || (a->isUnsigned() && b->isUnsigned())) {
+                    const auto s1 = a->bitsize();
+                    const auto s2 = b->bitsize();
+                    return (s1 > 0 && s2 > 0 && s2 <= s1);
+                }
+            }
+        }
+    }
+    return false;
+}
+
+KDevelop::AbstractType::Ptr Helper::mergeTypes(
+    const KDevelop::AbstractType::Ptr &a,
+    const KDevelop::AbstractType::Ptr &b,
+    const KDevelop::DUContext* context)
+{
+    Q_UNUSED(context);
+    if (a->equals(b.data())) {
+        return a;
+    }
+    auto builtina = a.dynamicCast<BuiltinType>();
+    if (builtina) {
+        if (builtina->isNull()) {
+            if (auto opt = b.dynamicCast<OptionalType>()) {
+                return opt;
+            }
+            auto r = new OptionalType();
+            Q_ASSERT(r);
+            r->setBaseType(b);
+            return AbstractType::Ptr(r);
+        }
+    }
+    auto builtinb = b.dynamicCast<BuiltinType>();
+    if (builtinb) {
+        if (builtinb->isNull()) {
+            if (auto opt = a.dynamicCast<OptionalType>()) {
+                return opt;
+            }
+            auto r = new OptionalType();
+            Q_ASSERT(r);
+            r->setBaseType(a);
+            return AbstractType::Ptr(r);
+        }
+    }
+
+    if (builtina && builtinb) {
+        // If both are floats and one is comptime use the non-comptime one
+        if (builtina->isFloat() && builtinb->isFloat()) {
+            return builtina->isComptime() ? b : a;
+        }
+        // If both are ints and one is comptime use the non-comptime one
+        if (builtina->isInteger() && builtinb->isInteger()) {
+            return builtina->isComptimeInt() ? b : a;
+        }
+
+    }
+
+    if (auto opt = a.dynamicCast<OptionalType>()) {
+        // TODO: Promotion ?
+        if (opt->baseType()->equals(b.data())
+            || canMergeNumericBuiltinTypes(opt->baseType(), b)
+        ) {
+            return opt;
+        }
+    }
+    if (auto opt = b.dynamicCast<OptionalType>()) {
+        // TODO: Builtin promotion ?
+        if (opt->baseType()->equals(a.data())
+            || canMergeNumericBuiltinTypes(opt->baseType(), a)
+        ) {
+            return opt;
+        }
+    }
+
+    // Else, idk how to merge so its mixed
+    return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
+}
+
 static inline bool contextTypeIsFnOrClass(const DUContext* ctx)
 {
     return (
@@ -249,13 +344,9 @@ bool Helper::baseTypesEqual(
     auto bBaseType = b;
     if (auto aPtr = a.dynamicCast<Zig::PointerType>()) {
         aBaseType = aPtr->baseType();
-        if (!aBaseType)
-            return false;
     }
     if (auto bPtr = b.dynamicCast<Zig::PointerType>()) {
         bBaseType = bPtr->baseType();
-        if (!bBaseType)
-            return false;
     }
     return typesEqualIgnoringModifiers(aBaseType, bBaseType);
 }
@@ -303,9 +394,10 @@ bool Helper::canTypeBeAssigned(
 
     if (auto ptr = target.dynamicCast<PointerType>()) {
         if (auto valuePtr = value.dynamicCast<PointerType>()) {
-            // Types not equal, maybe const difference ?
-            if (ptr->modifiers() & AbstractType::ConstModifier) {
-                return canTypeBeAssigned(ptr->baseType(), valuePtr->baseType(), context);
+            // Types not equal, maybe const/volatile difference ?
+            if (ptr->modifiers() & AbstractType::ConstModifier
+                || ptr->modifiers() & AbstractType::VolatileModifier) {
+                return typesEqualIgnoringModifiers(ptr->baseType(), valuePtr->baseType());
             }
             // Else they should be equal which was already checked
         }
@@ -329,6 +421,11 @@ bool Helper::canTypeBeAssigned(
         }
     }
 
+    // // Const param/capture can be assigned to non-const
+    // if (auto enumeration = target.dynamicCast<EnumerationType>()) {
+    //     return typesEqualIgnoringModifiers(enumeration, value);
+    // }
+
     // Resolve auto casts (eg comptime int)
     if (auto builtinType = target.dynamicCast<BuiltinType>()) {
         auto paramType = value.dynamicCast<BuiltinType>();
@@ -337,6 +434,14 @@ bool Helper::canTypeBeAssigned(
                 return true;
             if (builtinType->isFloat() && paramType->isComptime())
                 return true; // Auto casts
+            if (
+                (builtinType->isSigned() && paramType->isSigned())
+                || (builtinType->isUnsigned() && paramType->isUnsigned())
+            ) {
+                const auto s1 = builtinType->bitsize();
+                const auto s2 = paramType->bitsize();
+                return (s1 > 0 && s2 > 0 && s2 <= s1);
+            }
             // Else do other cases need to cast?
 
             // Can assign non-const to const but not the other way
@@ -345,10 +450,7 @@ bool Helper::canTypeBeAssigned(
             }
         }
 
-        QString builtinName = builtinType->toString();
-        if (builtinName == QLatin1String("type")
-            || builtinName == QLatin1String("anytype")
-        ) {
+        if (builtinType->isType() || builtinType->isAnytype()) {
             if (paramType && (paramType->isUndefined() || paramType->isNull())) {
                 return false;
             }
@@ -356,6 +458,14 @@ bool Helper::canTypeBeAssigned(
         }
     }
 
+    return false;
+}
+
+bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a)
+{
+    if (auto it = a.dynamicCast<IntegralType>()) {
+        return it->dataType() == IntegralType::TypeMixed;
+    }
     return false;
 }
 

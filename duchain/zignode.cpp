@@ -102,6 +102,16 @@ ZigNode ZigNode::arrayInitAt(uint32_t i) const
     return ZigNode{ast, ast_array_init_item_at(ast, index, i)};
 }
 
+uint32_t ZigNode::switchCaseCount() const
+{
+    return ast_switch_case_size(ast, index);
+}
+
+ZigNode ZigNode::switchCaseItemAt(uint32_t i) const
+{
+    return ZigNode{ast, ast_switch_case_item_at(ast, index, i)};
+}
+
 QString ZigNode::tokenSlice(TokenIndex i) const
 {
     if (i == INVALID_TOKEN) {
@@ -198,7 +208,6 @@ QString ZigNode::comment() const
     return "";
 
 }
-
 
 QString ZigNode::containerName() const
 {

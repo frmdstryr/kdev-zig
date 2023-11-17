@@ -160,7 +160,7 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
     std.log.info("zig: parsing filename '{s}'...", .{name});
 
     const allocator = gpa.allocator();
-    const ast = allocator.create(Ast) catch |err| {
+    const ast: *Ast = allocator.create(Ast) catch |err| {
         std.log.warn("zig: parsing {s} error: {}", .{ name, err });
         return null;
     };
@@ -1202,6 +1202,30 @@ export fn ast_array_init_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex 
             if (ast.fullArrayInit(&nodes, node)) |array_data| {
                 if (i < array_data.ast.elements.len) {
                     return array_data.ast.elements[i];
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+export fn ast_switch_case_size(ptr: ?*Ast, node: NodeIndex) u32 {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullSwitchCase(node)) |switch_case| {
+                return @intCast(switch_case.ast.values.len);
+            }
+        }
+    }
+    return 0;
+}
+
+export fn ast_switch_case_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullSwitchCase(node)) |switch_case| {
+                if (i < switch_case.ast.values.len) {
+                    return switch_case.ast.values[i];
                 }
             }
         }

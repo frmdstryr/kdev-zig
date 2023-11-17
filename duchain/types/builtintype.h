@@ -55,7 +55,6 @@ public:
 
     NodeIndex valueNode() const;
     void setValueNode(NodeIndex node);
-
     bool isSigned() const;
     bool isUnsigned() const;
     bool isFloat() const;
@@ -65,8 +64,20 @@ public:
     bool isInteger() const { return isSigned() || isUnsigned(); }
     bool isNumeric() const { return isInteger() || isFloat(); }
     bool isBool() const;
+
+    // "null" (does not check nullptr)
     bool isNull() const;
+    // "undefined"
     bool isUndefined() const;
+    // "type"
+    bool isType() const;
+    // "anytype"
+    bool isAnytype() const;
+    // "void"
+    bool isVoid() const;
+
+    // Get bitsize of an int (-1 if not in or unkown type)
+    int bitsize() const;
 
     using Data = BuiltinTypeData;
 

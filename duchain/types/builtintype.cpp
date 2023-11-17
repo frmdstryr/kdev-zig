@@ -135,6 +135,7 @@ bool BuiltinType::isUnsigned() const
     STATIC_INDEXED_STR(u16);
     STATIC_INDEXED_STR(u32);
     STATIC_INDEXED_STR(u64);
+    STATIC_INDEXED_STR(u128);
     STATIC_INDEXED_STR(usize);
     STATIC_INDEXED_STR(c_char);
     STATIC_INDEXED_STR(c_uint);
@@ -146,6 +147,7 @@ bool BuiltinType::isUnsigned() const
          || d == indexed_u16
          || d == indexed_u32
          || d == indexed_u64
+         || d == indexed_u128
          || d == indexed_usize
          || isComptimeInt()
          || d == indexed_c_char
@@ -162,6 +164,7 @@ bool BuiltinType::isSigned() const
     STATIC_INDEXED_STR(i16);
     STATIC_INDEXED_STR(i32);
     STATIC_INDEXED_STR(i64);
+    STATIC_INDEXED_STR(i128);
     STATIC_INDEXED_STR(isize);
     STATIC_INDEXED_STR(c_int);
     STATIC_INDEXED_STR(c_short);
@@ -174,6 +177,7 @@ bool BuiltinType::isSigned() const
          || d == indexed_i16
          || d == indexed_i32
          || d == indexed_i64
+         || d == indexed_i128
          || isComptimeInt()
          || d == indexed_isize
          || d == indexed_c_int
@@ -228,10 +232,48 @@ bool BuiltinType::isNull() const
     return d_func()->m_data == indexed_null;
 }
 
+bool BuiltinType::isType() const
+{
+    STATIC_INDEXED_STR(type);
+    return d_func()->m_data == indexed_type;
+}
+
+bool BuiltinType::isAnytype() const
+{
+    STATIC_INDEXED_STR(anytype);
+    return d_func()->m_data == indexed_anytype;
+}
+
 bool BuiltinType::isUndefined() const
 {
     STATIC_INDEXED_STR(undefined);
     return d_func()->m_data == indexed_undefined;
+}
+
+bool BuiltinType::isVoid() const
+{
+    STATIC_INDEXED_STR(void);
+    return d_func()->m_data == indexed_void;
+}
+
+
+int BuiltinType::bitsize() const
+{
+    if (isComptime()) {
+        return -1; // Should this return 0 ?
+    }
+    else if (isNumeric()) {
+        QString v = toString().mid(1);
+        bool ok;
+        int i = v.toInt(&ok);
+        if (ok) {
+            return i;
+        }
+    }
+    else if (isVoid()) {
+        return 0;
+    }
+    return -1;
 }
 
 bool BuiltinType::isBuiltinFunc(const QString& name)

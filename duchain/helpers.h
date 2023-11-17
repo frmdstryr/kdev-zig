@@ -16,6 +16,7 @@
 #include <language/duchain/topducontext.h>
 
 #include "kdevzigduchain_export.h"
+#include "types/builtintype.h"
 
 namespace Zig
 {
@@ -126,6 +127,31 @@ public:
         const KDevelop::DUContext* context);
 
 
+    /**
+     * Attempt to merge two types from an if condition.
+     * If types are equal, return a
+     * If one of the types is null return the other type (
+     * coercing to optional as needed).
+     * If one of the types is a comptime int/float, return the other
+     * If one is optional and other is not optionl of same type, return the optional
+     */
+    static KDevelop::AbstractType::Ptr mergeTypes(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b,
+        const KDevelop::DUContext* context);
+
+    /**
+     * If types are not builtin return false
+     */
+    static bool canMergeNumericBuiltinTypes(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b);
+
+    /**
+     * Check if type is an IntegralType with dataType of mixed. This
+     * is the unknown type returned by the expression visitor.
+     */
+    static bool isMixedType(const KDevelop::AbstractType::Ptr &a);
 
 };
 

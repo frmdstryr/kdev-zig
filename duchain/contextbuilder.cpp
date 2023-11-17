@@ -45,6 +45,7 @@ void ContextBuilder::setParseSession(ParseSession *session)
 
 RangeInRevision ContextBuilder::editorFindSpellingRange(const ZigNode &node, const QString &identifier)
 {
+    Q_UNUSED(identifier);
     TokenIndex tok = ast_node_name_token(node.ast, node.index);
     SourceRange range = ast_token_range(node.ast, tok);
     KTextEditor::Range spellingRange = range.isEmpty() ?

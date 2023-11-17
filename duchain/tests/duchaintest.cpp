@@ -539,6 +539,13 @@ void DUChainTest::testVarType_data()
     QTest::newRow("orelse bad") << "var x: i8 = 0; var y = x orelse 1;" << "y" << "mixed" << "";
     QTest::newRow("if expr") << "var x = if (true) 1 else 2;" << "x" << "comptime_int" << "";
     QTest::newRow("if expr 2") << "var x: ?u8 = 0; var y = if (x) |z| z else 2;" << "y" << "u8" << "";
+    QTest::newRow("if expr bool") << "var y = if (1 > 2) true else !true;" << "y" << "bool" << "";
+    QTest::newRow("if expr opt") << "var y = if (1 > 2) null else false;" << "y" << "?bool" << "";
+    QTest::newRow("if expr opt 2") << "var a: ?u8 = 0; var y = if (a) |b| b else 0;" << "y" << "u8" << "";
+    QTest::newRow("if expr opt 3") << "var a: u8 = 0; var y = if (1 > 2) a else null;" << "y" << "?u8" << "";
+    QTest::newRow("if expr opt 4") << "var a: u8 = 0; var y = if (1 > 2) a else 0;" << "y" << "u8" << "";
+    QTest::newRow("if expr opt 5") << "var a: ?u8 = 0; var b: u8 = 0; var y = if (1 > 2) a else b;" << "y" << "?u8" << "";
+    QTest::newRow("if expr opt 6") << "var a: ?u8 = 0; var b: u8 = 0; var y = if (1 > 2) b else a;" << "y" << "?u8" << "";
     QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
     QTest::newRow("var fixed array type") << "const A = struct {}; var x: [2]A = undefined;" << "x" << "[2]A" << "";
     QTest::newRow("array access") << "var x: [2]u8 = undefined; var y = x[0];" << "y" << "u8" << "";
@@ -713,12 +720,16 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{"Attempted to access enum field on non-enum type"} << "";
     QTest::newRow("enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Error; \n}" << QStringList{} << "1,0";
-    QTest::newRow("invalid enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("invalid enumr assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
+    QTest::newRow("enum switch case 2") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error => {}}}" << QStringList{} << "";
+    QTest::newRow("enum switch case 3") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error, .Bad => {}}}" << QStringList{"Invalid enum field Bad"} << "";
     QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum array init") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error};" << QStringList{} << "";
     QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; };" << QStringList{} << "";
+    QTest::newRow("enum comp") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Ok) {}};" << QStringList{} << "";
+    QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}};" << QStringList{"Invalid enum field Bad"} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";
@@ -735,11 +746,16 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn call enum arg") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(Status.Ok); }" << QStringList{} << "";
     QTest::newRow("fn call enum arg inferred invalid") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Missing); }" << QStringList{"Invalid enum field Missing"} << "";
     QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{"Argument 1 type mismatch. Expected u8 got bool"} << "";
+    QTest::newRow("fn call implicit cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u8 = 1; var y = foo(x); }" << QStringList{} << "";
+    QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{"type mismatch"} << "";
     QTest::newRow("struct fn call") << "const Foo = struct {pub fn foo(self: Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call ptr") << "const Foo = struct {pub fn foo(self: *Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call arg") << "const Foo = struct {pub fn foo(self: Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
     QTest::newRow("struct fn call ptr arg") << "const Foo = struct {pub fn foo(self: *Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
     QTest::newRow("struct fn call not self") << "const Foo = struct {pub fn foo(other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
+    QTest::newRow("struct fn call self this") << "const Foo = struct {const Self = @This(); pub fn foo(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
+    QTest::newRow("struct fn call self *this") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
+    QTest::newRow("struct fn call self *this 2") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void { self.bar(); } pub fn bar(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
 
     QTest::newRow("fn opt null") << "pub fn foo(bar: ?u8) void {} test {const y = foo(null); }" << QStringList{} << "";
     QTest::newRow("fn non-opt null") << "pub fn foo(bar: u8) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";

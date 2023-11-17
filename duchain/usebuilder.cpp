@@ -102,7 +102,10 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_switch_comma:
             visitSwitch(node, parent);
             break;
+        case NodeTag_switch_case:
+        case NodeTag_switch_case_inline:
         case NodeTag_switch_case_one:
+        case NodeTag_switch_case_inline_one:
             visitSwitchCase(node, parent);
             break;
         case NodeTag_assign:
@@ -186,21 +189,28 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(child, node);
     AbstractType::Ptr selfType  = AbstractType::Ptr();
+
+    // Check if a bound fn
     if (child.tag() == NodeTag_field_access) {
         ExpressionVisitor ownerVisitor(session, currentContext());
         ZigNode lhs = {child.ast, child.data().lhs};
         ownerVisitor.startVisiting(lhs, node);
+        auto maybeSelfType = ownerVisitor.lastType();
 
-        if (ownerVisitor.lastType().dynamicCast<StructureType>()
-            || ownerVisitor.lastType().dynamicCast<EnumerationType>()
+        // *Self
+        if (auto ptr = maybeSelfType.dynamicCast<PointerType>()) {
+            maybeSelfType = ptr->baseType();
+        }
+
+        // Self
+        if (maybeSelfType.dynamicCast<StructureType>()
+            || maybeSelfType.dynamicCast<EnumerationType>()
         ) {
-            selfType = ownerVisitor.lastType();
+            selfType = maybeSelfType;
         }
     }
 
-
     QString functionName = child.spellingName();
-
     auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>();
     RangeInRevision useRange = editorFindSpellingRange(child, functionName);
     if (!decl) {
@@ -456,20 +466,21 @@ bool UseBuilder::checkAndAddArrayItemUse(
 
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(valueNode, arrayInitNode);
-    if (Helper::canTypeBeAssigned(itemType, v.lastType(), topContext())) {
-        return true;
+    if (!Helper::canTypeBeAssigned(itemType, v.lastType(), topContext())) {
+        if (Helper::isMixedType(itemType)) {
+            return Continue; // Probably not implemented or resolved yet
+        }
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n(
+            "Array item type mismatch at index %1. Expected %2 got %3",
+            itemIndex, itemType->toString(), v.lastType()->toString()));
+        topContext()->addProblem(p);
     }
-
-    ProblemPointer p = ProblemPointer(new Problem());
-    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-    p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
-    DUChainWriteLocker lock;
-    p->setDescription(i18n(
-        "Array item type mismatch at index %1. Expected %2 got %3",
-        itemIndex, itemType->toString(), v.lastType()->toString()));
-    topContext()->addProblem(p);
-    return false;
+    return true;
 }
 
 VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
@@ -477,6 +488,13 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
+    if (lhs.tag() == NodeTag_identifier) {
+        if (lhs.mainToken() == QLatin1String("_")) {
+            // TODO: Check if it is used ?
+            return Continue; // Discard
+        }
+    }
+
     ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
@@ -493,18 +511,19 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     auto value = valueVisitor.lastType();
 
     if (!Helper::canTypeBeAssigned(target, value, topContext())) {
-        return Continue;
+        if (Helper::isMixedType(target)) {
+            return Continue; // Probably not implemented or resolved yet
+        }
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n(
+            "Assignment type mismatch. Expected %1 got %2",
+            target->toString(), value->toString()));
+        topContext()->addProblem(p);
     }
-
-    ProblemPointer p = ProblemPointer(new Problem());
-    p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
-    p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
-    DUChainWriteLocker lock;
-    p->setDescription(i18n(
-        "Assignment type mismatch. Expected %1 got %2",
-        target->toString(), value->toString()));
-    topContext()->addProblem(p);
     return Continue;
 }
 
@@ -736,7 +755,16 @@ VisitResult UseBuilder::visitEnumLiteral(const ZigNode &node, const ZigNode &par
         checkAndAddEnumUse(target->abstractType(), node.mainToken(), node.mainTokenRange());
         return Continue;
     }
-    // NodeTag tag = parent.tag();
+
+    NodeTag tag = parent.tag();
+    if (tag == NodeTag_equal_equal || tag == NodeTag_bang_equal) {
+        NodeData data = parent.data();
+        ZigNode lhs = {parent.ast, data.lhs};
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(lhs, parent);
+        checkAndAddEnumUse(v.lastType(), node.mainToken(), node.mainTokenRange());
+        return Continue;
+    }
     // if (tag == NodeTag_array_init) {
     //       // TODO: Cache parent type somehow
     //     ZigNode arrayType = {parent.ast, parent.data().lhs};
@@ -792,15 +820,18 @@ VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
 
 VisitResult UseBuilder::visitSwitchCase(const ZigNode &node, const ZigNode &parent)
 {
-    ZigNode lhs = {node.ast, node.data().lhs};
-    if (lhs.tag() == NodeTag_enum_literal) {
-        // TODO: Cache parent switch type somehow
-        ZigNode switchType = {parent.ast, parent.data().lhs};
-        ExpressionVisitor v(session, currentContext()->parentContext());
-        v.startVisiting(switchType, node);
-        checkAndAddEnumUse(v.lastType(), lhs.mainToken(), lhs.mainTokenRange());
-    }
+    ZigNode switchTypeNode = {parent.ast, parent.data().lhs};
+    ExpressionVisitor v(session, currentContext()->parentContext());
+    v.startVisiting(switchTypeNode, node);
+    const auto switchType = v.lastType();
 
+    const auto n = node.switchCaseCount();
+    for (uint32_t i=0; i < n; i++) {
+        ZigNode item = node.switchCaseItemAt(i);
+        if (item.tag() == NodeTag_enum_literal) {
+            checkAndAddEnumUse(switchType, item.mainToken(), item.mainTokenRange());
+        }
+    }
     return Continue;
 }
 
@@ -865,14 +896,16 @@ bool UseBuilder::checkAndAddFnArgUse(
             return true;
         }
     }
-
+    if (Helper::isMixedType(argType)) {
+        return false; // Don't show error if we don't know the target type
+    }
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
     p->setSeverity(IProblem::Hint);
     DUChainWriteLocker lock;
     p->setDescription(i18n("Argument %1 type mismatch. Expected %2 got %3", argIndex + 1,
-                           argType->toString(), v.lastType()->toString()));
+                        argType->toString(), v.lastType()->toString()));
     topContext()->addProblem(p);
     return false;
 }
