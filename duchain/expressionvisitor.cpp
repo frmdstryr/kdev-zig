@@ -887,32 +887,17 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
 {
     Q_UNUSED(parent);
     IfData data = ast_if_data(node.ast, node.index);
-    if (data.payload_token != 0) {
-        ZigNode cond = {node.ast, data.cond_expr};
-        ExpressionVisitor v(this);
-        v.visitNode(cond, node);
-        if (auto optionalType = v.lastType().dynamicCast<OptionalType>()) {
-            // Returns base type
-            // rhs is only valid for if_simple
-            // ZigNode rhs = {node.ast, data.rhs};
-            // ExpressionVisitor v2(this);
-            // v2.visitNode(rhs, node);
-            // TODO: Merge types???
-            encounter(optionalType->baseType());
-            return Continue;
-        }
-    }
-    else {
-        ZigNode then = {node.ast, data.then_expr};
-        ExpressionVisitor v1(this);
-        v1.visitNode(then, node);
-        encounter(v1.lastType());
-        // TODO: Check if else type is compatible
-        return Continue;
-    }
-    encounterUnknown(); // TODO: Show error?
-    return Continue;
 
+    ZigNode thenNode = {node.ast, data.then_expr};
+    ExpressionVisitor thenExpr(this);
+    thenExpr.startVisiting(thenNode, node);
+
+    ZigNode elseNode = {node.ast, data.else_expr};
+    ExpressionVisitor elseExpr(this);
+    elseExpr.startVisiting(elseNode, node);
+
+    encounter(Helper::mergeTypes(thenExpr.lastType(), elseExpr.lastType(), context()));
+    return Continue;
 }
 
 
