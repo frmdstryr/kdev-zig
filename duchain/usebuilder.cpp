@@ -878,6 +878,12 @@ bool UseBuilder::checkAndAddFnArgUse(
             return true;
         }
     }
+
+    if (auto templateParam = argType.dynamicCast<DelayedType>()) {
+        // TODO: Check if argument is instance or type ?
+        return false;
+    }
+
     if (Helper::isMixedType(argType)) {
         return false; // Don't show error if we don't know the target type
     }
