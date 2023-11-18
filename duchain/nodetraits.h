@@ -36,6 +36,7 @@ constexpr bool hasContext(NodeKind kind)
         || kind == BlockDecl
         || kind == ErrorDecl
         || kind == TestDecl
+        || kind == Call
         || kind == If
         || kind == For
         || kind == While
@@ -67,6 +68,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == BlockDecl      ? DUContext::Other
         :  kind == VarDecl        ? DUContext::Other
         :  kind == FieldDecl      ? DUContext::Other
+        :  kind == Call           ? DUContext::Other
         :  kind == If             ? DUContext::Other
         :  kind == For            ? DUContext::Other
         :  kind == While          ? DUContext::Other

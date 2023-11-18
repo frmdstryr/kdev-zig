@@ -67,7 +67,7 @@ void PointerType::accept0(TypeVisitor* v) const
     if (v->visit(this))
         acceptType(d_func()->m_baseType.abstractType(), v);
 
-    v->endVisit(reinterpret_cast<const KDevelop::PointerType*>(this));
+    //v->endVisit(reinterpret_cast<const KDevelop::PointerType*>(this));
 }
 
 void PointerType::exchangeTypes(TypeExchanger* exchanger)

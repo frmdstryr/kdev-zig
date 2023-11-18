@@ -120,11 +120,10 @@ void SliceType::accept0(TypeVisitor* v) const
     // v->endVisit(reinterpret_cast<const ArrayType*>(this));
 }
 
-// void SliceType::exchangeTypes(TypeExchanger* exchanger)
-// {
-//     TYPE_D_DYNAMIC(SliceType);
-//     d->m_elementType = IndexedType(exchanger->exchange(d->m_elementType.abstractType()));
-// }
+void SliceType::exchangeTypes(TypeExchanger* exchanger)
+{
+    d_func_dynamic()->m_elementType = IndexedType(exchanger->exchange(d_func()->m_elementType.abstractType()));
+}
 
 AbstractType::WhichType SliceType::whichType() const
 {

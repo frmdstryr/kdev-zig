@@ -77,7 +77,12 @@ public:
     VisitResult callBuiltinField(const ZigNode &node);
     VisitResult callBuiltinAs(const ZigNode &node);
 
-
+    /**
+     * Return the self type of a function call node
+     * Note the caller must check for nullptr if it the lhs of the call
+     * is not a bound function.
+     */
+    KDevelop::AbstractType::Ptr functionCallSelfType(const ZigNode &owner, const ZigNode &callNode);
 
     /**
      * Set the current function being visited. This is used by the

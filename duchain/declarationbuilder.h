@@ -125,7 +125,11 @@ protected:
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
 
-    VisitResult visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
+    // Import into current context
+    void visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
+
+    // If call is a fn that returns a type, create a new decl for the type
+    void visitCall(const ZigNode &node, const ZigNode &parent);
 };
 
 }

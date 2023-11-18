@@ -94,7 +94,10 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
         return buildDeclaration<TestDecl>(node, parent);
     case Usingnamespace:
         visitUsingnamespace(node, parent);
-        // fall through
+        return ContextBuilder::visitNode(node, parent);
+    case Call:
+        visitCall(node, parent);
+        return ContextBuilder::visitNode(node, parent);
     default:
         return ContextBuilder::visitNode(node, parent);
     }
@@ -327,6 +330,8 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
     }
     else if (Kind ==  ParamDecl) {
         // Function arg node is the type
+        // The type here may be modified when updating the fn args later
+        // It is also used when binding comptime types at the call site
         ExpressionVisitor v(session, currentContext());
         v.startVisiting(node, parent);
         return v.lastType();
@@ -412,22 +417,33 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
         }
         auto *param = createDeclaration<ParamDecl>(paramType, node, paramName, true, paramRange);
         {
+            // Update the parameter type declarations
+            // The type is set by the default paramter visitor (in createType)
+            // but may need modified based on the parameter info (eg comptime)
             DUChainWriteLocker lock;
             if (paramData.info.is_comptime) {
-                if (Helper::isComptimeKnown(param->abstractType())) {
-                    fn->addArgument(param->abstractType(), i);
+                auto builtin = param->abstractType().dynamicCast<BuiltinType>();
+                if (builtin && builtin->isType()) {
+                    // Eg comptime T: type, create a delayed type that can
+                    // be resolved at the call site
+                    auto t = new DelayedType();
+                    t->setIdentifier(IndexedTypeIdentifier(paramName));
+                    param->setAbstractType(AbstractType::Ptr(t));
+                } else if (param->abstractType()->modifiers() & ComptimeModifier) {
+                    // No change needed
                 } else {
+                    // Set type to comptime
+                    // TODO: is using clone needed?
                     auto comptimeType = param->abstractType()->clone();
                     comptimeType->setModifiers(comptimeType->modifiers() | ComptimeModifier);
-                    fn->addArgument(AbstractType::Ptr(comptimeType), i);
+                    param->setAbstractType(AbstractType::Ptr(comptimeType));
                 }
             }
             else if (paramData.info.is_anytype) {
-                fn->addArgument(BuiltinType::newFromName("anytype"), i);
+                param->setAbstractType(BuiltinType::newFromName("anytype"));
             }
-            else {
-                fn->addArgument(param->abstractType(), i);
-            }
+
+            fn->addArgument(param->abstractType(), i);
         }
         // buildContext<ParamDecl>(paramType, node);
         // eventuallyAssignInternalContext();
@@ -453,14 +469,13 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
     auto returnType = v.lastType();
 
     if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
-        if (builtin->toString() == QLatin1String("type")) {
+        if (builtin->isType()) {
             // DUChainWriteLocker lock;
             FunctionVisitor f(session, currentContext());
             NodeData data = node.data();
             ZigNode bodyNode = {node.ast, data.rhs};
             f.setCurrentFunction(fn);
             f.startVisiting(bodyNode, node);
-            //qCDebug(KDEV_ZIG) << "Fn return " << f.returnType()->toString();
             if (Helper::isComptimeKnown(f.returnType())) {
                 returnType = f.returnType();
             } else {
@@ -479,7 +494,7 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
     DUChainWriteLocker lock;
     fn->setReturnType(returnType);
     decl->setAbstractType(fn);
-    // qDebug()  << "  fn type" << fn->toString();
+    // qCDebug(KDEV_ZIG)  << "  fn type" << fn->toString();
 }
 
 template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)>>
@@ -608,7 +623,66 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
     }
 }
 
-VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
+void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
+{
+    // ZigNode child = node.nextChild();
+    // ExpressionVisitor v(session, currentContext());
+    // v.startVisiting(child, node);
+    // if (auto fn = v.lastType().dynamicCast<FunctionType>()) {
+    //     // TODO: Push into helper fn
+    //     AbstractType::Ptr selfType  = AbstractType::Ptr();
+    //
+    //     // Check if a bound fn
+    //     if (child.tag() == NodeTag_field_access) {
+    //         ExpressionVisitor ownerVisitor(session, currentContext());
+    //         ZigNode lhs = {child.ast, child.data().lhs};
+    //         ownerVisitor.startVisiting(lhs, node);
+    //         auto maybeSelfType = ownerVisitor.lastType();
+    //
+    //         // *Self
+    //         if (auto ptr = maybeSelfType.dynamicCast<PointerType>()) {
+    //             maybeSelfType = ptr->baseType();
+    //         }
+    //
+    //         // Self
+    //         if (maybeSelfType.dynamicCast<StructureType>()
+    //             || maybeSelfType.dynamicCast<EnumerationType>()
+    //         ) {
+    //             selfType = maybeSelfType;
+    //         }
+    //     }
+    //
+    //     // Create var declarations for parameters ?
+    //     //const auto n = node.callParamCount();
+    //     const auto args = fn->arguments();
+    //
+    //     // Handle implict "self" arg in struct fns
+    //     int startArg = 0;
+    //     if (args.size() > 0 && Helper::baseTypesEqual(args.at(0), selfType)) {
+    //         startArg = 1;
+    //     }
+    //
+    //     // Create bindings for delayed arguments
+    //     uint32_t i = 0;
+    //     for (const auto &arg: args.mid(startArg)) {
+    //         if (auto delayed = arg.dynamicCast<DelayedType>()) {
+    //             ZigNode argValueNode = node.callParamAt(i);
+    //             if (argValueNode.isRoot()) {
+    //                 continue; // Arg is missing
+    //             }
+    //             QString name = delayed->identifier().toString();
+    //             auto range = argValueNode.range();
+    //             createDeclaration<ParamDecl>(argValueNode, node, name, false, range);
+    //             closeDeclaration();
+    //         }
+    //         i += 1;
+    //     }
+    //
+    // }
+
+}
+
+void DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
     QString name = node.spellingName();
@@ -622,7 +696,7 @@ VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const Z
         const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext();
         if (auto ctx = s->internalContext(moduleContext)) {
             currentContext()->addImportedParentContext(ctx);
-            return Continue;
+            return;
         }
     }
 
@@ -636,7 +710,7 @@ VisitResult DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const Z
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
     }
-    return Continue;
+    return;
 
 }
 

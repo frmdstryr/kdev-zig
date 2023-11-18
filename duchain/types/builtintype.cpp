@@ -51,7 +51,7 @@ BuiltinType::BuiltinType(BuiltinTypeData& data)
 BuiltinType::BuiltinType(const IndexedString &name)
     : ComptimeTypeBase(createData<BuiltinType>())
 {
-    d_func_dynamic()->setTypeClassId<BuiltinType>();
+    // d_func_dynamic()->setTypeClassId<BuiltinType>();
     setDataType(name);
 }
 

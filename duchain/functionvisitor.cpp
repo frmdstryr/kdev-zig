@@ -68,7 +68,7 @@ VisitResult FunctionVisitor::visitReturn(const ZigNode &node, const ZigNode &par
         Q_ASSERT(m_currentFunction);
         v.setCurrentFunction(m_currentFunction);
         v.startVisiting(lhs, node);
-        encounterReturn(v.lastType());
+        encounterReturn(v.lastType(), v.lastDeclaration());
     } else {
         // Return void ?
     }

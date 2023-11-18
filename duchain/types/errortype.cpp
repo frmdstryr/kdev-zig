@@ -31,11 +31,13 @@ ErrorTypeData::ErrorTypeData(const ErrorTypeData& rhs)
 
 REGISTER_TYPE(ErrorType);
 
-ErrorType::ErrorType(const ErrorType& rhs) : ComptimeTypeBase(copyData<ErrorType>(*rhs.d_func()))
+ErrorType::ErrorType(const ErrorType& rhs)
+    : ComptimeTypeBase(copyData<ErrorType>(*rhs.d_func()))
 {
 }
 
-ErrorType::ErrorType(ErrorTypeData& data) : ComptimeTypeBase(data)
+ErrorType::ErrorType(ErrorTypeData& data)
+    : ComptimeTypeBase(data)
 {
 }
 
@@ -72,14 +74,16 @@ void ErrorType::accept0(TypeVisitor* v) const
         acceptType(d_func()->m_baseType.abstractType(), v);
         acceptType(d_func()->m_errorType.abstractType(), v);
     }
-
-    // v->endVisit(reinterpret_cast<const PointerType*>(this));
+    // v->endVisit(this);
 }
 
-// void ErrorType::exchangeTypes(TypeExchanger* exchanger)
-// {
-//     d_func_dynamic()->m_baseType = IndexedType(exchanger->exchange(d_func()->m_baseType.abstractType()));
-// }
+void ErrorType::exchangeTypes(TypeExchanger* exchanger)
+{
+    d_func_dynamic()->m_baseType = IndexedType(exchanger->exchange(d_func()->m_baseType.abstractType()));
+    if (errorType().data()) {
+        d_func_dynamic()->m_errorType = IndexedType(exchanger->exchange(d_func()->m_errorType.abstractType()));
+    }
+}
 
 ErrorType::~ErrorType()
 {

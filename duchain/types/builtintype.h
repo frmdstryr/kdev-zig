@@ -84,9 +84,6 @@ public:
     static bool isBuiltinVariable(const QString &name);
     static AbstractType::Ptr newFromName(const QString &name);
 
-
-
-
     enum {
         Identity = 154
     };

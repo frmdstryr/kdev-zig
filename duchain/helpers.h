@@ -164,12 +164,15 @@ public:
      */
     static bool isComptimeKnown(const KDevelop::AbstractType::Ptr &a);
 
-
     /**
      * Attempt to evaulate an unsigned op of comptime known unsigned types.
      * It does not handle overflows
      */
-    static AbstractType::Ptr evaluateUnsignedOp(const BuiltinType::Ptr a, const BuiltinType::Ptr b, NodeTag tag);
+    static AbstractType::Ptr evaluateUnsignedOp(
+        const BuiltinType::Ptr &a,
+        const BuiltinType::Ptr &b,
+        const NodeTag &tag);
+
 
 };
 

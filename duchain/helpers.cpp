@@ -25,6 +25,7 @@
 
 #include "helpers.h"
 #include "zigdebug.h"
+#include "delayedtypevisitor.h"
 
 namespace Zig
 {
@@ -405,9 +406,8 @@ bool Helper::canTypeBeAssigned(
         const KDevelop::AbstractType::Ptr &value,
         const KDevelop::DUContext* context)
 {
-    if (!target || !value) {
-        return false;
-    }
+    // TODO: Handled delayed types
+    Q_ASSERT(target && value);
     if (target->equals(value.data())) {
         return true; // Same type, yes!
     }
@@ -512,7 +512,9 @@ bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a)
 }
 
 AbstractType::Ptr Helper::evaluateUnsignedOp(
-    const BuiltinType::Ptr a, const BuiltinType::Ptr b, NodeTag tag)
+    const BuiltinType::Ptr &a,
+    const BuiltinType::Ptr &b,
+    const NodeTag &tag)
 {
     Q_ASSERT(a->isUnsigned() && b->isUnsigned());
     Q_ASSERT(a->isComptimeKnown() && b->isComptimeKnown());

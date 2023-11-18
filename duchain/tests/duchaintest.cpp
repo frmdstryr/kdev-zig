@@ -644,6 +644,8 @@ void DUChainTest::testVarType_data()
        "}"<< "b" << "i8" << "3,0";
 
     QTest::newRow("comptime type simple") << "pub fn Foo() type { return u8; } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("comptime fn arg return") << "pub fn add(comptime T: type, a: T, b: T) T { return a + b; } test{\nconst x = add(u32, 1, 2);\n}" << "x" << "u32" << "2,0";
+    QTest::newRow("comptime fn arg return error") << "pub fn parseInt(comptime T: type, a: []const u8) !T { return 1; } test{\nconst x = try parseInt(u32, 1);\n}" << "x" << "u32" << "2,0";
     QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
     QTest::newRow("comptime type simple block") << "pub fn Foo() type { comptime {return u8;} } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
     QTest::newRow("comptime struct") <<

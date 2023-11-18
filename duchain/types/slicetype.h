@@ -93,7 +93,7 @@ public:
 
     WhichType whichType() const override;
 
-    // void exchangeTypes(TypeExchanger* exchanger) override;
+    void exchangeTypes(TypeExchanger* exchanger) override;
 
     enum {
         Identity = 158

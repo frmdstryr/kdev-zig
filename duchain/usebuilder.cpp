@@ -188,27 +188,6 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     ZigNode child = node.nextChild();
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(child, node);
-    AbstractType::Ptr selfType  = AbstractType::Ptr();
-
-    // Check if a bound fn
-    if (child.tag() == NodeTag_field_access) {
-        ExpressionVisitor ownerVisitor(session, currentContext());
-        ZigNode lhs = {child.ast, child.data().lhs};
-        ownerVisitor.startVisiting(lhs, node);
-        auto maybeSelfType = ownerVisitor.lastType();
-
-        // *Self
-        if (auto ptr = maybeSelfType.dynamicCast<PointerType>()) {
-            maybeSelfType = ptr->baseType();
-        }
-
-        // Self
-        if (maybeSelfType.dynamicCast<StructureType>()
-            || maybeSelfType.dynamicCast<EnumerationType>()
-        ) {
-            selfType = maybeSelfType;
-        }
-    }
 
     QString functionName = child.spellingName();
     auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>();
@@ -234,8 +213,11 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 
     // Handle implict "self" arg in struct fns
     int startArg = 0;
-    if (args.size() > 0 && Helper::baseTypesEqual(args.at(0), selfType)) {
-        startArg = 1;
+    if (args.size() > 0) {
+        AbstractType::Ptr selfType  = v.functionCallSelfType(child, node);
+        if (Helper::baseTypesEqual(args.at(0), selfType)) {
+            startArg = 1;
+        }
     }
     const auto requiredArgs = static_cast<uint32_t>(args.size() - startArg);
 

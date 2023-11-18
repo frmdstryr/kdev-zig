@@ -1,11 +1,11 @@
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
-#include <language/duchain/types/typealiastype.h>
+#include <language/duchain/types/enumerationtype.h>
+#include <language/duchain/types/typesystem.h>
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/duchainutils.h>
 #include <language/duchain/duchain.h>
 #include <language/duchain/functiondeclaration.h>
-#include <language/duchain/aliasdeclaration.h>
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -17,6 +17,7 @@
 #include "nodetraits.h"
 #include "functionvisitor.h"
 #include "types/comptimetype.h"
+#include "delayedtypevisitor.h"
 
 namespace Zig
 {
@@ -429,15 +430,12 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
             DUChainPointer<const DUContext>(context())
         );
         if (decl) {
-            //DUChainReadLocker lock; // For debug statement only
+            // DUChainReadLocker lock; // For debug statement only
             // qCDebug(KDEV_ZIG) << "result" << decl->toString();;
+            // qCDebug(KDEV_ZIG) << "ident" << name << "found";
             encounterLvalue(DeclarationPointer(decl));
         } else {
             // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
-            // Needs resolved later
-            //auto delayedType = new DelayedType();
-            //delayedType->setIdentifier(IndexedTypeIdentifier(name));
-            //encounter(AbstractType::Ptr(delayedType));
             encounterUnknown();
         }
     }
@@ -780,26 +778,68 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     // if (functionName == "@compileError") {
     //     encounter(new BuiltinType("compileError"));
     // }
-
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
     v.startVisiting(next, node);
-    if (auto func = v.lastType().dynamicCast<FunctionType>()) {
-        // Return type may temporarily be null when the FunctionVisitor is
-        // visiting a recursive function that returns "type"
-        if (auto returnType = func->returnType()) {
-            if (returnType->modifiers() & ComptimeModifier) {
-                auto comptimeType = func->returnType();
-                // TODO: Specialize fn decl
-                encounter(comptimeType);
-                return Continue;
-            }
-            encounter(returnType);
-            return Continue;
+    auto func = v.lastType().dynamicCast<FunctionType>();
+    // Return type may temporarily be null when the FunctionVisitor is
+    // visiting a recursive function that returns "type"
+    if (!func || !func->returnType()) {
+        encounterUnknown();
+        return Continue;
+    }
+
+    auto returnType = func->returnType();
+    // Shortcut, builtintypes have delayed types
+    if (returnType.dynamicCast<BuiltinType>()) {
+        encounter(returnType);
+        return Continue;
+    }
+
+    // Check if any delayed types need resolved
+    // It should be able to resolve the type name in the proper context
+    // using kdevelops builtin specialization but I'm still not sure
+    // how to properly do that, so until then this is a workaround
+    const auto &args = func->arguments();
+    int startArg = 0;
+    if (args.size() > 0) {
+        AbstractType::Ptr selfType  = v.functionCallSelfType(next, node);
+        if (Helper::baseTypesEqual(args.at(0), selfType)) {
+            startArg = 1;
         }
     }
-    // TODO: Handle builtins?
-    encounterUnknown();
+
+    // eg fn (comptime T: type, ...) []T
+    DelayedTypeFinder finder;
+    returnType->accept(&finder);
+    if (finder.delayedTypes.size() > 0) {
+        uint32_t i = 0;
+        for (const auto &arg: args.mid(startArg)) {
+            if (auto param = arg.dynamicCast<DelayedType>()) {
+                bool found = false;
+                for (const auto t : finder.delayedTypes) {
+                    if (param->identifier() == t->identifier()) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    continue;
+
+                ZigNode argValueNode = node.callParamAt(i);
+                if (!argValueNode.isRoot()) {
+                    ExpressionVisitor valueVisitor(this);
+                    valueVisitor.startVisiting(argValueNode, node);
+                    const auto value = valueVisitor.lastType();
+                    // WARNING: This does NOT work with empty types
+                    SimpleTypeExchanger exchanger(param, value);
+                    returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
+                }
+            }
+            i += 1;
+        }
+    }
+    encounter(returnType);
     return Continue;
 }
 
@@ -1118,6 +1158,31 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(const ZigNode &node, const
 
     encounter(AbstractType::Ptr(sliceType));
     return Continue;
+}
+
+AbstractType::Ptr ExpressionVisitor::functionCallSelfType(
+    const ZigNode &owner, const ZigNode &callNode)
+{
+    // Check if a bound fn
+    if (owner.tag() == NodeTag_field_access) {
+        ExpressionVisitor ownerVisitor(this);
+        ZigNode lhs = {owner.ast, owner.data().lhs};
+        ownerVisitor.startVisiting(lhs, callNode);
+        auto maybeSelfType = ownerVisitor.lastType();
+
+        // *Self
+        if (auto ptr = maybeSelfType.dynamicCast<PointerType>()) {
+            maybeSelfType = ptr->baseType();
+        }
+
+        // Self
+        if (maybeSelfType.dynamicCast<StructureType>()
+            || maybeSelfType.dynamicCast<EnumerationType>()
+        ) {
+            return maybeSelfType;
+        }
+    }
+    return AbstractType::Ptr();
 }
 
 

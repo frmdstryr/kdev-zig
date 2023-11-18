@@ -38,6 +38,12 @@ OptionalType::OptionalType(OptionalTypeData& data) : ComptimeTypeBase(data)
 {
 }
 
+OptionalType::OptionalType()
+    : ComptimeTypeBase(createData<OptionalType>())
+{
+    d_func_dynamic()->setTypeClassId<OptionalType>();
+}
+
 AbstractType* OptionalType::clone() const
 {
     return new OptionalType(*this);
@@ -57,10 +63,6 @@ bool OptionalType::equalsIgnoringValue(const AbstractType* _rhs) const
     return d_func()->m_baseType == rhs->d_func()->m_baseType;
 }
 
-OptionalType::OptionalType()
-    : ComptimeTypeBase(createData<OptionalType>())
-{
-}
 
 void OptionalType::accept0(TypeVisitor* v) const
 {
