@@ -17,6 +17,7 @@
 #include <kconfiggroup.h>
 
 #include "types/declarationtypes.h"
+#include "types/comptimetype.h"
 #include "types/pointertype.h"
 #include "types/builtintype.h"
 #include "types/optionaltype.h"
@@ -142,10 +143,10 @@ bool Helper::canMergeNumericBuiltinTypes(
     if (auto a = aType.dynamicCast<BuiltinType>()) {
         if (auto b = bType.dynamicCast<BuiltinType>()) {
             if (a->isFloat() && b->isFloat()) {
-                return (a->isComptime() || b->isComptime());
+                return (a->isComptimeKnown() || b->isComptimeKnown());
             }
             if (a->isInteger() && b->isInteger()) {
-                if (a->isComptime() || b->isComptime()) {
+                if (a->isComptimeKnown() || b->isComptimeKnown()) {
                     return true;
                 }
 
@@ -161,15 +162,35 @@ bool Helper::canMergeNumericBuiltinTypes(
     return false;
 }
 
+KDevelop::AbstractType::Ptr Helper::removeComptimeValue(
+        const KDevelop::AbstractType::Ptr &a)
+{
+    if (auto comptimeType = a.dynamicCast<ComptimeTypeBase>()) {
+        if (comptimeType->isComptimeKnown()) {
+            auto copy = static_cast<ComptimeTypeBase*>(a->clone());
+            copy->clearComptimeValue();
+            return AbstractType::Ptr(copy);
+        }
+    }
+    return a;
+
+}
+
 KDevelop::AbstractType::Ptr Helper::mergeTypes(
     const KDevelop::AbstractType::Ptr &a,
     const KDevelop::AbstractType::Ptr &b,
     const KDevelop::DUContext* context)
 {
     Q_UNUSED(context);
-    if (a->equals(b.data())) {
+    if ( a->equals(b.data()) ) {
         return a;
     }
+    if ( auto t = a.dynamicCast<ComptimeTypeBase>() ) {
+        if ( t->equalsIgnoringValue(b.data()) ) {
+            return removeComptimeValue(t);
+        }
+    }
+
     auto builtina = a.dynamicCast<BuiltinType>();
     if (builtina) {
         if (builtina->isNull()) {
@@ -177,7 +198,6 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
                 return opt;
             }
             auto r = new OptionalType();
-            Q_ASSERT(r);
             r->setBaseType(b);
             return AbstractType::Ptr(r);
         }
@@ -189,7 +209,6 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
                 return opt;
             }
             auto r = new OptionalType();
-            Q_ASSERT(r);
             r->setBaseType(a);
             return AbstractType::Ptr(r);
         }
@@ -198,11 +217,11 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
     if (builtina && builtinb) {
         // If both are floats and one is comptime use the non-comptime one
         if (builtina->isFloat() && builtinb->isFloat()) {
-            return builtina->isComptime() ? b : a;
+            return builtina->isComptimeKnown() ? b : a;
         }
         // If both are ints and one is comptime use the non-comptime one
         if (builtina->isInteger() && builtinb->isInteger()) {
-            return builtina->isComptimeInt() ? b : a;
+            return builtina->isComptimeKnown() ? b : a;
         }
 
     }
@@ -362,8 +381,23 @@ bool Helper::typesEqualIgnoringModifiers(
     auto copy = b->clone();
     copy->setModifiers(a->modifiers());
     bool result = a->equals(copy);
+    if (!result) {
+        auto comptimeType = a.dynamicCast<ComptimeTypeBase>();
+        result = comptimeType && comptimeType->equalsIgnoringValue(copy);
+    }
     delete copy;
     return result;
+}
+
+bool Helper::isComptimeKnown(const KDevelop::AbstractType::Ptr &a)
+{
+    if (!a)
+        return false;
+    if (a->modifiers() & ComptimeModifier)
+        return true;
+    if (auto comptimeType = a.dynamicCast<ComptimeTypeBase>())
+        return comptimeType->isComptimeKnown();
+    return false;
 }
 
 bool Helper::canTypeBeAssigned(
@@ -377,6 +411,14 @@ bool Helper::canTypeBeAssigned(
     if (target->equals(value.data())) {
         return true; // Same type, yes!
     }
+
+    if (auto comptimeType = target.dynamicCast<ComptimeTypeBase>()) {
+        if (comptimeType->equalsIgnoringValue(value.data())) {
+            return true; // Types equal but comptime known values differ
+        }
+    }
+
+    // all comptime stuff should be gone now
 
     // Optionals can be assigned to null or value of same type
     if (auto optional = target.dynamicCast<OptionalType>()) {
@@ -430,9 +472,12 @@ bool Helper::canTypeBeAssigned(
     if (auto builtinType = target.dynamicCast<BuiltinType>()) {
         auto paramType = value.dynamicCast<BuiltinType>();
         if (paramType) {
+            // Can assign non-const to const but not the other way
+            if (builtinType->dataType() == paramType->dataType())
+                return true;
             if (builtinType->isInteger() && paramType->isComptimeInt())
                 return true;
-            if (builtinType->isFloat() && paramType->isComptime())
+            if (builtinType->isFloat() && (paramType->isComptimeInt() || paramType->isComptimeFloat()))
                 return true; // Auto casts
             if (
                 (builtinType->isSigned() && paramType->isSigned())
@@ -444,10 +489,7 @@ bool Helper::canTypeBeAssigned(
             }
             // Else do other cases need to cast?
 
-            // Can assign non-const to const but not the other way
-            if (builtinType->toString() == paramType->toString()) {
-                return true;
-            }
+
         }
 
         if (builtinType->isType() || builtinType->isAnytype()) {
@@ -467,6 +509,53 @@ bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a)
         return it->dataType() == IntegralType::TypeMixed;
     }
     return false;
+}
+
+AbstractType::Ptr Helper::evaluateUnsignedOp(
+    const BuiltinType::Ptr a, const BuiltinType::Ptr b, NodeTag tag)
+{
+    Q_ASSERT(a->isUnsigned() && b->isUnsigned());
+    Q_ASSERT(a->isComptimeKnown() && b->isComptimeKnown());
+    bool ok1 = false;
+    bool ok2 = false;
+    bool ok3 = true;
+    QString va = a->comptimeKnownValue().str();
+    QString vb = b->comptimeKnownValue().str();
+    const uint64_t v1 = va.toULongLong(&ok1, 0);
+    const uint64_t v2 = vb.toULongLong(&ok2, 0);
+    if (ok1 && ok2) {
+        uint64_t result = 0;
+        // check overflow ???
+        if (tag == NodeTag_add)
+            result = v1 + v2;
+        else if (tag == NodeTag_sub)
+            result = v1 - v2;
+        else if (tag == NodeTag_shl)
+            result = v1 << v2;
+        else if (tag == NodeTag_shr)
+            result = v1 >> v2;
+        else if (tag == NodeTag_bit_or)
+            result = v1 | v2;
+        else if (tag == NodeTag_bit_and)
+            result = v1 & v2;
+        else
+            ok3 = false;
+        if (ok3) {
+            // TODO: Resolve the type? check overflow ???
+            auto sizea = a->bitsize();
+            auto sizeb = b->bitsize();
+            auto r = static_cast<BuiltinType*>((sizea >= sizeb) ? a->clone() : b->clone());
+            const int base = (va.startsWith("0x") || vb.startsWith("0x")) ? 16 : 10;
+            QString prefix = (base == 16 || result > 255 ) ? "0x" : "";
+            r->setComptimeKnownValue(QString("%1%2").arg(prefix).arg(result, 0, base));
+            return AbstractType::Ptr(r);
+        }
+    }
+
+    // IDK how to add so make the type longer comptime
+    auto r = static_cast<BuiltinType*>(a->clone());
+    r->clearComptimeValue();
+    return AbstractType::Ptr(r);
 }
 
 

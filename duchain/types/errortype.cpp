@@ -23,7 +23,7 @@ ErrorTypeData::ErrorTypeData()
 }
 
 ErrorTypeData::ErrorTypeData(const ErrorTypeData& rhs)
-    : AbstractTypeData(rhs)
+    : ComptimeTypeBase::Data(rhs)
     , m_baseType(rhs.m_baseType)
     , m_errorType(rhs.m_errorType)
 {
@@ -31,11 +31,16 @@ ErrorTypeData::ErrorTypeData(const ErrorTypeData& rhs)
 
 REGISTER_TYPE(ErrorType);
 
-ErrorType::ErrorType(const ErrorType& rhs) : AbstractType(copyData<ErrorType>(*rhs.d_func()))
+ErrorType::ErrorType(const ErrorType& rhs) : ComptimeTypeBase(copyData<ErrorType>(*rhs.d_func()))
 {
 }
 
-ErrorType::ErrorType(ErrorTypeData& data) : AbstractType(data)
+ErrorType::ErrorType(ErrorTypeData& data) : ComptimeTypeBase(data)
+{
+}
+
+ErrorType::ErrorType()
+    : ComptimeTypeBase(createData<ErrorType>())
 {
 }
 
@@ -44,12 +49,12 @@ AbstractType* ErrorType::clone() const
     return new ErrorType(*this);
 }
 
-bool ErrorType::equals(const AbstractType* _rhs) const
+bool ErrorType::equalsIgnoringValue(const AbstractType* _rhs) const
 {
     if (this == _rhs)
         return true;
 
-    if (!AbstractType::equals(_rhs))
+    if (!ComptimeTypeBase::equalsIgnoringValue(_rhs))
         return false;
 
     Q_ASSERT(dynamic_cast<const ErrorType*>(_rhs));
@@ -59,11 +64,6 @@ bool ErrorType::equals(const AbstractType* _rhs) const
         (d_func()->m_baseType == rhs->d_func()->m_baseType)
         && (d_func()->m_errorType == rhs->d_func()->m_errorType)
     );
-}
-
-ErrorType::ErrorType()
-    : AbstractType(createData<ErrorType>())
-{
 }
 
 void ErrorType::accept0(TypeVisitor* v) const
@@ -121,7 +121,8 @@ uint ErrorType::hash() const
 {
     return KDevHash(AbstractType::hash())
         << d_func()->m_baseType.hash()
-        << d_func()->m_errorType.hash();
+        << d_func()->m_errorType.hash()
+        << ComptimeType::hash();
 }
 }
 

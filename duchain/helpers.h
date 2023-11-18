@@ -141,6 +141,12 @@ public:
         const KDevelop::DUContext* context);
 
     /**
+     * If the type is comptime known clone and remove it.
+     */
+    static KDevelop::AbstractType::Ptr removeComptimeValue(
+        const KDevelop::AbstractType::Ptr &a);
+
+    /**
      * If types are not builtin return false
      */
     static bool canMergeNumericBuiltinTypes(
@@ -152,6 +158,18 @@ public:
      * is the unknown type returned by the expression visitor.
      */
     static bool isMixedType(const KDevelop::AbstractType::Ptr &a);
+
+    /**
+     * Check if the type has a comptime known value
+     */
+    static bool isComptimeKnown(const KDevelop::AbstractType::Ptr &a);
+
+
+    /**
+     * Attempt to evaulate an unsigned op of comptime known unsigned types.
+     * It does not handle overflows
+     */
+    static AbstractType::Ptr evaluateUnsignedOp(const BuiltinType::Ptr a, const BuiltinType::Ptr b, NodeTag tag);
 
 };
 

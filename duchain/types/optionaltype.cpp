@@ -23,18 +23,18 @@ OptionalTypeData::OptionalTypeData()
 }
 
 OptionalTypeData::OptionalTypeData(const OptionalTypeData& rhs)
-    : AbstractTypeData(rhs)
+    : ComptimeTypeBase::Data(rhs)
     , m_baseType(rhs.m_baseType)
 {
 }
 
 REGISTER_TYPE(OptionalType);
 
-OptionalType::OptionalType(const OptionalType& rhs) : AbstractType(copyData<OptionalType>(*rhs.d_func()))
+OptionalType::OptionalType(const OptionalType& rhs) : ComptimeTypeBase(copyData<OptionalType>(*rhs.d_func()))
 {
 }
 
-OptionalType::OptionalType(OptionalTypeData& data) : AbstractType(data)
+OptionalType::OptionalType(OptionalTypeData& data) : ComptimeTypeBase(data)
 {
 }
 
@@ -43,12 +43,12 @@ AbstractType* OptionalType::clone() const
     return new OptionalType(*this);
 }
 
-bool OptionalType::equals(const AbstractType* _rhs) const
+bool OptionalType::equalsIgnoringValue(const AbstractType* _rhs) const
 {
     if (this == _rhs)
         return true;
 
-    if (!AbstractType::equals(_rhs))
+    if (!ComptimeTypeBase::equalsIgnoringValue(_rhs))
         return false;
 
     Q_ASSERT(dynamic_cast<const OptionalType*>(_rhs));
@@ -58,7 +58,7 @@ bool OptionalType::equals(const AbstractType* _rhs) const
 }
 
 OptionalType::OptionalType()
-    : AbstractType(createData<OptionalType>())
+    : ComptimeTypeBase(createData<OptionalType>())
 {
 }
 
@@ -67,7 +67,7 @@ void OptionalType::accept0(TypeVisitor* v) const
     if (v->visit(this))
         acceptType(d_func()->m_baseType.abstractType(), v);
 
-    v->endVisit(reinterpret_cast<const PointerType*>(this));
+    //v->endVisit(reinterpret_cast<const PointerType*>(this));
 }
 
 void OptionalType::exchangeTypes(TypeExchanger* exchanger)
@@ -102,7 +102,8 @@ AbstractType::WhichType OptionalType::whichType() const
 
 uint OptionalType::hash() const
 {
-    return KDevHash(AbstractType::hash()) << d_func()->m_baseType.hash();
+    return KDevHash(AbstractType::hash())
+        << d_func()->m_baseType.hash() << ComptimeType::hash();
 }
 }
 

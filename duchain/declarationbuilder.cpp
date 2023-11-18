@@ -37,6 +37,7 @@
 #include "nodetraits.h"
 #include "helpers.h"
 #include "zigdebug.h"
+#include "types/comptimetype.h"
 
 
 namespace Zig
@@ -168,14 +169,14 @@ VisitResult DeclarationBuilder::buildDeclaration(const ZigNode &node, const ZigN
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
     auto *decl = createDeclaration<Kind>(node, parent, name, isDef, range);
-    if (Kind == Module) {
-        DUChainWriteLocker lock;
-        topContext()->setOwner(decl);
-    }
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) {
         eventuallyAssignInternalContext();
     }
+    // if (!Helper::isMixedType(lastType())) {
+    //     session->setTypeOnNode(node, lastType());
+    // }
+    // session->setDeclOnNode(node, DeclarationPointer(decl));
     closeDeclaration();
 
     return ret;
@@ -224,6 +225,9 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         declRange,
         isDef ? DeclarationIsDefinition : NoFlags
     );
+    if (Kind == Module) {
+        topContext()->setOwner(decl);
+    }
 
     if (NodeTraits::isTypeDeclaration(Kind)) {
         decl->setKind(Declaration::Type);
@@ -285,20 +289,40 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         return parentContext->owner()->abstractType();
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
-        // const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
+        const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
         ZigNode typeNode = node.varType();
+        ZigNode valueNode = node.varValue();
 
+        // Type and value
         if (!typeNode.isRoot()) {
-            ExpressionVisitor v(session, currentContext());
-            v.startVisiting(typeNode, node);
-            return v.lastType();
-        } else {
-            ZigNode valueNode = node.varValue();
-            if (!valueNode.isRoot()) {
+            ExpressionVisitor typeVisitor(session, currentContext());
+            typeVisitor.startVisiting(typeNode, node);
+            auto t = typeVisitor.lastType();
+            // Skip for fields / var, that also requires tracking changes...
+            if (!isConst || valueNode.isRoot())
+                return t; // No value
+
+            // TODO: Should it skip fields?
+            // If the value is assigned try set the comptime known value
+            if (auto type = typeVisitor.lastType().dynamicCast<ComptimeTypeBase>()) {
                 ExpressionVisitor v(session, currentContext());
                 v.startVisiting(valueNode, node);
-                return v.lastType();
+                if (auto value = v.lastType().dynamicCast<ComptimeTypeBase>()) {
+                    if (value->isComptimeKnown()) { // && Helper::canTypeBeAssigned(type, value, currentContext())) {
+                        // TODO: Is it necessary to clone?
+                        auto comptimeType = static_cast<ComptimeTypeBase*>(type->clone());
+                        comptimeType->setComptimeKnownValue(value->comptimeKnownValue());
+                        return AbstractType::Ptr(comptimeType);
+                    }
+                }
             }
+            return t; // Has a value but could be another variable/expression, etc..
+        }
+        // Only have value
+        else if (!valueNode.isRoot()) {
+            ExpressionVisitor v(session, currentContext());
+            v.startVisiting(valueNode, node);
+            return v.lastType();
         }
     }
     else if (Kind ==  ParamDecl) {
@@ -390,9 +414,13 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
         {
             DUChainWriteLocker lock;
             if (paramData.info.is_comptime) {
-                auto t = param->abstractType()->clone();
-                t->setModifiers(ComptimeModifier);
-                fn->addArgument(AbstractType::Ptr(t), i);
+                if (Helper::isComptimeKnown(param->abstractType())) {
+                    fn->addArgument(param->abstractType(), i);
+                } else {
+                    auto comptimeType = param->abstractType()->clone();
+                    comptimeType->setModifiers(comptimeType->modifiers() | ComptimeModifier);
+                    fn->addArgument(AbstractType::Ptr(comptimeType), i);
+                }
             }
             else if (paramData.info.is_anytype) {
                 fn->addArgument(BuiltinType::newFromName("anytype"), i);
@@ -433,9 +461,13 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
             f.setCurrentFunction(fn);
             f.startVisiting(bodyNode, node);
             //qCDebug(KDEV_ZIG) << "Fn return " << f.returnType()->toString();
-            auto comptimeType = f.returnType()->clone();
-            comptimeType->setModifiers(ComptimeModifier);
-            returnType = comptimeType;
+            if (Helper::isComptimeKnown(f.returnType())) {
+                returnType = f.returnType();
+            } else {
+                auto comptimeType = f.returnType()->clone();
+                comptimeType->setModifiers(comptimeType->modifiers() | ComptimeModifier);
+                returnType = comptimeType;
+            }
         }
     }
 

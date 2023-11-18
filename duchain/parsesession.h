@@ -55,7 +55,8 @@ private:
     ZAst *m_ast;
     int m_jobPriority;
     QMap<uint32_t, KDevelop::DUContext *> m_nodeContextMap;
-
+    QMap<uint32_t, KDevelop::AbstractType::Ptr> m_nodeTypeMap;
+    QMap<uint32_t, KDevelop::DeclarationPointer> m_nodeDeclMap;
 };
 
 class KDEVZIGDUCHAIN_EXPORT ParseSession
@@ -78,6 +79,11 @@ public:
 
     void setContextOnNode(const ZigNode &node, KDevelop::DUContext *context);
     KDevelop::DUContext *contextFromNode(const ZigNode &node);
+    void setTypeOnNode(const ZigNode &node, const KDevelop::AbstractType::Ptr &type);
+    KDevelop::AbstractType::Ptr typeFromNode(const ZigNode &node);
+
+    void setDeclOnNode(const ZigNode &node, const KDevelop::DeclarationPointer &decl);
+    KDevelop::DeclarationPointer declFromNode(const ZigNode &node);
 
 private:
     Q_DISABLE_COPY(ParseSession)

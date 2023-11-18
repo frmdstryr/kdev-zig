@@ -13,18 +13,19 @@
 
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
-#include <QString>
+#include "comptimetype.h"
 
 namespace Zig
 {
 
 using namespace KDevelop;
+using ComptimeTypeBase = MergeComptimeType<AbstractType>;
 
 // If pointer is to an array use this to render [*]
 const quint32 ArrayModifier = 1 << 15;
 
 class KDEVPLATFORMLANGUAGE_EXPORT PointerTypeData
-    : public AbstractTypeData
+    : public ComptimeTypeBase::Data
 {
 public:
     /// Constructor
@@ -43,7 +44,7 @@ public:
  * PointerType is used to represent types which hold a can be null.
  */
 class KDEVPLATFORMLANGUAGE_EXPORT PointerType
-    : public AbstractType
+    : public ComptimeTypeBase
 {
 public:
     using Ptr = TypePtr<PointerType>;
@@ -81,7 +82,7 @@ public:
 
     AbstractType* clone() const override;
 
-    bool equals(const AbstractType* rhs) const override;
+    bool equalsIgnoringValue(const AbstractType* rhs) const override;
 
     void exchangeTypes(TypeExchanger* exchanger) override;
 

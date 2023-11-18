@@ -36,7 +36,6 @@ NodeData ZigNode::data() const
     return ast_node_data(ast, index);
 }
 
-
 ZigNode ZigNode::nextChild() const
 {
     return ZigNode{ast, ast_visit_one_child(ast, index)};
@@ -112,6 +111,17 @@ ZigNode ZigNode::switchCaseItemAt(uint32_t i) const
     return ZigNode{ast, ast_switch_case_item_at(ast, index, i)};
 }
 
+uint32_t ZigNode::forInputCount() const
+{
+    return ast_for_input_count(ast, index);
+}
+
+ZigNode ZigNode::forInputAt(uint32_t i) const
+{
+    return ZigNode{ast, ast_for_input_at(ast, index, i)};
+}
+
+
 QString ZigNode::tokenSlice(TokenIndex i) const
 {
     if (i == INVALID_TOKEN) {
@@ -154,14 +164,12 @@ SourceRange ZigNode::extent() const
 
 QString ZigNode::captureName(CaptureType capture) const
 {
-    TokenIndex tok = ast_node_capture_token(ast, index, capture);
-    return tokenSlice(tok);
+    return tokenSlice(ast_node_capture_token(ast, index, capture));
 }
 
 KDevelop::RangeInRevision ZigNode::captureRange(CaptureType capture) const
 {
-    TokenIndex tok = ast_node_capture_token(ast, index, capture);
-    return tokenRange(tok);
+    return tokenRange(ast_node_capture_token(ast, index, capture));
 }
 
 
@@ -183,20 +191,17 @@ QString ZigNode::spellingName() const
 
 QString ZigNode::mainToken() const
 {
-    TokenIndex tok = ast_node_main_token(ast, index);
-    return tokenSlice(tok);
+    return tokenSlice(ast_node_main_token(ast, index));
 }
 
 KDevelop::RangeInRevision ZigNode::mainTokenRange() const
 {
-    TokenIndex tok = ast_node_main_token(ast, index);
-    return tokenRange(tok);
+    return tokenRange(ast_node_main_token(ast, index));
 }
 
 KDevelop::RangeInRevision ZigNode::spellingRange() const
 {
-    TokenIndex tok = ast_node_name_token(ast, index);
-    return tokenRange(tok);
+    return tokenRange(ast_node_name_token(ast, index));
 }
 
 QString ZigNode::comment() const

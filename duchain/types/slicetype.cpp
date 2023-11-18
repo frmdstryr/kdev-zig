@@ -22,22 +22,27 @@ namespace Zig {
 using namespace KDevelop;
 
 SliceTypeData::SliceTypeData(const SliceTypeData& rhs)
-    : AbstractTypeData(rhs)
+    : ComptimeTypeBase::Data(rhs)
     , m_dimension(rhs.m_dimension)
     , m_sentinel(rhs.m_sentinel)
     , m_elementType(rhs.m_elementType)
 {
-    Q_ASSERT(m_dimension == rhs.m_dimension);
 }
 
 REGISTER_TYPE(SliceType);
 
 SliceType::SliceType(const SliceType& rhs)
-    : AbstractType(copyData<SliceType>(*rhs.d_func()))
+    : ComptimeTypeBase(copyData<SliceType>(*rhs.d_func()))
 {
 }
 
-SliceType::SliceType(SliceTypeData& data) : AbstractType(data)
+SliceType::SliceType(SliceTypeData& data)
+    : ComptimeTypeBase(data)
+{
+}
+
+SliceType::SliceType()
+    : ComptimeTypeBase(createData<SliceType>())
 {
 }
 
@@ -46,26 +51,21 @@ AbstractType* SliceType::clone() const
     return new SliceType(*this);
 }
 
-bool SliceType::equals(const AbstractType* _rhs) const
+bool SliceType::equalsIgnoringValue(const AbstractType* _rhs) const
 {
-    if (!AbstractType::equals(_rhs))
+    if (this == _rhs)
+        return true;
+    if (!ComptimeTypeBase::equalsIgnoringValue(_rhs))
         return false;
-
     Q_ASSERT(dynamic_cast<const SliceType*>(_rhs));
     const auto* rhs = static_cast<const SliceType*>(_rhs);
-
     TYPE_D(SliceType);
     if (d->m_dimension != rhs->d_func()->m_dimension)
         return false;
     if (d->m_sentinel != rhs->d_func()->m_sentinel)
         return false;
-    // TODO: Should element value be checked?
     return d->m_elementType == rhs->d_func()->m_elementType;
-}
 
-SliceType::SliceType()
-    : AbstractType(createData<SliceType>())
-{
 }
 
 int SliceType::dimension() const
@@ -98,15 +98,17 @@ void SliceType::setElementType(const AbstractType::Ptr& type)
 
 QString SliceType::toString() const
 {
+    // TODO: Clean this up...
     const auto T = elementType();
     const auto isConst = T ? T->modifiers() & ConstModifier : false;
     QString c = isConst ? "const " : "";
     QString s = (sentinel() >= 0) ? QStringLiteral(":%1").arg(sentinel()) : "";
     QString type = T ? (c + T->toString()) : QStringLiteral("<notype>");
+    QString v = isComptimeKnown() ? QString(" = \"%1\"").arg(comptimeKnownValue().str()) : "";
     if (d_func()->m_dimension == 0) {
-        return QStringLiteral("[%1]%2").arg(s).arg(type);
+        return QStringLiteral("[%1]%2%3").arg(s).arg(type).arg(v);
     }
-    return QStringLiteral("[%1%2]%3").arg(d_func()->m_dimension).arg(s).arg(type);
+    return QStringLiteral("[%1%2]%3%4").arg(d_func()->m_dimension).arg(s).arg(type).arg(v);
 }
 
 void SliceType::accept0(TypeVisitor* v) const
@@ -133,6 +135,6 @@ uint SliceType::hash() const
 {
     return KDevHash(AbstractType::hash())
            << (elementType() ? elementType()->hash() : 0)
-           << dimension() << sentinel();
+           << dimension() << sentinel() << ComptimeType::hash();
 }
 }

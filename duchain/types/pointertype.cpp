@@ -23,18 +23,23 @@ PointerTypeData::PointerTypeData()
 }
 
 PointerTypeData::PointerTypeData(const PointerTypeData& rhs)
-    : AbstractTypeData(rhs)
+    : ComptimeTypeBase::Data(rhs)
     , m_baseType(rhs.m_baseType)
 {
 }
 
 REGISTER_TYPE(PointerType);
 
-PointerType::PointerType(const PointerType& rhs) : AbstractType(copyData<PointerType>(*rhs.d_func()))
+PointerType::PointerType(const PointerType& rhs) : ComptimeTypeBase(copyData<PointerType>(*rhs.d_func()))
 {
 }
 
-PointerType::PointerType(PointerTypeData& data) : AbstractType(data)
+PointerType::PointerType(PointerTypeData& data) : ComptimeTypeBase(data)
+{
+}
+
+PointerType::PointerType()
+    : ComptimeTypeBase(createData<PointerType>())
 {
 }
 
@@ -43,23 +48,18 @@ AbstractType* PointerType::clone() const
     return new PointerType(*this);
 }
 
-bool PointerType::equals(const AbstractType* _rhs) const
+bool PointerType::equalsIgnoringValue(const AbstractType* _rhs) const
 {
     if (this == _rhs)
         return true;
 
-    if (!AbstractType::equals(_rhs))
+    if (!ComptimeTypeBase::equalsIgnoringValue(_rhs))
         return false;
 
     Q_ASSERT(dynamic_cast<const PointerType*>(_rhs));
     const auto* rhs = static_cast<const PointerType*>(_rhs);
 
     return d_func()->m_baseType == rhs->d_func()->m_baseType;
-}
-
-PointerType::PointerType()
-    : AbstractType(createData<PointerType>())
-{
 }
 
 void PointerType::accept0(TypeVisitor* v) const
@@ -107,7 +107,8 @@ AbstractType::WhichType PointerType::whichType() const
 
 uint PointerType::hash() const
 {
-    return KDevHash(AbstractType::hash()) << d_func()->m_baseType.hash();
+    return KDevHash(AbstractType::hash())
+        << d_func()->m_baseType.hash() << ComptimeType::hash();
 }
 }
 

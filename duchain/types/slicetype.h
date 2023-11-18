@@ -3,29 +3,27 @@
     SPDX-FileCopyrightText: 2006-2008 Hamish Rodda <rodda@kde.org>
     SPDX-FileCopyrightText: 2007-2008 David Nolden <david.nolden.kdevelop@art-master.de>
 
-    Literal copy / rename that updates to string
-    // TODO: Can it just subclass ArrayType?
-
     SPDX-License-Identifier: LGPL-2.0-only
 */
 #pragma once
 
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
+#include "kdevplatform/serialization/indexedstring.h"
 #include "kdevzigduchain_export.h"
+#include "comptimetype.h"
 
 namespace Zig {
 
 using namespace KDevelop;
+using ComptimeTypeBase = MergeComptimeType<AbstractType>;
 
 /// Private data structure for SliceType
 class KDEVZIGDUCHAIN_EXPORT SliceTypeData
-    : public AbstractTypeData
+    : public ComptimeTypeBase::Data
 {
 public:
-    /// Constructor
     SliceTypeData() = default;
-    /// Copy constructor. \param rhs data to copy
     SliceTypeData(const SliceTypeData& rhs);
     ~SliceTypeData() = default;
     SliceTypeData& operator=(const SliceTypeData& rhs) = delete;
@@ -37,8 +35,7 @@ public:
 };
 
 
-class KDEVZIGDUCHAIN_EXPORT SliceType
-    : public AbstractType
+class KDEVZIGDUCHAIN_EXPORT SliceType: public ComptimeTypeBase
 {
 public:
     using Ptr = TypePtr<SliceType>;
@@ -56,7 +53,7 @@ public:
 
     AbstractType* clone() const override;
 
-    bool equals(const AbstractType* rhs) const override;
+    bool equalsIgnoringValue(const AbstractType* rhs) const override;
 
     /**
      * Retrieve the dimension of this array type. Multiple-dimensioned

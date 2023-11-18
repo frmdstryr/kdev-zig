@@ -178,7 +178,7 @@ void DUChainTest::sanityCheckVar()
     Declaration *varDeclaration = decls.first();
     QVERIFY(varDeclaration);
     QCOMPARE(varDeclaration->identifier().toString(), QString("X"));
-    QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int"));
+    QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int = 1"));
 }
 
 void DUChainTest::sanityCheckStd()
@@ -203,7 +203,7 @@ void DUChainTest::sanityCheckStd()
     Declaration *decl = decls.first();
     QVERIFY(decl);
     QCOMPARE(decl->identifier().toString(), QString("ns_per_us"));
-    QCOMPARE(decl->abstractType()->toString(), QString("comptime_int"));
+    QCOMPARE(decl->abstractType()->toString(), QString("comptime_int = 1000"));
 }
 
 void DUChainTest::sanityCheckBasicImport()
@@ -218,7 +218,6 @@ void DUChainTest::sanityCheckBasicImport()
     }
 
     qDebug() << "mod_b decls are:";
-    QCOMPARE(mod_b->localDeclarations().size(), 1);
     for (const KDevelop::Declaration *decl : moduleInternalContext(mod_b)->localDeclarations()) {
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
@@ -227,7 +226,7 @@ void DUChainTest::sanityCheckBasicImport()
     QCOMPARE(decls.size(), 1);
     QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("basic_import/a.zig"));
     QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
-    decls = mod_b->findDeclarations(Identifier("A"));
+    decls = mod_b->findDeclarations(Identifier("ImportedA"));
     QCOMPARE(decls.size(), 1);
     Q_ASSERT(decls.first()->internalContext());
     // auto importedContexts = decls.first()->internalContext()->importedParentContexts();
@@ -367,8 +366,8 @@ void DUChainTest::testVarBindings_data()
     QTest::newRow("struct field") << "const Foo = struct { a: u8, };" << "a" << "Foo";
     QTest::newRow("test decl") << "test \"foo\" {  }" << "test foo"  << "";
     QTest::newRow("if capture") << "test {var opt: ?u8 = null;\n if (opt) |x| {\n_ = x;\n} }" << "x" << "1,13";
-    QTest::newRow("catch capture") << "test {\nsomething() catch |err| {_ = err;}\n} }" << "err" << "1,23";
-    QTest::newRow("catch capture expr") << "test {\nconst n = something() catch |err| { return err;}\n} }" << "err" << "1,23";
+    QTest::newRow("catch capture") << "test {\nsomething() catch |err| {_ = err;}\n}" << "err" << "1,23";
+    QTest::newRow("catch capture expr") << "test {\nconst n = something() catch |err| 0; \n}" << "err" << "1,23";
     // Interal context ?
     // QTest::newRow("fn var in if") << "main" << "pub fn main() void { if (true) { var i: u8 = 0;} }" << QStringList { "i" };
 
@@ -478,7 +477,6 @@ void DUChainTest::testVarType()
     const KDevelop::Declaration *decl = decls.first();
     qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     QCOMPARE(decl->abstractType()->toString(), type);
-
 }
 
 void DUChainTest::testVarType_data()
@@ -488,11 +486,13 @@ void DUChainTest::testVarType_data()
     QTest::addColumn<QString>("type");
     QTest::addColumn<QString>("container");
 
-    QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8" << "";
-    QTest::newRow("const bool") << "var x = true;" << "x" << "bool" << "";
-    QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int" << "";
-    QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float" << "";
-    QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8" << "";
+    QTest::newRow("var u8") << "var x: u8 = 0;" << "x" << "u8 = 0" << "";
+    QTest::newRow("const bool") << "var x = true;" << "x" << "bool = true" << "";
+    QTest::newRow("var bool") << "var x: bool = undefined;" << "x" << "bool" << "";
+    QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int = 1" << "";
+    QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float = 1.1" << "";
+    QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8 = \"abc\"" << "";
+    QTest::newRow("char lit") << "const x = 'a';" << "x" << "u8 = 'a'" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
@@ -508,8 +508,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("fn anytype") << "pub fn main(a: anytype) void {}" << "main" << "function void (anytype)"<< "";
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
     QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
-    QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
-    QTest::newRow("field ptr") << "const Foo = struct {a: u8=0};\ntest {\nvar f = &Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
+    QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8 = 0" << "3,0";
+    QTest::newRow("field ptr") << "const Foo = struct {a: u8=0};\ntest {\nvar f = &Foo{}; var b = f.a;\n}" << "b" << "u8 = 0" << "3,0";
     QTest::newRow("fn call") << "pub fn foo() f32 { return 0.0; }\ntest {\nvar f = foo();\n}" << "f" << "f32" << "3,0";
     QTest::newRow("var addr of") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{}; var x = &f;\n}" << "x" << "*Foo" << "3,0";
     QTest::newRow("ptr deref") << "test {\nvar buf: *u8 = undefined; var x = buf.*;\n}" << "x" << "u8" << "2,0";
@@ -529,7 +529,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("add comptime rhs") << "var x: u8 = 1; var y = 2 + x;" << "y" << "u8" << "";
     QTest::newRow("add comptime lhs") << "var x: u8 = 1; var y = x + 2;" << "y" << "u8" << "";
     QTest::newRow("negate signed") << "var x: i8 = 1; var y = -x;" << "y" << "i8" << "";
-    QTest::newRow("negate comptime") << "var x = 1; var y = -x;" << "y" << "comptime_int" << "";
+    QTest::newRow("negate comptime") << "var x = 1; var y = -x;" << "y" << "comptime_int = -1" << "";
     QTest::newRow("negate unsigned") << "var x: u8 = 1; var y = -x;" << "y" << "mixed" << "";
     QTest::newRow("negate float") << "var x: f32 = 1; var y = -x;" << "y" << "f32" << "";
     QTest::newRow("math expression") << "var x: f32 = 1; var y = (1 + -x);" << "y" << "f32" << "";
@@ -576,10 +576,12 @@ void DUChainTest::testVarType_data()
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";
     QTest::newRow("@sizeOf()") << "const Foo = struct { a: u8, }; test {var x = @sizeOf(Foo);\n}" << "x" << "comptime_int" << "1,0";
-    QTest::newRow("@as()") << "test{var x = @as(u8, 1);\n}" << "x" << "u8" << "1,0";
+    QTest::newRow("@as()") << "test{var x = @as(u8, 1);\n}" << "x" << "u8 = 1" << "1,0";
+    QTest::newRow("@as(u32) << 2") << "test{var x = @as(u32, 0xFF) << 8;\n}" << "x" << "u32 = 0xff00" << "1,0";
     QTest::newRow("@min()") << "test{var x: u32 = 1; var y = @min(x, 1);\n}" << "x" << "u32" << "1,0";
     QTest::newRow("@hasField()") << "const Foo = struct {a: u8}; test{var x = @hasField(Foo, \"a\");\n}" << "x" << "bool" << "1,0";
     QTest::newRow("@field()") << "const Foo = struct {a: u8}; test{var x = Foo{}; var y = @field(x, \"a\");\n}" << "y" << "u8" << "1,0";
+    QTest::newRow("@field() expr") << "const Foo = struct {a: u8}; test{const f = \"a\"; var x = Foo{}; var y = @field(x, f);\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
     QTest::newRow("@fieldParentPtr()") <<
         "const Point = struct {x: i32=0, y: i32=0};\n"
@@ -727,9 +729,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum array init") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error};" << QStringList{} << "";
     QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{"Invalid enum field Invalid"} << "";
-    QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; };" << QStringList{} << "";
+    QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; }" << QStringList{} << "";
     QTest::newRow("enum comp") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Ok) {}};" << QStringList{} << "";
-    QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}};" << QStringList{"Invalid enum field Bad"} << "";
+    QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}}" << QStringList{"Invalid enum field Bad"} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";

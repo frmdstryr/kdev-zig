@@ -694,6 +694,10 @@ FieldInitData ast_struct_init_field_at(const ZAst *tree, NodeIndex node, uint32_
 uint32_t ast_switch_case_size(const ZAst *tree, NodeIndex node);
 NodeIndex ast_switch_case_item_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
+uint32_t ast_for_input_count(const ZAst *tree, NodeIndex node);
+NodeIndex ast_for_input_at(const ZAst *tree, NodeIndex node, uint32_t i);
+
+
 // NOTE: These return INVALID_TOKEN on error 0 is a valid token
 TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);

@@ -570,17 +570,17 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
     Q_UNUSED(parent);
     NodeData data = node.data(); // access lhs
     ZigNode lhs = {node.ast, data.lhs};
-    ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v1(session, currentContext());
     v1.startVisiting(lhs, node);
-    ExpressionVisitor v2(session, currentContext());
-    v2.startVisiting(rhs, node);
 
     if (auto slice = v1.lastType().dynamicCast<SliceType>()) {
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor v2(session, currentContext());
+        v2.startVisiting(rhs, node);
         if (auto index = v2.lastType().dynamicCast<BuiltinType>()) {
             if (index->isInteger()) {
                 auto decl = v1.lastDeclaration();
-                auto useRange = lhs.range();
+                auto useRange = lhs.spellingRange();
                 if (decl && decl->range() != useRange) {
                     UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
                 }
@@ -596,7 +596,7 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
         topContext()->addProblem(p);
     } else {
         ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+        p->setFinalLocation(DocumentRange(document, lhs.spellingRange().castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         p->setDescription(i18n("Attempt to index non-array type"));

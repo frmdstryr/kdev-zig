@@ -16,6 +16,7 @@
 #include "zigdebug.h"
 #include "nodetraits.h"
 #include "functionvisitor.h"
+#include "types/comptimetype.h"
 
 namespace Zig
 {
@@ -57,9 +58,18 @@ void ExpressionVisitor::visitChildren(const ZigNode &node, const ZigNode &parent
 
 void ExpressionVisitor::startVisiting(const ZigNode &node, const ZigNode &parent)
 {
-    if (!node.isRoot()) {
-        visitNode(node, parent);
+    if (node.isRoot()) {
+        return;
     }
+    // if (auto cachedType = session()->typeFromNode(node)) {
+    //     if (auto cachedDecl = session()->declFromNode(node)) {
+    //         encounterLvalue(DeclarationPointer(cachedDecl));
+    //     } else {
+    //         encounter(cachedType);
+    //     }
+    //     return;
+    // }
+    visitNode(node, parent);
 }
 
 VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &parent)
@@ -196,6 +206,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_comptime:
         visitChildren(node, parent);
         return Continue;
+    default:
+        break;
     }
     // TODO: Thereset
 
@@ -209,12 +221,11 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
 
     ZigNode childType = {node.ast, ptr_info.child_type};
     ExpressionVisitor v(this);
-    v.visitNode(childType, node);
+    v.startVisiting(childType, node);
 
     auto baseType = v.lastType();
     if (ptr_info.info.is_const && !(baseType->modifiers() & AbstractType::ConstModifier)) {
         auto clone = baseType->clone();
-        Q_ASSERT(clone);
         clone->setModifiers(clone->modifiers() | AbstractType::ConstModifier);
         baseType = AbstractType::Ptr(clone);
     }
@@ -243,7 +254,6 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
     if (mainToken == QLatin1String("[")) {
         // TODO: slice alignment
         auto sliceType = new SliceType();
-        Q_ASSERT(sliceType);
         sliceType->setElementType(baseType);
         if (sentinel >= 0) {
             sliceType->setSentinel(sentinel);
@@ -251,7 +261,6 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
         encounter(AbstractType::Ptr(sliceType));
     } else if (mainToken == QLatin1String("*")) {
         auto ptrType = new PointerType();
-        Q_ASSERT(ptrType);
         ptrType->setBaseType(baseType);
         if (align >= 0) {
             ptrType->setAlignOf(align);
@@ -267,7 +276,6 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
     } else {
         // Can this happen ?
         auto ptrType = new PointerType();
-        Q_ASSERT(ptrType);
         ptrType->setBaseType(baseType);
         encounter(AbstractType::Ptr(ptrType));
     }
@@ -280,9 +288,8 @@ VisitResult ExpressionVisitor::visitAddressOf(const ZigNode &node, const ZigNode
     // qCDebug(KDEV_ZIG) << "visit address of";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
-    v.visitNode(value, node);
+    v.startVisiting(value, node);
     auto ptrType = new PointerType();
-    Q_ASSERT(ptrType);
     ptrType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(ptrType));
     return Continue;
@@ -294,7 +301,7 @@ VisitResult ExpressionVisitor::visitDeref(const ZigNode &node, const ZigNode &pa
     // qCDebug(KDEV_ZIG) << "visit deref";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
-    v.visitNode(value, node);
+    v.startVisiting(value, node);
     if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
         encounter(AbstractType::Ptr(ptr->baseType()));
     } else {
@@ -308,9 +315,9 @@ VisitResult ExpressionVisitor::visitOptionalType(const ZigNode &node, const ZigN
 {
     // qCDebug(KDEV_ZIG) << "visit optional";
     Q_UNUSED(parent);
-    ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
-    v.visitNode(value, node);
+    ExpressionVisitor v(this);
+    v.startVisiting(value, node);
     auto optionalType = new OptionalType();
     optionalType->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(optionalType));
@@ -323,7 +330,7 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const Zi
     // qCDebug(KDEV_ZIG) << "visit unwrap optional";
     ExpressionVisitor v(this);
     ZigNode value = node.nextChild();
-    v.visitNode(value, node);
+    v.startVisiting(value, node);
 
     // Automatically derefs
     auto T = v.lastType();
@@ -342,20 +349,19 @@ VisitResult ExpressionVisitor::visitUnwrapOptional(const ZigNode &node, const Zi
 VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    QString value = node.mainToken();
+    QString value = node.spellingName(); // This strips the ""
 
     auto sliceType = new SliceType();
-    Q_ASSERT(sliceType);
     sliceType->setSentinel(0);
-    sliceType->setDimension(value.size() - 2); // Main token inclues quotes
+    sliceType->setDimension(value.size()); // Main token inclues quotes
     sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
-    // sliceType->setValueNode(node.index);
+    sliceType->setComptimeKnownValue(value);
 
     auto ptrType = new PointerType();
-    Q_ASSERT(ptrType);
     ptrType->setBaseType(AbstractType::Ptr(sliceType));
     encounter(AbstractType::Ptr(ptrType));
+
     return Continue;
 }
 
@@ -365,15 +371,13 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
     //auto range = node.range();
 
     auto sliceType = new SliceType();
-    Q_ASSERT(sliceType);
     sliceType->setSentinel(0);
     // sliceType->setDimension();
     sliceType->setElementType(BuiltinType::newFromName("u8"));
     sliceType->setModifiers(AbstractType::CommonModifiers::ConstModifier);
-    // sliceType->setValueNode(node.index);
+    // sliceType->setValue(node.mainToken()); // Join all lines?
 
     auto ptrType = new PointerType();
-    Q_ASSERT(ptrType);
     ptrType->setBaseType(AbstractType::Ptr(sliceType));
     encounter(AbstractType::Ptr(ptrType));
     return Continue;
@@ -384,16 +388,19 @@ VisitResult ExpressionVisitor::visitNumberLiteral(const ZigNode &node, const Zig
     Q_UNUSED(parent);
     QString tok = node.mainToken();
     // qCDebug(KDEV_ZIG) << "visit number lit" << name;
-    encounter(BuiltinType::newFromName(
-        tok.contains(".") ? "comptime_float" : "comptime_int"));
+    auto t = new BuiltinType(tok.contains(".") ? "comptime_float" : "comptime_int");
+    t->setComptimeKnownValue(tok);
+    encounter(AbstractType::Ptr(t));
     return Continue;
 }
 
 VisitResult ExpressionVisitor::visitCharLiteral(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(node);
     Q_UNUSED(parent);
-    encounter(BuiltinType::newFromName("u8"));
+    auto t = new BuiltinType("u8");
+    // Remove the ''
+    t->setComptimeKnownValue(node.mainToken().at(1));
+    encounter(AbstractType::Ptr(t));
     return Continue;
 }
 
@@ -443,7 +450,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
     ExpressionVisitor v(this);
     NodeData data = node.data();
     ZigNode owner = {node.ast, data.lhs};
-    v.visitNode(owner, node);
+    v.startVisiting(owner, node);
     QString attr = node.tokenSlice(data.rhs);
     const auto T = v.lastType();
     // {
@@ -541,11 +548,13 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     else if (name == QLatin1String("@field")) {
         return callBuiltinField(node);
     }
+    else if (name == QLatin1String("@as")) {
+        return callBuiltinAs(node);
+    }
     // todo @Type
     else if (
         // These return the type of the first argument
-        name == QLatin1String("@as")
-        || name == QLatin1String("@sqrt")
+        name == QLatin1String("@sqrt")
         || name == QLatin1String("@sin")
         || name == QLatin1String("@cos")
         || name == QLatin1String("@tan")
@@ -662,7 +671,7 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
         //    auto mod = decls.first();
         if (auto mod = importedModule->owner()) {
             Q_ASSERT(mod->abstractType()->modifiers() & ModuleModifier);
-            qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString() << "ctx" << importedModule;
+            // qCDebug(KDEV_ZIG) << "Imported module " << mod->toString() << "from" << importPath.toString() << "ctx" << importedModule;
             encounterLvalue(DeclarationPointer(mod));
             return Continue;
         }
@@ -670,7 +679,7 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
     } else {
         Helper::scheduleDependency(IndexedString(importPath), session()->jobPriority());
         // Also reschedule reparsing of this
-        qCDebug(KDEV_ZIG) << "Module scheduled for parsing" << importPath.toString();
+        // qCDebug(KDEV_ZIG) << "Module scheduled for parsing" << importPath.toString();
         // Helper::scheduleDependency(session()->document(), session()->jobPriority());
     }
     encounterUnknown();
@@ -684,7 +693,6 @@ VisitResult ExpressionVisitor::callBuiltinFieldParentPtr(const ZigNode &node)
     ExpressionVisitor v(this);
     v.startVisiting(typeNode, node);
     auto ptr = new PointerType();
-    Q_ASSERT(ptr);
     ptr->setBaseType(v.lastType());
     encounter(AbstractType::Ptr(ptr));
     return Continue;
@@ -695,19 +703,70 @@ VisitResult ExpressionVisitor::callBuiltinField(const ZigNode &node)
     auto tag = node.tag();
     if (tag == NodeTag_builtin_call_two || tag == NodeTag_builtin_call_two_comma) {
         NodeData data = node.data();
-        ZigNode rhs = {node.ast, data.rhs};
-        if (rhs.tag() != NodeTag_string_literal) {
-            encounterUnknown();
-            return Continue;
-        }
         ZigNode lhs = {node.ast, data.lhs};
         ExpressionVisitor v(this);
         v.startVisiting(lhs, node);
+
+        ZigNode rhs = {node.ast, data.rhs};
+        QString fieldName;
+        if (rhs.tag() == NodeTag_string_literal) {
+            fieldName = rhs.spellingName();
+        } else {
+            // May be some expr like @import("foo").bar or some const var
+            ExpressionVisitor nameVisitor(this);
+            nameVisitor.startVisiting(rhs, node);
+            // Look for *const [x:0]u8
+            if (auto ptr = nameVisitor.lastType().dynamicCast<PointerType>()) {
+                if (auto slice = ptr->baseType().dynamicCast<SliceType>()) {
+                    if (slice->isComptimeKnown()) {
+                        fieldName = slice->comptimeKnownValue().str();
+                    }
+                }
+            }
+        }
+
+        if (fieldName.isEmpty()) {
+            encounterUnknown();
+            return Continue;;
+        }
+
         // TODO: lhs may be a type or instance
-        if (auto r = Helper::accessAttribute(v.lastType(), rhs.spellingName(), topContext())) {
+        if (auto r = Helper::accessAttribute(v.lastType(), fieldName, topContext())) {
             encounterLvalue(DeclarationPointer(r));
             return Continue;
         }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinAs(const ZigNode&node)
+{
+    NodeTag tag = node.tag();
+    if (tag == NodeTag_builtin_call_two || tag == NodeTag_builtin_call_two_comma) {
+        NodeData data = node.data();
+        ZigNode lhs = {node.ast, data.lhs};
+        ZigNode rhs = {node.ast, data.rhs};
+
+        ExpressionVisitor typeVisitor(this);
+        typeVisitor.startVisiting(lhs, node);
+
+        // If lhs is a builtin type, check if rhs is comptime known and if
+        // so set it to a comptime known value, eg @as(u32, 1)
+        if (auto builtin = typeVisitor.lastType().dynamicCast<BuiltinType>()) {
+            ExpressionVisitor valueVisitor(this);
+            valueVisitor.startVisiting(rhs, node);
+            if (auto value = valueVisitor.lastType().dynamicCast<ComptimeTypeBase>()) {
+                if (value->isComptimeKnown() && Helper::canTypeBeAssigned(builtin, value, context())) {
+                    auto t = static_cast<BuiltinType*>(builtin->clone());
+                    t->setComptimeKnownValue(value->comptimeKnownValue());
+                    encounter(AbstractType::Ptr(t));
+                    return Continue;
+                }
+            }
+        }
+        encounter(typeVisitor.lastType());
+        return Continue;
     }
     encounterUnknown();
     return Continue;
@@ -724,7 +783,7 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
 
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
-    v.visitNode(next, node);
+    v.startVisiting(next, node);
     if (auto func = v.lastType().dynamicCast<FunctionType>()) {
         // Return type may temporarily be null when the FunctionVisitor is
         // visiting a recursive function that returns "type"
@@ -753,11 +812,10 @@ VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNod
     ZigNode lhs = {node.ast, data.lhs};
     ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor errorVisitor(this);
-    errorVisitor.visitNode(lhs, node);
+    errorVisitor.startVisiting(lhs, node);
     ExpressionVisitor typeVisitor(this);
-    typeVisitor.visitNode(rhs, node);
+    typeVisitor.startVisiting(rhs, node);
     auto errType = new ErrorType();
-    Q_ASSERT(errType);
     errType->setBaseType(typeVisitor.lastType());
     errType->setErrorType(errorVisitor.lastType());
     encounter(AbstractType::Ptr(errType));
@@ -769,6 +827,7 @@ VisitResult ExpressionVisitor::visitBoolExpr(const ZigNode &node, const ZigNode 
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
+    // TODO: Evaluate if both lhs & rhs are comptime known
     encounter(BuiltinType::newFromName("bool"));
     return Continue;
 }
@@ -780,19 +839,33 @@ VisitResult ExpressionVisitor::visitMathExpr(const ZigNode &node, const ZigNode 
     ZigNode lhs = {node.ast, data.lhs};
 
     ExpressionVisitor v1(this);
-    v1.visitNode(lhs, node);
+    v1.startVisiting(lhs, node);
+
 
     // Check if lhs & rhs are compatable
     if (auto a = v1.lastType().dynamicCast<BuiltinType>()) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(this);
-        v2.visitNode(rhs, node);
+        v2.startVisiting(rhs, node);
         if (auto b = v2.lastType().dynamicCast<BuiltinType>()) {
-            if ((a->isFloat() && b->isFloat())
+            // If both are comptime known try to evaluate the expr
+            if (a->isComptimeKnown() && b->isComptimeKnown()) {
+                NodeTag tag = node.tag();
+                if (a->isUnsigned() && b->isUnsigned()) {
+                    encounter(Helper::evaluateUnsignedOp(a, b, tag));
+                    return Continue;
+                }
+                // TODO: The rest
+                encounter(a);
+                return Continue;
+            }
+            // if the types match, return the non-comptime one
+            else if ((a->isFloat() && b->isFloat())
                 || (a->isSigned() && b->isSigned())
                 || (a->isUnsigned() && b->isUnsigned())
             ) {
-                encounter(a->isComptime() ? b : a);
+                // TODO: Evaluate comptime known expr
+                encounter(a->isComptimeKnown() ? b : a);
                 return Continue;
             }
             // else error, must cast
@@ -807,10 +880,22 @@ VisitResult ExpressionVisitor::visitNegation(const ZigNode &node, const ZigNode 
     Q_UNUSED(parent);
     ZigNode child = node.nextChild();
     ExpressionVisitor v(this);
-    v.visitNode(child, node);
+    v.startVisiting(child, node);
     if (auto a = v.lastType().dynamicCast<BuiltinType>()) {
         if (a->isSigned() || a->isFloat()) {
-            encounter(a);
+            if (a->isComptimeKnown()) {
+                // Known to be at least size of 1
+                auto result = new BuiltinType(a->dataType());
+                QString value = a->comptimeKnownValue().str();
+                if (value.at(0) == '-') {
+                    result->setComptimeKnownValue(value.mid(1));
+                } else {
+                    result->setComptimeKnownValue('-' + value);
+                }
+                encounter(AbstractType::Ptr(result));
+            } else {
+                encounter(a);
+            }
             return Continue;
         }
     }
@@ -823,7 +908,7 @@ VisitResult ExpressionVisitor::visitBitNot(const ZigNode &node, const ZigNode &p
     Q_UNUSED(parent);
     ZigNode child = node.nextChild();
     ExpressionVisitor v(this);
-    v.visitNode(child, node);
+    v.startVisiting(child, node);
     if (auto a = v.lastType().dynamicCast<BuiltinType>()) {
         if (a->isInteger()) {
             encounter(a);
@@ -839,7 +924,7 @@ VisitResult ExpressionVisitor::visitTry(const ZigNode &node, const ZigNode &pare
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
     ZigNode next = node.nextChild();
-    v.visitNode(next, node);
+    v.startVisiting(next, node);
     if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
         encounter(errorType->baseType());
     } else {
@@ -854,7 +939,7 @@ VisitResult ExpressionVisitor::visitCatch(const ZigNode &node, const ZigNode &pa
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v(this);
-    v.visitNode(lhs, node);
+    v.startVisiting(lhs, node);
     // TODO: Check that lhs and rhs are compatable
     if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
         encounter(errorType->baseType());
@@ -870,12 +955,12 @@ VisitResult ExpressionVisitor::visitOrelse(const ZigNode &node, const ZigNode &p
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v1(this);
-    v1.visitNode(lhs, node);
+    v1.startVisiting(lhs, node);
     if (auto optionalType = v1.lastType().dynamicCast<OptionalType>()) {
         // Returns base type
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(this);
-        v2.visitNode(rhs, node);
+        v2.startVisiting(rhs, node);
         encounter(optionalType->baseType());
         return Continue;
     }
@@ -887,6 +972,7 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
 {
     Q_UNUSED(parent);
     IfData data = ast_if_data(node.ast, node.index);
+    // TODO: If the cond expr is comptime known delete the relevant branch
 
     ZigNode thenNode = {node.ast, data.then_expr};
     ExpressionVisitor thenExpr(this);
@@ -908,10 +994,9 @@ VisitResult ExpressionVisitor::visitArrayType(const ZigNode &node, const ZigNode
     ZigNode lhs = {node.ast, data.lhs};
     ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor typeVisitor(this);
-    typeVisitor.visitNode(rhs, node);
+    typeVisitor.startVisiting(rhs, node);
 
     auto sliceType = new SliceType();
-    Q_ASSERT(sliceType);
     sliceType->setElementType(typeVisitor.lastType());
 
     if (lhs.tag() == NodeTag_number_literal) {
@@ -933,12 +1018,11 @@ VisitResult ExpressionVisitor::visitArrayInit(const ZigNode &node, const ZigNode
     ZigNode lhs = {node.ast, data.lhs};
     //ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(this);
-    v.visitNode(lhs, node);
+    v.startVisiting(lhs, node);
     if (auto slice = v.lastType().dynamicCast<SliceType>()) {
         uint32_t n = node.arrayInitCount();
         if (n && static_cast<uint32_t>(slice->dimension()) != n) {
             auto newSlice = static_cast<SliceType*>(slice->clone());
-            Q_ASSERT(newSlice);
             newSlice->setDimension(n);
             encounter(AbstractType::Ptr(newSlice));
         } else {
@@ -973,7 +1057,6 @@ VisitResult ExpressionVisitor::visitForRange(const ZigNode &node, const ZigNode 
     Q_UNUSED(node);
     Q_UNUSED(parent);
     auto newSlice = new SliceType();
-    Q_ASSERT(newSlice);
     newSlice->setElementType(BuiltinType::newFromName("usize"));
     encounter(AbstractType::Ptr(newSlice)); // New slice
     return Continue;
@@ -990,7 +1073,6 @@ VisitResult ExpressionVisitor::visitSlice(const ZigNode &node, const ZigNode &pa
 
     if (auto slice = v.lastType().dynamicCast<SliceType>()) {
         auto newSlice = new SliceType();
-        Q_ASSERT(newSlice);
         newSlice->setElementType(slice->elementType());
         // TODO: Size try to detect size?
         encounter(AbstractType::Ptr(newSlice)); // New slice
@@ -1010,10 +1092,9 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(const ZigNode &node, const
 
 
     ExpressionVisitor typeVisitor(this);
-    typeVisitor.visitNode(elemType, node);
+    typeVisitor.startVisiting(elemType, node);
 
     auto sliceType = new SliceType();
-    Q_ASSERT(sliceType);
     sliceType->setElementType(typeVisitor.lastType());
 
     ZigNode sentinelType = {node.ast, sentinel.sentinel};

@@ -30,86 +30,89 @@ BuiltinTypeData::BuiltinTypeData()
 {
 }
 
-BuiltinTypeData::BuiltinTypeData(const QString& name)
-{
-    setData(name);
-}
-
-void BuiltinTypeData::setData(const QString& name)
-{
-    m_data = IndexedString(name);
-}
-
 BuiltinTypeData::BuiltinTypeData(const BuiltinTypeData& rhs)
-    : AbstractTypeData(rhs)
+    : ComptimeTypeBase::Data(rhs)
     , m_data(rhs.m_data)
-    , m_value(rhs.m_value)
 {
 }
 
 REGISTER_TYPE(BuiltinType);
 
 BuiltinType::BuiltinType(const BuiltinType& rhs)
-    : AbstractType(copyData<BuiltinType>(*rhs.d_func()))
+    : ComptimeTypeBase(copyData<BuiltinType>(*rhs.d_func()))
 {
 }
 
 BuiltinType::BuiltinType(BuiltinTypeData& data)
-    : AbstractType(data)
+    : ComptimeTypeBase(data)
 {
 }
 
-QString BuiltinType::dataType() const
+BuiltinType::BuiltinType(const IndexedString &name)
+    : ComptimeTypeBase(createData<BuiltinType>())
 {
-    return toString();
+    d_func_dynamic()->setTypeClassId<BuiltinType>();
+    setDataType(name);
 }
 
-void BuiltinType::setDataType(QString &dataType)
+BuiltinType::BuiltinType(const QString &name)
+    : BuiltinType(IndexedString(name))
 {
-    d_func_dynamic()->setData(dataType);
 }
 
-NodeIndex BuiltinType::valueNode() const
+const IndexedString& BuiltinType::dataType() const
 {
-    return d_func()->m_value;
+    return d_func()->m_data;
 }
 
-void BuiltinType::setValueNode(NodeIndex node)
+void BuiltinType::setDataType(const IndexedString &dataType)
 {
-    d_func_dynamic()->m_value = node;
+    STATIC_INDEXED_STR(null);
+    STATIC_INDEXED_STR(void);
+    STATIC_INDEXED_STR(true);
+    STATIC_INDEXED_STR(false);
+    STATIC_INDEXED_STR(bool);
+    if (dataType == indexed_true || dataType == indexed_false)
+        d_func_dynamic()->m_data = indexed_bool;
+    else
+        d_func_dynamic()->m_data = dataType;
+
+    // These are always comptime known
+    if (dataType == indexed_null
+        || dataType == indexed_void
+        || dataType == indexed_true
+        || dataType == indexed_false
+    ) {
+        setComptimeKnownValue(dataType);
+    }
 }
+
 
 AbstractType* BuiltinType::clone() const
 {
     return new BuiltinType(*this);
 }
 
-bool BuiltinType::equals(const AbstractType* _rhs) const
+bool BuiltinType::equalsIgnoringValue(const KDevelop::AbstractType* _rhs) const
 {
     if (this == _rhs)
         return true;
-
-    if (!AbstractType::equals(_rhs))
+    if (!ComptimeTypeBase::equalsIgnoringValue(_rhs))
         return false;
-
-    Q_ASSERT(dynamic_cast<const BuiltinType*>(_rhs));
     const auto *rhs = static_cast<const BuiltinType*>(_rhs);
-
-    if (d_func()->m_value != rhs->d_func()->m_value)
-        return false;
     return d_func()->m_data == rhs->d_func()->m_data;
-}
-
-BuiltinType::BuiltinType(QString name)
-    : AbstractType(createData<BuiltinType>())
-{
-    d_func_dynamic()->setTypeClassId<BuiltinType>();
-    setDataType(name);
 }
 
 QString BuiltinType::toString() const
 {
-    return d_func()->m_data.str();
+    if (!isComptimeKnown() || isVoid() || isNull()) {
+        return d_func()->m_data.str();
+    } else {
+        return QString("%1 = %2").arg(
+            d_func()->m_data.str(),
+            comptimeKnownValue().str()
+        );
+    }
 }
 
 void BuiltinType::accept0(TypeVisitor* v) const
@@ -125,7 +128,7 @@ AbstractType::WhichType BuiltinType::whichType() const
 uint BuiltinType::hash() const
 {
     return KDevHash(AbstractType::hash())
-        << d_func()->m_data.hash() << d_func()->m_value;
+        << d_func()->m_data.hash() << ComptimeType::hash();
 }
 
 bool BuiltinType::isUnsigned() const
@@ -154,7 +157,7 @@ bool BuiltinType::isUnsigned() const
          || d == indexed_c_uint
          || d == indexed_c_ulong
          || d == indexed_c_ulonglong
-         || unsignedIntPattern.match(toString()).hasMatch()
+         || unsignedIntPattern.match(d.str()).hasMatch()
     );
 }
 
@@ -184,7 +187,7 @@ bool BuiltinType::isSigned() const
          || d == indexed_c_short
          || d == indexed_c_long
          || d == indexed_c_longlong
-         || signedIntPattern.match(toString()).hasMatch()
+         || signedIntPattern.match(d.str()).hasMatch()
     );
 }
 
@@ -200,7 +203,8 @@ bool BuiltinType::isFloat() const
     const IndexedString &d = d_func()->m_data;
     return (d == indexed_f32
          || d == indexed_f64
-         || isComptime() // Can be int or float
+         || isComptimeInt()
+         || isComptimeFloat()
          || d == indexed_f16
          || d == indexed_f80
          || d == indexed_f128
@@ -259,19 +263,15 @@ bool BuiltinType::isVoid() const
 
 int BuiltinType::bitsize() const
 {
-    if (isComptime()) {
-        return -1; // Should this return 0 ?
-    }
-    else if (isNumeric()) {
-        QString v = toString().mid(1);
+    if (isVoid())
+        return 0;
+    if (isNumeric() && !(isComptimeInt() || isComptimeFloat())) {
+        QString v = d_func()->m_data.str().mid(1);
         bool ok;
         int i = v.toInt(&ok);
         if (ok) {
             return i;
         }
-    }
-    else if (isVoid()) {
-        return 0;
     }
     return -1;
 }
@@ -289,6 +289,8 @@ bool BuiltinType::isBuiltinType(const QString& name)
         || name == QLatin1String("void")
         || name == QLatin1String("type")
         || name == QLatin1String("bool")
+        || name == QLatin1String("true")
+        || name == QLatin1String("false")
         || name == QLatin1String("isize")
         || name == QLatin1String("usize")
         || name == QLatin1String("comptime_int")
@@ -338,14 +340,9 @@ AbstractType::Ptr BuiltinType::newFromName(const QString& name)
     if (it != builtinTypeCache.constEnd())
         return *it;
     if (BuiltinType::isBuiltinType(name)) {
-        auto t = new BuiltinType(name);
-        Q_ASSERT(t);
-        auto r = AbstractType::Ptr(t);
-        builtinTypeCache.insert(name, r);
-        return r;
-    }
-    if (name == QLatin1String("true") || name == QLatin1String("false")) {
-        return newFromName("bool");
+        auto t = AbstractType::Ptr(new BuiltinType(name));
+        builtinTypeCache.insert(name, t);
+        return t;
     }
     return AbstractType::Ptr();
 }

@@ -93,6 +93,9 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     uint32_t switchCaseCount() const;
     ZigNode switchCaseItemAt(uint32_t i) const;
 
+    uint32_t forInputCount() const;
+    ZigNode forInputAt(uint32_t i) const;
+
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;
     KDevelop::RangeInRevision range() const;

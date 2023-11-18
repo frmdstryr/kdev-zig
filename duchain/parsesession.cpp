@@ -108,4 +108,28 @@ KDevelop::DUContext *ParseSession::contextFromNode(const ZigNode &node)
     return d->m_nodeContextMap.value(node.index);
 }
 
+void ParseSession::setTypeOnNode(const ZigNode &node, const KDevelop::AbstractType::Ptr &type)
+{
+    Q_ASSERT(node.ast == d->m_ast);
+    d->m_nodeTypeMap.insert(node.index, type);
+}
+
+KDevelop::AbstractType::Ptr ParseSession::typeFromNode(const ZigNode &node)
+{
+    Q_ASSERT(node.ast == d->m_ast);
+    return d->m_nodeTypeMap.value(node.index);
+}
+
+void ParseSession::setDeclOnNode(const ZigNode &node, const KDevelop::DeclarationPointer &decl)
+{
+    Q_ASSERT(node.ast == d->m_ast);
+    d->m_nodeDeclMap.insert(node.index, decl);
+}
+
+KDevelop::DeclarationPointer ParseSession::declFromNode(const ZigNode &node)
+{
+    Q_ASSERT(node.ast == d->m_ast);
+    return d->m_nodeDeclMap.value(node.index);
+}
+
 }

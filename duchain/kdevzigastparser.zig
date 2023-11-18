@@ -1233,6 +1233,30 @@ export fn ast_switch_case_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex
     return 0;
 }
 
+export fn ast_for_input_count(ptr: ?*Ast, node: NodeIndex) u32 {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullFor(node)) |for_data| {
+                return @intCast(for_data.ast.inputs.len);
+            }
+        }
+    }
+    return 0;
+}
+
+export fn ast_for_input_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            if (ast.fullFor(node)) |for_data| {
+                if (i < for_data.ast.inputs.len) {
+                    return for_data.ast.inputs[i];
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 fn visitOne(ast: *const Ast, node: NodeIndex, parent: NodeIndex, data: *NodeIndex) VisitResult {
     _ = ast;
     _ = parent;

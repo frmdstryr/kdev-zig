@@ -9,15 +9,16 @@
 
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
-#include <QString>
+#include "comptimetype.h"
 
 namespace Zig
 {
 
 using namespace KDevelop;
+using ComptimeTypeBase = MergeComptimeType<AbstractType>;
 
 class KDEVPLATFORMLANGUAGE_EXPORT ErrorTypeData
-    : public AbstractTypeData
+    : public ComptimeTypeBase::Data
 {
 public:
     /// Constructor
@@ -37,7 +38,7 @@ public:
  * ErrorType is used to represent types which hold a can be null.
  */
 class KDEVPLATFORMLANGUAGE_EXPORT ErrorType
-    : public AbstractType
+    : public ComptimeTypeBase
 {
 public:
     using Ptr = TypePtr<ErrorType>;
@@ -87,7 +88,7 @@ public:
 
     AbstractType* clone() const override;
 
-    bool equals(const AbstractType* rhs) const override;
+    bool equalsIgnoringValue(const AbstractType* rhs) const override;
 
     // void exchangeTypes(TypeExchanger* exchanger) override;
 
