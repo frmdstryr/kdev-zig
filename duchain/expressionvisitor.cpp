@@ -832,7 +832,7 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
                     valueVisitor.startVisiting(argValueNode, node);
                     const auto value = valueVisitor.lastType();
                     // WARNING: This does NOT work with empty types
-                    SimpleTypeExchanger exchanger(param, value);
+                    SimpleTypeExchanger exchanger(AbstractType::Ptr(param->clone()), value);
                     returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
                 }
             }

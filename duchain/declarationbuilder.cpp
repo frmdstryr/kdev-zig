@@ -427,7 +427,12 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
                     // Eg comptime T: type, create a delayed type that can
                     // be resolved at the call site
                     auto t = new DelayedType();
-                    t->setIdentifier(IndexedTypeIdentifier(paramName));
+                    if (paramName.isEmpty()) {
+                        qCDebug(KDEV_ZIG) << "Unknown param name at node" << node.index;
+                        t->setIdentifier(IndexedTypeIdentifier(QString("_")));
+                    } else {
+                        t->setIdentifier(IndexedTypeIdentifier(paramName));
+                    }
                     param->setAbstractType(AbstractType::Ptr(t));
                 } else if (param->abstractType()->modifiers() & ComptimeModifier) {
                     // No change needed
