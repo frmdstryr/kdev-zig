@@ -298,7 +298,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         return t;
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
-        const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
+        const bool isConst = (Kind == VarDecl) ? node.mainToken() == QLatin1String("const") : false;
         ZigNode typeNode = node.varType();
         ZigNode valueNode = node.varValue();
 
@@ -316,13 +316,24 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
             if (auto type = dynamic_cast<ComptimeType*>(t.data())) {
                 ExpressionVisitor v(session, currentContext());
                 v.startVisiting(valueNode, node);
-                if (auto value = dynamic_cast<ComptimeType*>(v.lastType().data())) {
-                    if (value->isComptimeKnown()) { // && Helper::canTypeBeAssigned(type, value, currentContext())) {
-                        // TODO: Is it necessary to clone?
+
+                // If we have a builtin type and a comptime known value
+                // clone the type and copy the value. This is so the type
+                // info not lost. Eg `const x: u8 = 1` will keep the u8 type.
+                if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
+                    if (value->isComptimeKnown()) {
                         auto comptimeType = dynamic_cast<ComptimeType*>(t->clone());
                         Q_ASSERT(comptimeType);
                         comptimeType->setComptimeKnownValue(value->comptimeKnownValue());
                         return comptimeType->asType();
+                    }
+                }
+                // If we have another comptime known value return the value
+                // This may be an enum field, string or something
+                // TODO: This can squash an error if the type is not correct
+                else if (auto value = dynamic_cast<ComptimeType*>(v.lastType().data())) {
+                    if (value->isComptimeKnown()) {
+                        return value->asType();
                     }
                 }
             }

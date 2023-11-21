@@ -671,6 +671,10 @@ void DUChainTest::testVarType_data()
         << "const Kind = enum {Char, Int}; test{\n"
            "const x = Kind.Int; const y = switch (x) {.Char=>u8,.Int=>i32};\n}"
            << "y" << "i32" << "2,0";
+    QTest::newRow("comptime typed field")
+        << "const Kind = enum {Char, Int}; test{\n"
+           "const y: Kind = @field(Kind, \"Int\");\n}"
+           << "y" << "Kind.Int" << "2,0";
 }
 
 
