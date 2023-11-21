@@ -55,6 +55,12 @@ public:
 
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
 
+
+    // Check for *const [x:0]u8 implicitly casting to []u8
+    // or &[x]T to []T
+    // fn foo(arg: []const u8) --> foo("abc")
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
+
     /**
      * Retrieve the dimension of this array type. Multiple-dimensioned
      * arrays will have another array type as their elementType().

@@ -172,6 +172,15 @@ KDevelop::RangeInRevision ZigNode::captureRange(CaptureType capture) const
     return tokenRange(ast_node_capture_token(ast, index, capture));
 }
 
+NodeSubRange ZigNode::subRange() const
+{
+    return ast_sub_range(ast, index);
+}
+
+ZigNode ZigNode::extraDataAsNode(uint32_t i) const
+{
+    return ZigNode{ast, ast_extra_data(ast, i)};
+}
 
 QString ZigNode::spellingName() const
 {

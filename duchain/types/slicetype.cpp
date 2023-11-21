@@ -16,6 +16,7 @@
 #include "language/duchain/types/structuretype.h"
 
 #include "language/duchain/types/arraytype.h"
+#include <helpers.h>
 
 namespace Zig {
 
@@ -136,4 +137,30 @@ uint SliceType::hash() const
            << (elementType() ? elementType()->hash() : 0)
            << dimension() << sentinel() << ComptimeType::hash();
 }
+
+bool SliceType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
+{
+    if (equalsIgnoringValue(rhs.data()))
+        return true;
+
+    if (d_func()->m_dimension != 0)
+        return false;
+    // if target is const a non const can be used
+    if (elementType()->modifiers() & AbstractType::ConstModifier) {
+        if (const auto v = rhs.dynamicCast<SliceType>()) {
+            return Helper::typesEqualIgnoringModifiers(elementType(), v->elementType());
+        }
+
+        if (const auto ptr = rhs.dynamicCast<PointerType>()) {
+            if (const auto v = ptr->baseType().dynamicCast<SliceType>()) {
+                // TODO: const and sentinel ?
+                return Helper::typesEqualIgnoringModifiers(elementType(), v->elementType());
+            }
+        }
+    }
+
+    return false;
+
 }
+
+} // End namespace

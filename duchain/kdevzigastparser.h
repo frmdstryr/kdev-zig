@@ -543,6 +543,10 @@ struct SourceLocation
 {
     uint32_t line;
     uint32_t column;
+    inline bool isEmpty() const
+    {
+        return line == 0 && column == 0;
+    }
 };
 
 struct SourceRange
@@ -550,9 +554,9 @@ struct SourceRange
     SourceLocation start;
     SourceLocation end;
 
-    bool isEmpty() {
-        return start.line == 0 && start.column == 0 &&
-               end.line == 0 && end.column == 0;
+    inline bool isEmpty() const
+    {
+        return start.isEmpty() && end.isEmpty();
     }
 };
 
@@ -656,6 +660,16 @@ struct FieldInitData
   NodeIndex value_expr;
 };
 
+struct NodeSubRange
+{
+    NodeIndex start;
+    NodeIndex end;
+    inline bool isValid() const
+    {
+        return end > start;
+    }
+};
+
 ZAst *parse_ast(const char *name, const char *source);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
@@ -676,6 +690,9 @@ NodeIndex ast_array_init_item_at(const ZAst *tree, NodeIndex node, uint32_t i);
 NodeIndex ast_visit_one_child(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_type(const ZAst *tree, NodeIndex node);
 NodeIndex ast_var_value(const ZAst *tree, NodeIndex node);
+
+// sub range
+NodeSubRange ast_sub_range(const ZAst *tree, NodeIndex node);
 
 // fn proto/decl
 NodeIndex ast_fn_return_type(const ZAst *tree, NodeIndex node);

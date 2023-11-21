@@ -44,6 +44,7 @@ public:
 
     QString toString() const override;
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
 
     uint hash() const override;
     WhichType whichType() const override;
@@ -61,6 +62,9 @@ public:
     bool isInteger() const { return isSigned() || isUnsigned(); }
     bool isNumeric() const { return isInteger() || isFloat(); }
     bool isBool() const;
+
+    bool isTrue() const;
+    bool isFalse() const;
 
     // "null" (does not check nullptr)
     bool isNull() const;

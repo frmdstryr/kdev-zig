@@ -28,6 +28,8 @@ public:
     IndexedString m_comptimeValue;
 };
 
+
+
 /**
  * \short A type representing comptime known types.
  *
@@ -89,10 +91,16 @@ public:
     // Check if types are equal ignoring any comptime known value information
     virtual bool equalsIgnoringValue(const AbstractType* rhs) const = 0;
 
+    // Check if the value can be assigned
+    virtual bool canValueBeAssigned(const AbstractType::Ptr &rhs) const = 0;
+
     /// Allow ComptimeType to access its data.
     virtual ComptimeTypeData* comptimeData() = 0;
     /// Allow IdentifiedType to access its data.
     virtual const ComptimeTypeData* comptimeData() const = 0;
+
+    /// Allow ComptimeType to cast back to self
+    virtual AbstractType::Ptr asType() = 0;
 
     /// Determine this identified type's hash value. \returns the hash value
     inline uint hash() const
@@ -149,6 +157,17 @@ public:
         const auto* rhsId = dynamic_cast<const ComptimeType*>(rhs);
         Q_ASSERT(rhsId);
         return ComptimeType::equals(static_cast<const ComptimeType*>(rhsId));
+    }
+
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override
+    {
+        return equalsIgnoringValue(rhs.data());
+    }
+
+    /// Allow ComptimeType to cast back to self
+    AbstractType::Ptr asType() override
+    {
+        return AbstractType::Ptr(this);
     }
 };
 

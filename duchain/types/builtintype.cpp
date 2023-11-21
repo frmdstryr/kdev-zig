@@ -11,6 +11,7 @@
 #include "language/duchain/types/typesystem.h"
 #include <QRegularExpression>
 
+#include "zigdebug.h"
 #include "builtintype.h"
 #include "../kdevzigastparser.h"
 
@@ -103,16 +104,45 @@ bool BuiltinType::equalsIgnoringValue(const KDevelop::AbstractType* _rhs) const
     return d_func()->m_data == rhs->d_func()->m_data;
 }
 
+bool BuiltinType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+{
+    if (equalsIgnoringValue(rhs.data()))
+        return true;
+    if (const auto v = rhs.dynamicCast<BuiltinType>()) {
+        // Can assign non-const to const but not the other way
+        if (dataType() == v->dataType())
+            return true;
+        if (isInteger() && v->isComptimeInt())
+            return true;
+        if (isFloat() && (v->isComptimeInt() || v->isComptimeFloat()))
+            return true; // Auto casts
+        if (
+            (isSigned() && v->isSigned())
+            || (isUnsigned() && v->isUnsigned())
+        ) {
+            const auto s1 = bitsize();
+            const auto s2 = v->bitsize();
+            return (s1 > 0 && s2 > 0 && s2 <= s1);
+        }
+        // Else do other cases need to cast?
+        if (v->isUndefined() && !(isType() || isAnytype()))
+            return true;
+    }
+    if (isType() || isAnytype())
+        return true;
+
+    return false;
+}
+
 QString BuiltinType::toString() const
 {
     if (!isComptimeKnown() || isVoid() || isNull()) {
         return d_func()->m_data.str();
-    } else {
-        return QString("%1 = %2").arg(
-            d_func()->m_data.str(),
-            comptimeKnownValue().str()
-        );
     }
+    return QString("%1 = %2").arg(
+        d_func()->m_data.str(),
+        comptimeKnownValue().str()
+    );
 }
 
 void BuiltinType::accept0(TypeVisitor* v) const
@@ -234,6 +264,18 @@ bool BuiltinType::isNull() const
 {
     STATIC_INDEXED_STR(null);
     return d_func()->m_data == indexed_null;
+}
+
+bool BuiltinType::isTrue() const
+{
+    STATIC_INDEXED_STR(true);
+    return d_func()->m_comptimeValue == indexed_true;
+}
+
+bool BuiltinType::isFalse() const
+{
+    STATIC_INDEXED_STR(false);
+    return d_func()->m_comptimeValue == indexed_false;
 }
 
 bool BuiltinType::isType() const

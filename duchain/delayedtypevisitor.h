@@ -1,31 +1,31 @@
 #pragma once
 #include <language/duchain/types/typesystem.h>
-#include <language/duchain/types/delayedtype.h>
+#include "types/delayedtype.h"
 #include "kdevzigduchain_export.h"
 
 namespace Zig
 {
 
-using namespace KDevelop;
 /**
  * Find all delayed types
  */
-class KDEVZIGDUCHAIN_EXPORT DelayedTypeFinder : public SimpleTypeVisitor
+class KDEVZIGDUCHAIN_EXPORT DelayedTypeFinder : public KDevelop::SimpleTypeVisitor
 {
 public:
     ~DelayedTypeFinder() = default;
 
-    bool visit(const AbstractType* t) override {
-        if (dynamic_cast<const DelayedType*>(t)) {
-            auto d = static_cast<const DelayedType*>(t);
-            if (!delayedTypes.contains(d))
-                delayedTypes.append(d);
+    bool visit(const KDevelop::AbstractType* t) override {
+        if (auto d = dynamic_cast<const Zig::DelayedType*>(t)) {
+            // Must use a clone or it deletes the underlying types when the list
+            // is destroyed
+            delayedTypes.append(
+                DelayedType::Ptr(static_cast<DelayedType*>(d->clone())));
             return false;
         }
         return true;
     }
 
-    QList<const DelayedType*> delayedTypes;
+    QList<DelayedType::Ptr> delayedTypes;
 };
 
 

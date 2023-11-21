@@ -26,6 +26,7 @@
 #include "helpers.h"
 #include "zigdebug.h"
 #include "delayedtypevisitor.h"
+#include "types/enumtype.h"
 
 namespace Zig
 {
@@ -107,9 +108,13 @@ Declaration* Helper::accessAttribute(
     }
 
     // const s = enum {...}
-    if (auto s = accessed.dynamicCast<EnumerationType>()) {
+    if (auto e = accessed.dynamicCast<EnumType>()) {
+        // If accessed is an enum value, use the parent.
+        if (auto enumType = e->enumType().dynamicCast<EnumType>()) {
+            e = enumType;
+        }
         DUChainReadLocker lock;
-        if (auto ctx = s->internalContext(topContext)) {
+        if (auto ctx = e->internalContext(topContext)) {
             auto decls = ctx->findDeclarations(
                 attribute, CursorInRevision::invalid(),
                 topContext,
@@ -166,11 +171,12 @@ bool Helper::canMergeNumericBuiltinTypes(
 KDevelop::AbstractType::Ptr Helper::removeComptimeValue(
         const KDevelop::AbstractType::Ptr &a)
 {
-    if (auto comptimeType = a.dynamicCast<ComptimeTypeBase>()) {
+    if (auto comptimeType = dynamic_cast<const ComptimeType*>(a.data())) {
         if (comptimeType->isComptimeKnown()) {
-            auto copy = static_cast<ComptimeTypeBase*>(a->clone());
+            auto copy = dynamic_cast<ComptimeType*>(a->clone());
+            Q_ASSERT(copy);
             copy->clearComptimeValue();
-            return AbstractType::Ptr(copy);
+            return copy->asType();
         }
     }
     return a;
@@ -186,9 +192,9 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
     if ( a->equals(b.data()) ) {
         return a;
     }
-    if ( auto t = a.dynamicCast<ComptimeTypeBase>() ) {
+    if (const auto t = dynamic_cast<ComptimeType*>(a.data()) ) {
         if ( t->equalsIgnoringValue(b.data()) ) {
-            return removeComptimeValue(t);
+            return removeComptimeValue(t->asType());
         }
     }
 
@@ -383,7 +389,7 @@ bool Helper::typesEqualIgnoringModifiers(
     copy->setModifiers(a->modifiers());
     bool result = a->equals(copy);
     if (!result) {
-        auto comptimeType = a.dynamicCast<ComptimeTypeBase>();
+        auto comptimeType = dynamic_cast<const ComptimeType*>(a.data());
         result = comptimeType && comptimeType->equalsIgnoringValue(copy);
     }
     delete copy;
@@ -396,112 +402,45 @@ bool Helper::isComptimeKnown(const KDevelop::AbstractType::Ptr &a)
         return false;
     if (a->modifiers() & ComptimeModifier)
         return true;
-    if (auto comptimeType = a.dynamicCast<ComptimeTypeBase>())
+    if (auto comptimeType = dynamic_cast<const ComptimeType*>(a.data()))
         return comptimeType->isComptimeKnown();
     return false;
 }
 
 bool Helper::canTypeBeAssigned(
         const KDevelop::AbstractType::Ptr &target,
-        const KDevelop::AbstractType::Ptr &value,
-        const KDevelop::DUContext* context)
+        const KDevelop::AbstractType::Ptr &value)
 {
     // TODO: Handled delayed types
     Q_ASSERT(target && value);
-    if (target->equals(value.data())) {
-        return true; // Same type, yes!
-    }
 
-    if (auto comptimeType = target.dynamicCast<ComptimeTypeBase>()) {
-        if (comptimeType->equalsIgnoringValue(value.data())) {
-            return true; // Types equal but comptime known values differ
+    // {
+    //     DUChainReadLocker lock;
+    //     qCDebug(KDEV_ZIG) << "Check if "<< value->toString()
+    //         << "can be assigned to " << target->toString();
+    // }
+
+    // undefined can be assigned to anything except a type
+    if (const auto v = value.dynamicCast<BuiltinType>()) {
+        if (v->isUndefined()) {
+            if (const auto t = target.dynamicCast<BuiltinType>())
+                return !(t->isType() || t->isAnytype());
+            return true;
         }
     }
 
-    // all comptime stuff should be gone now
-
-    // Optionals can be assigned to null or value of same type
-    if (auto optional = target.dynamicCast<OptionalType>()) {
-        if (auto builtin = value.dynamicCast<BuiltinType>()) {
-            if (builtin->isNull() || builtin->isUndefined()) {
-                return true; // This is fine
-            }
-        }
-        if (auto v = value.dynamicCast<OptionalType>()) {
-            return canTypeBeAssigned(optional->baseType(), v->baseType(), context);
-        } else {
-            return canTypeBeAssigned(optional->baseType(), value, context);
-        }
-    }
-
-    if (auto ptr = target.dynamicCast<PointerType>()) {
-        if (auto valuePtr = value.dynamicCast<PointerType>()) {
-            // Types not equal, maybe const/volatile difference ?
-            if (ptr->modifiers() & AbstractType::ConstModifier
-                || ptr->modifiers() & AbstractType::VolatileModifier) {
-                return typesEqualIgnoringModifiers(ptr->baseType(), valuePtr->baseType());
-            }
-            // Else they should be equal which was already checked
-        }
-        return false;
-    }
-
-    // Check for *const [x:0]u8 implicitly casting to []u8
-    // fn foo(arg: []const u8) --> foo("abc")
-    if (auto slice = target.dynamicCast<SliceType>()) {
-        if (slice->dimension() != 0)
-            return false;
-        if (auto elementType = slice->elementType()) {
-            if (elementType->modifiers() & AbstractType::ConstModifier) {
-                if (auto ptr = value.dynamicCast<PointerType>()) {
-                    if (auto valueSlice = ptr->baseType().dynamicCast<SliceType>()) {
-                        // TODO: const and sentinel ?
-                        return typesEqualIgnoringModifiers(elementType, valueSlice->elementType());
-                    }
-                }
-            }
-        }
-    }
+    // Handles the rest
+    if (const auto t = dynamic_cast<const ComptimeType*>(target.data()))
+        return t->canValueBeAssigned(value);
 
     // // Const param/capture can be assigned to non-const
     // if (auto enumeration = target.dynamicCast<EnumerationType>()) {
     //     return typesEqualIgnoringModifiers(enumeration, value);
     // }
 
-    // Resolve auto casts (eg comptime int)
-    if (auto builtinType = target.dynamicCast<BuiltinType>()) {
-        auto paramType = value.dynamicCast<BuiltinType>();
-        if (paramType) {
-            // Can assign non-const to const but not the other way
-            if (builtinType->dataType() == paramType->dataType())
-                return true;
-            if (builtinType->isInteger() && paramType->isComptimeInt())
-                return true;
-            if (builtinType->isFloat() && (paramType->isComptimeInt() || paramType->isComptimeFloat()))
-                return true; // Auto casts
-            if (
-                (builtinType->isSigned() && paramType->isSigned())
-                || (builtinType->isUnsigned() && paramType->isUnsigned())
-            ) {
-                const auto s1 = builtinType->bitsize();
-                const auto s2 = paramType->bitsize();
-                return (s1 > 0 && s2 > 0 && s2 <= s1);
-            }
-            // Else do other cases need to cast?
-
-
-        }
-
-        if (builtinType->isType() || builtinType->isAnytype()) {
-            if (paramType && (paramType->isUndefined() || paramType->isNull())) {
-                return false;
-            }
-            return true; // TODO check if context is type or instance
-        }
-    }
-
-    return false;
+    return target->equals(value.data());
 }
+
 
 bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a)
 {

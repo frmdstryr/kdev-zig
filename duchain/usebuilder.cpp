@@ -23,7 +23,6 @@
 #include <language/duchain/problem.h>
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
-#include <language/duchain/types/enumerationtype.h>
 #include <language/editor/documentrange.h>
 
 #include "types/builtintype.h"
@@ -33,6 +32,7 @@
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
+#include "types/enumtype.h"
 
 
 namespace Zig
@@ -340,7 +340,7 @@ bool UseBuilder::checkAndAddStructFieldUse(
     }
 
     // Enum field
-    if (auto enumeration = decl->abstractType().dynamicCast<EnumerationType>()) {
+    if (auto enumeration = decl->abstractType().dynamicCast<EnumType>()) {
         if (valueNode.tag() == NodeTag_enum_literal) {
             return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
         }
@@ -370,7 +370,7 @@ bool UseBuilder::checkAndAddStructFieldUse(
     // Generic field assignment
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(valueNode, structInitNode);
-    if (!Helper::canTypeBeAssigned(decl->abstractType(), v.lastType(), topContext())) {
+    if (!Helper::canTypeBeAssigned(decl->abstractType(), v.lastType())) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -440,7 +440,7 @@ bool UseBuilder::checkAndAddArrayItemUse(
         // return checkAndAddStructInitUse(s, valueNode, valueNode.spellingRange());
     }
 
-    if (auto enumeration = itemType.dynamicCast<EnumerationType>()) {
+    if (auto enumeration = itemType.dynamicCast<EnumType>()) {
         if (valueNode.tag() == NodeTag_enum_literal) {
             return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
         }
@@ -448,7 +448,7 @@ bool UseBuilder::checkAndAddArrayItemUse(
 
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(valueNode, arrayInitNode);
-    if (!Helper::canTypeBeAssigned(itemType, v.lastType(), topContext())) {
+    if (!Helper::canTypeBeAssigned(itemType, v.lastType())) {
         if (Helper::isMixedType(itemType)) {
             return Continue; // Probably not implemented or resolved yet
         }
@@ -492,7 +492,7 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     valueVisitor.startVisiting(rhs, node);
     auto value = valueVisitor.lastType();
 
-    if (!Helper::canTypeBeAssigned(target, value, topContext())) {
+    if (!Helper::canTypeBeAssigned(target, value)) {
         if (Helper::isMixedType(target)) {
             return Continue; // Probably not implemented or resolved yet
         }
@@ -783,7 +783,7 @@ VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
             return Continue; // No problem
         }
     }
-    else if (auto enumeration = v.lastType().dynamicCast<EnumerationType>()) {
+    else if (auto enumeration = v.lastType().dynamicCast<EnumType>()) {
         return Continue; // No problem
     }
     // TODO: What else can switch?
@@ -838,7 +838,7 @@ bool UseBuilder::checkAndAddFnArgUse(
 
     // Check inferred enum literal fields
     // eg var x = call(.Foo);
-    if (auto enumeration = argType.dynamicCast<EnumerationType>()) {
+    if (auto enumeration = argType.dynamicCast<EnumType>()) {
         if (tag == NodeTag_enum_literal) {
             return checkAndAddEnumUse(
                 enumeration,
@@ -848,12 +848,6 @@ bool UseBuilder::checkAndAddFnArgUse(
         }
     }
 
-    auto useRange = argValueNode.range();
-    ExpressionVisitor v(session, currentContext());
-    v.startVisiting(argValueNode, callNode);
-    if (Helper::canTypeBeAssigned(argType, v.lastType(), currentContext())) {
-        return true; // Simple case
-    }
     if (auto s = argType.dynamicCast<StructureType>()) {
         if (tag == NodeTag_struct_init_dot
             || tag == NodeTag_struct_init_dot_comma
@@ -874,14 +868,22 @@ bool UseBuilder::checkAndAddFnArgUse(
             || tag == NodeTag_array_init_dot_two_comma
         ) {
             // TODO: Inferred types are always resolved by zig
-            // TODO: Check array element assignments
-            return true;
+            TokenIndex tok = ast_node_main_token(argValueNode.ast, argValueNode.index);
+            auto dotRange = argValueNode.tokenRange(tok - 1);
+            return checkAndAddArrayInitUse(s, argValueNode, dotRange);
         }
     }
 
-    if (auto templateParam = argType.dynamicCast<DelayedType>()) {
+    if (auto templateParam = argType.dynamicCast<Zig::DelayedType>()) {
         // TODO: Check if argument is instance or type ?
         return false;
+    }
+
+    auto useRange = argValueNode.range();
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(argValueNode, callNode);
+    if (Helper::canTypeBeAssigned(argType, v.lastType())) {
+        return true; // Simple case
     }
 
     if (Helper::isMixedType(argType)) {
@@ -903,7 +905,7 @@ bool UseBuilder::checkAndAddEnumUse(
         const QString &enumName,
         const KDevelop::RangeInRevision &useRange)
 {
-    auto enumeration = accessed.dynamicCast<EnumerationType>();
+    auto enumeration = accessed.dynamicCast<EnumType>();
     if (!enumeration){
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));

@@ -13,6 +13,7 @@
 #include "language/duchain/types/typeregister.h"
 #include "language/duchain/types/typesystem.h"
 #include "language/duchain/types/abstracttype.h"
+#include <helpers.h>
 
 namespace Zig {
 
@@ -60,6 +61,20 @@ bool PointerType::equalsIgnoringValue(const AbstractType* _rhs) const
     const auto* rhs = static_cast<const PointerType*>(_rhs);
 
     return d_func()->m_baseType == rhs->d_func()->m_baseType;
+}
+
+bool PointerType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+{
+    if (equalsIgnoringValue(rhs.data()))
+        return true;
+    if (const auto v = rhs.dynamicCast<PointerType>()) {
+        // Types not equal, try without modifiers
+        if (modifiers() & (AbstractType::ConstModifier | AbstractType::VolatileModifier)) {
+            return Helper::typesEqualIgnoringModifiers(baseType(), v->baseType());
+        }
+        // Else they should be equal which was already checked
+    }
+    return false;
 }
 
 void PointerType::accept0(TypeVisitor* v) const

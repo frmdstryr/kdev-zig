@@ -62,7 +62,7 @@ public:
     VisitResult visitCatch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
-
+    VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
 
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);
@@ -103,8 +103,23 @@ public:
      */
     bool isFunctionBeingVisited(const KDevelop::FunctionType::Ptr& fn);
 
+
+    /**
+     * Set the inferred owner type of the visitor. This can be used to help resolve
+     * struct/array/enum dot init's
+     */
+    void setInferredType(const KDevelop::AbstractType::Ptr& t) {
+        m_inferredType = t;
+    }
+
+    // May be null
+    const KDevelop::AbstractType::Ptr& inferredType() const {
+        return m_inferredType;
+    }
+
 protected:
     ParseSession* m_session;
+    KDevelop::AbstractType::Ptr m_inferredType;
     KDevelop::FunctionType::Ptr m_currentFunction;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
 

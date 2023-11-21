@@ -17,6 +17,8 @@
 
 #include "kdevzigduchain_export.h"
 #include "types/builtintype.h"
+#include "types/slicetype.h"
+#include "types/pointertype.h"
 
 namespace Zig
 {
@@ -123,9 +125,7 @@ public:
      */
     static bool canTypeBeAssigned(
         const KDevelop::AbstractType::Ptr &target,
-        const KDevelop::AbstractType::Ptr &value,
-        const KDevelop::DUContext* context);
-
+        const KDevelop::AbstractType::Ptr &value);
 
     /**
      * Attempt to merge two types from an if condition.

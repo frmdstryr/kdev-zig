@@ -125,6 +125,8 @@ protected:
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
 
+    void buildForCapture(const ZigNode &node, const ZigNode &parent);
+
     // Import into current context
     void visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
 

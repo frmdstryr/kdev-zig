@@ -94,7 +94,17 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     ZigNode switchCaseItemAt(uint32_t i) const;
 
     uint32_t forInputCount() const;
+    // This is the node in the for part
+    // eg for (0.., b) |x, y} {}
+    // forInputAt
     ZigNode forInputAt(uint32_t i) const;
+
+    // Access the sub range for the node
+    // This range is then used to index extraData
+    // Caller should make sure the range is valid before using
+    // by calling isValid()
+    NodeSubRange subRange() const;
+    ZigNode extraDataAsNode(uint32_t i) const;
 
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;

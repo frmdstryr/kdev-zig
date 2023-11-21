@@ -15,18 +15,18 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef USEBUILDER_H
-#define USEBUILDER_H
+#pragma once
 
 #include <language/duchain/builders/abstractusebuilder.h>
+#include <language/duchain/types/structuretype.h>
 #include <serialization/indexedstring.h>
-#include <QString>
+
 #include "contextbuilder.h"
 #include "zignode.h"
-
 #include "kdevzigduchain_export.h"
-#include <language/duchain/types/structuretype.h>
+
 #include "types/slicetype.h"
+#include "types/enumtype.h"
 
 namespace Zig
 {
@@ -96,6 +96,4 @@ public:
     KDevelop::QualifiedIdentifier currentPath;
 };
 
-}
-
-#endif // USEBUILDER_H
+} // end namespace zig

@@ -27,6 +27,7 @@
 #include <language/duchain/classfunctiondeclaration.h>
 #include <language/duchain/classmemberdeclaration.h>
 #include <language/duchain/aliasdeclaration.h>
+#include "enumtype.h"
 
 #include "kdevzigastparser.h"
 #include "nodetraits.h"
@@ -52,13 +53,13 @@ struct IdType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
 template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == EnumDecl>::type>
 {
-    typedef KDevelop::EnumerationType Type;
+    typedef EnumType Type;
 };
 
 template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == ErrorDecl>::type>
 {
-    typedef KDevelop::EnumerationType Type;
+    typedef EnumType Type;
 };
 
 template <NodeKind Kind, class Enable = void>

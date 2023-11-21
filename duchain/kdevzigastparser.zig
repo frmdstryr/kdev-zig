@@ -845,6 +845,7 @@ export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
                 // Main token is identifier
                 .identifier,
                 .string_literal,
+                .enum_literal,
                 .builtin_call,
                 .builtin_call_comma,
                 .builtin_call_two,
@@ -1207,6 +1208,53 @@ export fn ast_array_init_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex 
         }
     }
     return 0;
+}
+
+const SubRange = extern struct {
+    start: NodeIndex = 0,
+    end: NodeIndex = 0
+};
+
+export fn ast_sub_range(ptr: ?*Ast, node: NodeIndex) SubRange {
+    if (ptr) |ast| {
+        if (node < ast.nodes.len) {
+            const tag = ast.nodes.items(.tag)[node];
+            const d = ast.nodes.items(.data)[node];
+            switch (tag) {
+                .call,
+                .call_comma,
+                .async_call,
+                .async_call_comma,
+                .container_decl_arg,
+                .container_decl_arg_trailing,
+                .tagged_union_enum_tag,
+                .tagged_union_enum_tag_trailing,
+                .@"switch",
+                .switch_comma,
+                .array_init,
+                .array_init_comma,
+                .struct_init,
+                .struct_init_comma => {
+                    const field_range = ast.extraData(d.rhs, Ast.Node.SubRange);
+                    return SubRange{
+                        .start=field_range.start,
+                        .end=field_range.end,
+                    };
+                },
+                .switch_case, .switch_case_inline, .fn_proto_multi => {
+                    const field_range = ast.extraData(d.lhs, Ast.Node.SubRange);
+                    return SubRange{
+                        .start=field_range.start,
+                        .end=field_range.end,
+                    };
+                },
+                else => {
+                    // std.log.warn("sub range accessed on invalid node {} tag: {}", .{node, tag});
+                },
+            }
+        }
+    }
+    return SubRange{};
 }
 
 export fn ast_switch_case_size(ptr: ?*Ast, node: NodeIndex) u32 {

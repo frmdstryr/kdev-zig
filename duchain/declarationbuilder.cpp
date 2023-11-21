@@ -22,7 +22,6 @@
 
 #include <language/duchain/problem.h>
 #include <language/duchain/duchainlock.h>
-#include <language/duchain/aliasdeclaration.h>
 #include <language/editor/documentrange.h>
 
 #include "types/builtintype.h"
@@ -31,13 +30,15 @@
 #include "types/optionaltype.h"
 #include "types/slicetype.h"
 #include "types/pointertype.h"
+#include "types/comptimetype.h"
+#include "types/delayedtype.h"
 
 #include "expressionvisitor.h"
 #include "functionvisitor.h"
 #include "nodetraits.h"
 #include "helpers.h"
 #include "zigdebug.h"
-#include "types/comptimetype.h"
+
 
 
 namespace Zig
@@ -120,11 +121,13 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
         break;
 #define BUILD_CAPTURE_FOR(K) case K: maybeBuildCapture<K>(node, parent); break
         BUILD_CAPTURE_FOR(If);
-        BUILD_CAPTURE_FOR(For);
         BUILD_CAPTURE_FOR(While);
         BUILD_CAPTURE_FOR(Defer);
         BUILD_CAPTURE_FOR(Catch);
 #undef BUILD_CAPTURE_FOR
+    case For:
+        buildForCapture(node, parent);
+        break;
     default:
         break;
     }
@@ -289,7 +292,10 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         auto parentContext = contextFromNode(&parent);
         Q_ASSERT(parentContext);
         Q_ASSERT(parentContext->owner());
-        return parentContext->owner()->abstractType();
+        EnumType::Ptr t(new EnumType);
+        t->setEnumType(parentContext->owner()->abstractType());
+        t->setComptimeKnownValue(node.mainToken());
+        return t;
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
         const bool isConst = (Kind == VarDecl) ? node.mainToken() == "const" : false;
@@ -307,15 +313,16 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
 
             // TODO: Should it skip fields?
             // If the value is assigned try set the comptime known value
-            if (auto type = typeVisitor.lastType().dynamicCast<ComptimeTypeBase>()) {
+            if (auto type = dynamic_cast<ComptimeType*>(t.data())) {
                 ExpressionVisitor v(session, currentContext());
                 v.startVisiting(valueNode, node);
-                if (auto value = v.lastType().dynamicCast<ComptimeTypeBase>()) {
+                if (auto value = dynamic_cast<ComptimeType*>(v.lastType().data())) {
                     if (value->isComptimeKnown()) { // && Helper::canTypeBeAssigned(type, value, currentContext())) {
                         // TODO: Is it necessary to clone?
-                        auto comptimeType = static_cast<ComptimeTypeBase*>(type->clone());
+                        auto comptimeType = dynamic_cast<ComptimeType*>(t->clone());
+                        Q_ASSERT(comptimeType);
                         comptimeType->setComptimeKnownValue(value->comptimeKnownValue());
-                        return AbstractType::Ptr(comptimeType);
+                        return comptimeType->asType();
                     }
                 }
             }
@@ -426,22 +433,18 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
                 if (builtin && builtin->isType()) {
                     // Eg comptime T: type, create a delayed type that can
                     // be resolved at the call site
-                    auto t = new DelayedType();
-                    if (paramName.isEmpty()) {
-                        qCDebug(KDEV_ZIG) << "Unknown param name at node" << node.index;
-                        t->setIdentifier(IndexedTypeIdentifier(QString("_")));
-                    } else {
-                        t->setIdentifier(IndexedTypeIdentifier(paramName));
-                    }
-                    param->setAbstractType(AbstractType::Ptr(t));
+                    Zig::DelayedType::Ptr t(new Zig::DelayedType);
+                    Q_ASSERT(!paramName.isEmpty());
+                    t->setIdentifier(paramName);
+                    param->setAbstractType(t);
                 } else if (param->abstractType()->modifiers() & ComptimeModifier) {
                     // No change needed
                 } else {
                     // Set type to comptime
                     // TODO: is using clone needed?
-                    auto comptimeType = param->abstractType()->clone();
+                    AbstractType::Ptr comptimeType(param->abstractType()->clone());
                     comptimeType->setModifiers(comptimeType->modifiers() | ComptimeModifier);
-                    param->setAbstractType(AbstractType::Ptr(comptimeType));
+                    param->setAbstractType(comptimeType);
                 }
             }
             else if (paramData.info.is_anytype) {
@@ -535,7 +538,6 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
             }
         }
         else if (Kind == Catch) {
-            // If and While captures unwrap the optional type
             ZigNode errorType = node.nextChild();
             ExpressionVisitor v(session, currentContext());
             v.startVisiting(errorType, node);
@@ -554,76 +556,89 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
                 topContext()->addProblem(p);
             }
         }
-        else if (Kind == For) {
-            if (node.tag() == NodeTag_for_simple) {
-                // qCDebug(KDEV_ZIG) << "Create for loop capture "<< (isPtr ? "*" + name: name);
-                ZigNode child = node.nextChild();
-                ExpressionVisitor v(session, currentContext());
-                v.startVisiting(child, node);
-                if (auto arrayPtr = v.lastType().dynamicCast<Zig::PointerType>()) {
-                    // qCDebug(KDEV_ZIG) << "loop type is pointer";
-                    if (auto slice = arrayPtr->baseType().dynamicCast<SliceType>()) {
-                        DUChainWriteLocker lock;
-                        if (isPtr) {
-                            auto ptr = new Zig::PointerType();
-                            Q_ASSERT(ptr);
-                            ptr->setBaseType(slice->elementType());
-                            decl->setAbstractType(AbstractType::Ptr(ptr));
-                        } else {
-                            decl->setAbstractType(slice->elementType());
-                        }
-                    }
-                    else if (!m_prebuilding) {
-                        // Type is known but not an optional type, this is a problem
-                        ProblemPointer p = ProblemPointer(new Problem());
-                        p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
-                        p->setSource(IProblem::SemanticAnalysis);
-                        p->setSeverity(IProblem::Hint);
-                        p->setDescription(i18n("Attempt to loop pointer of non-array type"));
-                        DUChainWriteLocker lock;
-                        topContext()->addProblem(p);
-                    }
-                }
-                else if (auto slice = v.lastType().dynamicCast<SliceType>()) {
-                    // qCDebug(KDEV_ZIG) << "loop type is slice";
-                    DUChainWriteLocker lock;
-                    if (isPtr) {
-                        auto ptr = new Zig::PointerType();
-                        Q_ASSERT(ptr);
-                        ptr->setBaseType(slice->elementType());
-                        decl->setAbstractType(AbstractType::Ptr(ptr));
-                    } else {
-                        decl->setAbstractType(slice->elementType());
-                    }
-                }
-                else if (!m_prebuilding) {
-                    // Type is known but not an optional type, this is a problem
-                    // {
-                    //     DUChainReadLocker lock;
-                    //     qCDebug(KDEV_ZIG) << "for loop type is invalid " << v.lastType()->toString();
-                    // }
-                    ProblemPointer p = ProblemPointer(new Problem());
-                    p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
-                    p->setSource(IProblem::SemanticAnalysis);
-                    p->setSeverity(IProblem::Hint);
-                    if (isPtr) {
-                        p->setDescription(i18n("Attempt to capture pointer on non-pointer type"));
-                    } else {
-                        p->setDescription(i18n("Attempt to loop non-array type"));
-                    }
-                    DUChainWriteLocker lock;
-                    topContext()->addProblem(p);
+        closeDeclaration();
+    }
+
+}
+
+void DeclarationBuilder::buildForCapture(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    // This is the start token of the capture eg
+    // for (a, b) |*c, d| {}
+    // tok would be the position of *
+    TokenIndex tok = ast_node_capture_token(node.ast, node.index, CaptureType::Payload);
+
+    const auto n = node.forInputCount();
+    for (uint32_t i=0; i < n; i++) {
+        // qCDebug(KDEV_ZIG) << "Create for loop capture "<< (isPtr ? "*" + name: name);
+        const QString captureName = node.tokenSlice(tok);
+        const bool isPtr = captureName == QLatin1String("*");
+        const TokenIndex nameToken = isPtr ? tok+1 : tok;
+        tok = nameToken + 2; // , next
+        const QString name = node.tokenSlice(nameToken);
+        Q_ASSERT(name != QLatin1String(","));
+        auto range = node.tokenRange(nameToken);
+
+        const ZigNode forInputNode = node.forInputAt(i);
+        auto decl = createDeclaration<VarDecl>(forInputNode, node, name, true, range);
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(forInputNode, node);
+        if (auto arrayPtr = v.lastType().dynamicCast<Zig::PointerType>()) {
+            // qCDebug(KDEV_ZIG) << "loop type is pointer";
+            if (auto slice = arrayPtr->baseType().dynamicCast<SliceType>()) {
+                DUChainWriteLocker lock;
+                if (isPtr) {
+                    auto ptr = new Zig::PointerType();
+                    Q_ASSERT(ptr);
+                    ptr->setBaseType(slice->elementType());
+                    decl->setAbstractType(AbstractType::Ptr(ptr));
                 } else {
-                    qCDebug(KDEV_ZIG) << "for loop type is unknown";
+                    decl->setAbstractType(slice->elementType());
                 }
-            } else {
-                // TODO: Multiple capture for loop
-
             }
-
+            else if (!m_prebuilding) {
+                // Type is known but not an optional type, this is a problem
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+                p->setSource(IProblem::SemanticAnalysis);
+                p->setSeverity(IProblem::Hint);
+                p->setDescription(i18n("Attempt to loop pointer of non-array type"));
+                DUChainWriteLocker lock;
+                topContext()->addProblem(p);
+            }
         }
-
-
+        else if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+            // qCDebug(KDEV_ZIG) << "loop type is slice";
+            DUChainWriteLocker lock;
+            if (isPtr) {
+                auto ptr = new Zig::PointerType();
+                ptr->setBaseType(slice->elementType());
+                decl->setAbstractType(AbstractType::Ptr(ptr));
+            } else {
+                decl->setAbstractType(slice->elementType());
+            }
+        }
+        else if (!m_prebuilding) {
+            // Type is known but not an optional type, this is a problem
+            // {
+            //     DUChainReadLocker lock;
+            //     qCDebug(KDEV_ZIG) << "for loop type is invalid " << v.lastType()->toString();
+            // }
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Hint);
+            if (isPtr) {
+                p->setDescription(i18n("Attempt to capture pointer on non-pointer type"));
+            } else {
+                p->setDescription(i18n("Attempt to loop non-array type"));
+            }
+            DUChainWriteLocker lock;
+            topContext()->addProblem(p);
+        } else {
+            qCDebug(KDEV_ZIG) << "for loop type is unknown";
+        }
         closeDeclaration();
     }
 }
@@ -651,7 +666,7 @@ void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     //
     //         // Self
     //         if (maybeSelfType.dynamicCast<StructureType>()
-    //             || maybeSelfType.dynamicCast<EnumerationType>()
+    //             || maybeSelfType.dynamicCast<EnumType>()
     //         ) {
     //             selfType = maybeSelfType;
     //         }
@@ -670,7 +685,7 @@ void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     //     // Create bindings for delayed arguments
     //     uint32_t i = 0;
     //     for (const auto &arg: args.mid(startArg)) {
-    //         if (auto delayed = arg.dynamicCast<DelayedType>()) {
+    //         if (auto delayed = arg.dynamicCast<Zig::DelayedType>()) {
     //             ZigNode argValueNode = node.callParamAt(i);
     //             if (argValueNode.isRoot()) {
     //                 continue; // Arg is missing
