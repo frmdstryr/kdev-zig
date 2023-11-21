@@ -15,7 +15,11 @@ builtin parser via a library.
 
 ## Screenshots
 
-The following shows it is able to resolve methods of USBCDC driver using zig's builtin buffered writer to print.
+Resolving basic math expressions
+![image](https://github.com/frmdstryr/kdev-zig/assets/380158/581f1ec6-f92a-408c-97d3-58f8b85a4800)
+
+
+The following shows it is able to resolve methods of a USBCDC driver using zig's builtin buffered writer to print.
 ![](https://user-images.githubusercontent.com/380158/284731452-bca7eb00-0f1c-44aa-8096-f2f0e4042f29.png)
 
 ## Compiling
