@@ -1,11 +1,22 @@
 # Zig Language Support plugin
 
-This package is a WIP to provide language support for Zig. It uses zig's
-builtin parser via a library.
+This a plugin for [KDevelop](https://kdevelop.org/) that adds language support for Zig. It uses zig's
+builtin parser via a library. 
 
-![Example](https://user-images.githubusercontent.com/380158/279830656-9fc7aa74-175c-4826-a698-401751a07464.png)
+### Features
+- Syntax error messages
+- Syntax highlighting of structs, fns, enums. Rainbow colored local vars
+- Goto decl, view doc comments on hover.
+- Highlight usages on hover, lookup uses of fns, vars, etc..
+- Resolve imports from zig std lib and user defined packages
+- Evalutate some comptime expressions (enum switches, if exprs, basic math exprs)
+- Basic typed fn resolution for fns that return structs or typed params (still WIP)
+- Hints for type mismatches, missing args, invalid enum/struct fields, etc..
 
-It was forked from kdev-rust and borrows code from kdev-python so it is GPL.
+## Screenshots
+
+The following shows it is able to resolve methods of USBCDC driver using zig's builtin buffered writer to print.
+![](https://user-images.githubusercontent.com/380158/284731452-bca7eb00-0f1c-44aa-8096-f2f0e4042f29.png)
 
 ## Compiling
 
@@ -37,5 +48,9 @@ Then run KDevelop.
 
 ## Dependencies
 
-You must have zig 0.11.0+ installed somewhere where FindZig.cmake
+You must have zig 0.12 dev installed somewhere where FindZig.cmake
 will find it (eg ".local/bin").
+
+# License
+
+It was forked from kdev-rust and borrows code from kdev-python so licensed under the GPL.
