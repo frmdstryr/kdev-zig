@@ -41,6 +41,16 @@ ZigNode ZigNode::nextChild() const
     return ZigNode{ast, ast_visit_one_child(ast, index)};
 }
 
+ZigNode ZigNode::lhsAsNode() const
+{
+    return ZigNode{ast, data().lhs};
+}
+
+ZigNode ZigNode::rhsAsNode() const
+{
+    return ZigNode{ast, data().rhs};
+}
+
 ZigNode ZigNode::varType() const
 {
     return ZigNode{ast, ast_var_type(ast, index)};

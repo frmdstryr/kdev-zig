@@ -101,15 +101,13 @@ QString SliceType::toString() const
 {
     // TODO: Clean this up...
     const auto T = elementType();
-    const auto isConst = T ? T->modifiers() & ConstModifier : false;
-    QString c = isConst ? "const " : "";
     QString s = (sentinel() >= 0) ? QStringLiteral(":%1").arg(sentinel()) : "";
-    QString type = T ? (c + T->toString()) : QStringLiteral("<notype>");
+    QString type = T ? T->toString() : QStringLiteral("<notype>");
     QString v = isComptimeKnown() ? QString(" = \"%1\"").arg(comptimeKnownValue().str()) : "";
     if (d_func()->m_dimension == 0) {
-        return QStringLiteral("[%1]%2%3").arg(s).arg(type).arg(v);
+        return AbstractType::toString() + QStringLiteral("[%1]%2%3").arg(s).arg(type).arg(v);
     }
-    return QStringLiteral("[%1%2]%3%4").arg(d_func()->m_dimension).arg(s).arg(type).arg(v);
+    return AbstractType::toString() + QStringLiteral("[%1%2]%3%4").arg(d_func()->m_dimension).arg(s).arg(type).arg(v);
 }
 
 void SliceType::accept0(TypeVisitor* v) const

@@ -54,10 +54,12 @@ public:
     VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitCmpExpr(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBoolExpr(const ZigNode &node, const ZigNode &parent);
     VisitResult visitMathExpr(const ZigNode &node, const ZigNode &parent);
     VisitResult visitNegation(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBitNot(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBoolNot(const ZigNode &node, const ZigNode &parent);
     VisitResult visitTry(const ZigNode &node, const ZigNode &parent);
     VisitResult visitCatch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
@@ -76,6 +78,11 @@ public:
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
     VisitResult callBuiltinField(const ZigNode &node);
     VisitResult callBuiltinAs(const ZigNode &node);
+    VisitResult callBuiltinIntFromFloat(const ZigNode &node);
+    VisitResult callBuiltinFloatFromInt(const ZigNode &node);
+    VisitResult callBuiltinIntCast(const ZigNode &node);
+    VisitResult callBuiltinEnumFromInt(const ZigNode &node);
+    VisitResult callBuiltinIntFromEnum(const ZigNode &node);
 
     /**
      * Return the self type of a function call node

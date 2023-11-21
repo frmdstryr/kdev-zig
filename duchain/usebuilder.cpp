@@ -29,6 +29,7 @@
 #include "types/slicetype.h"
 #include "types/pointertype.h"
 #include "types/optionaltype.h"
+#include "types/delayedtype.h"
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
@@ -368,7 +369,9 @@ bool UseBuilder::checkAndAddStructFieldUse(
     }
 
     // Generic field assignment
+    qCDebug(KDEV_ZIG) << "Assign struct field" << fieldName;
     ExpressionVisitor v(session, currentContext());
+    v.setInferredType(decl->abstractType());
     v.startVisiting(valueNode, structInitNode);
     if (!Helper::canTypeBeAssigned(decl->abstractType(), v.lastType())) {
         ProblemPointer p = ProblemPointer(new Problem());
@@ -489,6 +492,7 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     // TODO: Check struct dot init, array dot init...
 
     ExpressionVisitor valueVisitor(session, currentContext());
+    valueVisitor.setInferredType(target);
     valueVisitor.startVisiting(rhs, node);
     auto value = valueVisitor.lastType();
 
@@ -520,7 +524,10 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     ZigNode owner = node.nextChild(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
-    const auto T = v.lastType();
+    auto T = v.lastType();
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
     if (auto s = T.dynamicCast<SliceType>()) {
         if (attr == QLatin1String("len") || attr == QLatin1String("ptr")) {
             return Continue; // Builtins
@@ -824,6 +831,11 @@ bool UseBuilder::checkAndAddFnArgUse(
         const ZigNode &argValueNode,
         const ZigNode &callNode)
 {
+    // {
+    //     DUChainReadLocker lock;
+    //     qCDebug(KDEV_ZIG) << "Checking arg " << argIndex << argType->toString();
+    // }
+
     if (argValueNode.isRoot()) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, callNode.mainTokenRange().castToSimpleRange()));
@@ -874,13 +886,14 @@ bool UseBuilder::checkAndAddFnArgUse(
         }
     }
 
-    if (auto templateParam = argType.dynamicCast<Zig::DelayedType>()) {
+    if (auto templateParam = argType.dynamicCast<DelayedType>()) {
         // TODO: Check if argument is instance or type ?
         return false;
     }
 
     auto useRange = argValueNode.range();
     ExpressionVisitor v(session, currentContext());
+    v.setInferredType(argType);
     v.startVisiting(argValueNode, callNode);
     if (Helper::canTypeBeAssigned(argType, v.lastType())) {
         return true; // Simple case

@@ -56,7 +56,6 @@ VisitResult FunctionVisitor::visitNode(const ZigNode &node, const ZigNode &paren
         visitChildren(node, parent);
         return Continue;
     }
-    return Recurse;
 }
 
 VisitResult FunctionVisitor::visitReturn(const ZigNode &node, const ZigNode &parent)
@@ -64,7 +63,13 @@ VisitResult FunctionVisitor::visitReturn(const ZigNode &node, const ZigNode &par
     NodeData data = node.data();
     if (data.lhs) {
         ZigNode lhs = {node.ast, data.lhs};
-        ExpressionVisitor v(session(), context());
+
+        const DUContext* returnContext = context();
+        // If return is in a comptime block or something
+        if (auto parentContext = session()->contextFromNode(parent)) {
+            returnContext = parentContext;
+        }
+        ExpressionVisitor v(session(), returnContext);
         Q_ASSERT(m_currentFunction);
         v.setCurrentFunction(m_currentFunction);
         v.startVisiting(lhs, node);

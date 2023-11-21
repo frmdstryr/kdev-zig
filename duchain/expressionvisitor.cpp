@@ -79,7 +79,6 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
 {
     NodeTag tag = node.tag();
     // qCDebug(KDEV_ZIG) << "ExpressionVisitor::visitNode" << node.index << "tag" << tag;
-
     switch (tag) {
     case NodeTag_identifier:
         return visitIdentifier(node, parent);
@@ -103,6 +102,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_ptr_type_sentinel:
         return visitPointerType(node, parent);
     case NodeTag_container_decl:
+    case NodeTag_container_decl_trailing:
+    case NodeTag_container_decl_arg:
     case NodeTag_container_decl_arg_trailing:
     case NodeTag_container_decl_two:
     case NodeTag_container_decl_two_trailing:
@@ -140,11 +141,12 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_less_than:
     case NodeTag_greater_than:
     case NodeTag_greater_or_equal:
+        return visitCmpExpr(node, parent);
     case NodeTag_bool_and:
-    case NodeTag_bool_not:
     case NodeTag_bool_or:
         return visitBoolExpr(node, parent);
-
+    case NodeTag_bool_not:
+        return visitBoolNot(node, parent);
     case NodeTag_mul:
     case NodeTag_div:
     case NodeTag_mod:
@@ -203,9 +205,11 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitSwitch(node, parent);
     //case NodeTag_switch_case:
     //case NodeTag_switch_case_inline:
+    case NodeTag_grouped_expression:
     case NodeTag_block:
     case NodeTag_block_semicolon:
-    case NodeTag_grouped_expression:
+    //case NodeTag_block_two:
+    // case NodeTag_block_two_semicolon:
     case NodeTag_await:
     case NodeTag_comptime:
         visitChildren(node, parent);
@@ -215,7 +219,7 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     }
     // TODO: Thereset
 
-    return Recurse;
+    return Break;
 }
 
 VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNode &parent)
@@ -524,13 +528,23 @@ VisitResult ExpressionVisitor::visitContainerDecl(const ZigNode &node, const Zig
         }
     }
 
+
+    Identifier ident(node.containerName());
     DUChainReadLocker lock;
-    auto contexts = context()->childContexts();
-    if (!contexts.isEmpty()) {
-        auto bodyContext = contexts.first();
-        auto decls = bodyContext->findLocalDeclarations(Identifier(node.containerName()));
+    {
+        auto decls = context()->findLocalDeclarations(ident);
         if (!decls.isEmpty()) {
-            encounterLvalue(DeclarationPointer(decls.last()));
+            encounterLvalue(DeclarationPointer(decls.first()));
+            return Continue;
+        }
+    }
+
+    auto childContexts = context()->childContexts();
+    if (!childContexts.isEmpty()) {
+        auto childContext = childContexts.first();
+        auto decls = childContext->findLocalDeclarations(ident);
+        if (!decls.isEmpty()) {
+            encounterLvalue(DeclarationPointer(decls.first()));
             return Continue;
         }
     }
@@ -544,21 +558,26 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     QString name = node.mainToken();
     if (name == QLatin1String("@This")) {
         return callBuiltinThis(node);
-    }
-    else if (name == QLatin1String("@import")) {
-       return callBuiltinImport(node);
-    }
-    else if (name == QLatin1String("@fieldParentPtr")) {
+    } else if (name == QLatin1String("@import")) {
+        return callBuiltinImport(node);
+    } else if (name == QLatin1String("@fieldParentPtr")) {
         return callBuiltinFieldParentPtr(node);
-    }
-    else if (name == QLatin1String("@field")) {
+    } else if (name == QLatin1String("@field")) {
         return callBuiltinField(node);
-    }
-    else if (name == QLatin1String("@as")) {
+    } else if (name == QLatin1String("@as")) {
         return callBuiltinAs(node);
-    }
+    } else if (name == QLatin1String("@intFromFloat")) {
+        return callBuiltinIntFromFloat(node);
+    } else if (name == QLatin1String("@floatFromInt")) {
+        return callBuiltinFloatFromInt(node);
+    } else if (name == QLatin1String("@intCast")) {
+        return callBuiltinIntCast(node);
+    } else if (name == QLatin1String("@enumFromInt")) {
+        return callBuiltinEnumFromInt(node);
+    } else if (name == QLatin1String("@intFromEnum")) {
+        return callBuiltinIntFromEnum(node);
     // todo @Type
-    else if (
+    } else if (
         // These return the type of the first argument
         name == QLatin1String("@sqrt")
         || name == QLatin1String("@sin")
@@ -634,6 +653,101 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     } else {
         encounterUnknown();
     }
+    return Continue;
+}
+
+static bool isBuiltinCallTwo(const ZigNode &node)
+{
+    const NodeTag tag = node.tag();
+    return (tag == NodeTag_builtin_call_two || tag == NodeTag_builtin_call_two_comma);
+}
+
+VisitResult ExpressionVisitor::callBuiltinIntFromFloat(const ZigNode &node)
+{
+    const auto result = inferredType().dynamicCast<BuiltinType>();
+    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isFloat()) {
+            // TODO: handle comptime known
+            encounter(result);
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinFloatFromInt(const ZigNode &node)
+{
+    qCDebug(KDEV_ZIG) << "callBuiltinFloatFromInt";
+    const auto result = inferredType().dynamicCast<BuiltinType>();
+    if (result && result->isFloat() && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isInteger()) {
+            // TODO: handle comptime known
+            encounter(result);
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinIntCast(const ZigNode &node)
+{
+    const auto result = inferredType().dynamicCast<BuiltinType>();
+    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isInteger()) {
+            // TODO: handle comptime known
+            encounter(result);
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinEnumFromInt(const ZigNode &node)
+{
+    const auto result = inferredType().dynamicCast<EnumType>();
+    if (result && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isInteger()) {
+            // TODO: handle comptime known
+            if (result->enumType()) {
+                encounter(result->enumType());
+            } else {
+                encounter(result);
+            }
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinIntFromEnum(const ZigNode &node)
+{
+    const auto result = inferredType().dynamicCast<BuiltinType>();
+    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        if (const auto value = v.lastType().dynamicCast<EnumType>()) {
+            // TODO: handle comptime known
+            encounter(result);
+            return Continue;
+        }
+    }
+    encounterUnknown();
     return Continue;
 }
 
@@ -763,6 +877,7 @@ VisitResult ExpressionVisitor::callBuiltinAs(const ZigNode&node)
         // so set it to a comptime known value, eg @as(u32, 1)
         if (auto builtin = typeVisitor.lastType().dynamicCast<BuiltinType>()) {
             ExpressionVisitor valueVisitor(this);
+            valueVisitor.setInferredType(typeVisitor.lastType());
             valueVisitor.startVisiting(rhs, node);
             if (auto value = dynamic_cast<ComptimeType*>(valueVisitor.lastType().data())) {
                 if (value->isComptimeKnown() && builtin->canValueBeAssigned(value->asType())) {
@@ -875,13 +990,95 @@ VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNod
     return Continue;
 }
 
+VisitResult ExpressionVisitor::visitCmpExpr(const ZigNode &node, const ZigNode &parent)
+{
+    // TODO: eval exprs..
+    encounter(BuiltinType::newFromName("bool"));
+    return Continue;
+}
 
 VisitResult ExpressionVisitor::visitBoolExpr(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(node);
+    Q_UNUSED(parent);
+    NodeTag tag = node.tag();
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ExpressionVisitor v1(this);
+    v1.startVisiting(lhs, node);
+    if (const auto a = v1.lastType().dynamicCast<BuiltinType>()) {
+        if (!a->isBool()) {
+            encounterUnknown();
+            return Continue;
+        }
+
+        // If lhs is comptime known try to eval it without doing the rhs
+        if ((tag == NodeTag_bool_or && a->isTrue()) || (tag == NodeTag_bool_and && a->isFalse())) {
+            encounter(a);
+            return Continue;
+        }
+
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor v2(this);
+        v2.startVisiting(rhs, node);
+        if (const auto b = v2.lastType().dynamicCast<BuiltinType>()) {
+            if (!b->isBool()) {
+                encounterUnknown();
+                return Continue;
+            }
+
+            // Can still eval if other side is not comptime known
+            if ((tag == NodeTag_bool_or && b->isTrue()) || (tag == NodeTag_bool_and && b->isFalse())) {
+                encounter(b);
+                return Continue;
+            }
+
+            // If both are known do full eval
+            if (a->isComptimeKnown() && b->isComptimeKnown()) {
+                if (tag == NodeTag_bool_or) {
+                    if (a->isTrue() || b->isTrue()) {
+                        encounter(BuiltinType::newFromName("true"));
+                    } else {
+                        encounter(BuiltinType::newFromName("false"));
+                    }
+                } else {
+                    if (a->isTrue() && b->isTrue()) {
+                        encounter(BuiltinType::newFromName("true"));
+                    } else {
+                        encounter(BuiltinType::newFromName("false"));
+                    }
+                }
+                return Continue;
+            }
+
+            // Both types are only runtime known
+            encounter(BuiltinType::newFromName("bool"));
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitBoolNot(const ZigNode &node, const ZigNode &parent)
+{
     Q_UNUSED(parent);
     // TODO: Evaluate if both lhs & rhs are comptime known
-    encounter(BuiltinType::newFromName("bool"));
+    ZigNode lhs = {node.ast, node.data().lhs};
+    ExpressionVisitor v(this);
+    v.startVisiting(lhs, node);
+    if (const auto a = v.lastType().dynamicCast<BuiltinType>()) {
+        if (a->isBool()) {
+            if (a->isTrue()) {
+                encounter(BuiltinType::newFromName("false"));
+            } else if (a->isFalse()) {
+                encounter(BuiltinType::newFromName("true"));
+            } else {
+                encounter(a); // Not comptime known
+            }
+            return Continue;
+        }
+    }
+    encounterUnknown();
     return Continue;
 }
 
@@ -895,11 +1092,11 @@ VisitResult ExpressionVisitor::visitMathExpr(const ZigNode &node, const ZigNode 
     v1.startVisiting(lhs, node);
 
     // Check if lhs & rhs are compatable
-    if (auto a = v1.lastType().dynamicCast<BuiltinType>()) {
+    if (const auto a = v1.lastType().dynamicCast<BuiltinType>()) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(this);
         v2.startVisiting(rhs, node);
-        if (auto b = v2.lastType().dynamicCast<BuiltinType>()) {
+        if (const auto b = v2.lastType().dynamicCast<BuiltinType>()) {
             // If both are comptime known try to evaluate the expr
             if (a->isComptimeKnown() && b->isComptimeKnown()) {
                 NodeTag tag = node.tag();
@@ -1120,6 +1317,7 @@ VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &p
                     if (switchValue->asType()->equals(caseVisitor.lastType().data())) {
                         ZigNode rhs = {caseNode.ast, caseNode.data().rhs};
                         ExpressionVisitor valueVisitor(this);
+                        valueVisitor.setInferredType(inferredType());
                         valueVisitor.startVisiting(rhs, caseNode);
                         encounter(valueVisitor.lastType());
                         return Continue;

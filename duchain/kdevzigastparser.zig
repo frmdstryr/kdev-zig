@@ -66,6 +66,7 @@ const NodeKind = enum(u8) {
     Defer,
     Catch,
     Usingnamespace,
+    Comptime
 };
 
 // std.mem.len does not check for null

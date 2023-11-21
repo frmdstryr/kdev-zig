@@ -136,10 +136,11 @@ bool BuiltinType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
 
 QString BuiltinType::toString() const
 {
+    // AbstractType::toString() prints modifiers (eg const/volatile)
     if (!isComptimeKnown() || isVoid() || isNull()) {
-        return d_func()->m_data.str();
+        return AbstractType::toString() + d_func()->m_data.str();
     }
-    return QString("%1 = %2").arg(
+    return AbstractType::toString() + QString("%1 = %2").arg(
         d_func()->m_data.str(),
         comptimeKnownValue().str()
     );

@@ -119,6 +119,9 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
     case FunctionDecl:
         updateFunctionDeclArgs(node);
         break;
+    case ErrorDecl:
+        buildErrorDecl(node, parent);
+        break;
 #define BUILD_CAPTURE_FOR(K) case K: maybeBuildCapture<K>(node, parent); break
         BUILD_CAPTURE_FOR(If);
         BUILD_CAPTURE_FOR(While);
@@ -136,8 +139,7 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
     if (kind == FunctionDecl) {
         updateFunctionDeclReturnType(node);
     }
-
-    if (kind == VarDecl|| kind == ParamDecl || kind  == FieldDecl) {
+    else if (kind == VarDecl|| kind == ParamDecl || kind  == FieldDecl) {
         if (auto s = lastType().dynamicCast<StructureType>()) {
             DUChainWriteLocker lock;
             if (auto decl = s->declaration(nullptr)) {
@@ -288,13 +290,20 @@ template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind !
 AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     if (Kind == FieldDecl && parent.kind() == EnumDecl) {
-        DUChainReadLocker lock;
-        auto parentContext = contextFromNode(&parent);
-        Q_ASSERT(parentContext);
-        Q_ASSERT(parentContext->owner());
         EnumType::Ptr t(new EnumType);
-        t->setEnumType(parentContext->owner()->abstractType());
+        auto parentContext = session->contextFromNode(parent);
+        Q_ASSERT(parentContext);
+        {
+            DUChainReadLocker lock;
+            Q_ASSERT(parentContext->owner());
+            t->setEnumType(parentContext->owner()->abstractType());
+        }
         t->setComptimeKnownValue(node.mainToken());
+        return t;
+    }
+    else if (Kind == FieldDecl && node.tag() == NodeTag_error_set_decl) {
+        EnumType::Ptr t(new EnumType);
+        // Updated in buildErrorDecl
         return t;
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
@@ -315,6 +324,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
             // If the value is assigned try set the comptime known value
             if (auto type = dynamic_cast<ComptimeType*>(t.data())) {
                 ExpressionVisitor v(session, currentContext());
+                v.setInferredType(t);
                 v.startVisiting(valueNode, node);
 
                 // If we have a builtin type and a comptime known value
@@ -650,6 +660,24 @@ void DeclarationBuilder::buildForCapture(const ZigNode &node, const ZigNode &par
         } else {
             qCDebug(KDEV_ZIG) << "for loop type is unknown";
         }
+        closeDeclaration();
+    }
+}
+
+void DeclarationBuilder::buildErrorDecl(const ZigNode &node, const ZigNode &parent)
+{
+    TokenIndex start_tok = ast_node_main_token(node.ast, node.index) + 2;
+    TokenIndex end_tok = node.data().rhs;
+    auto errorType = currentDeclaration()->abstractType();
+    for (TokenIndex i=start_tok; i < end_tok; i++) {
+        QString name = node.tokenSlice(i);
+        auto range = node.tokenRange(i);
+        auto decl = createDeclaration<FieldDecl>(node, parent, name, true, range);
+        auto errorValueType = decl->abstractType().staticCast<EnumType>();
+        errorValueType->setEnumType(errorType);
+        errorValueType->setComptimeKnownValue(name);
+        DUChainWriteLocker lock;
+        decl->setAbstractType(errorValueType);
         closeDeclaration();
     }
 }

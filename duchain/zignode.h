@@ -56,6 +56,9 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     NodeTag tag() const;
     NodeData data() const;
     ZigNode nextChild() const;
+    ZigNode lhsAsNode() const;
+    ZigNode rhsAsNode() const;
+
     SourceRange extent() const;
     QString comment() const;
     QString spellingName() const;

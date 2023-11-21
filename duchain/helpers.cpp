@@ -194,31 +194,28 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
     }
     if (const auto t = dynamic_cast<ComptimeType*>(a.data()) ) {
         if ( t->equalsIgnoringValue(b.data()) ) {
+            // FIXME: This removes comptime_int/comptime_float value...
             return removeComptimeValue(t->asType());
         }
     }
 
-    auto builtina = a.dynamicCast<BuiltinType>();
-    if (builtina) {
-        if (builtina->isNull()) {
-            if (auto opt = b.dynamicCast<OptionalType>()) {
-                return opt;
-            }
-            auto r = new OptionalType();
-            r->setBaseType(b);
-            return AbstractType::Ptr(r);
+    const auto builtina = a.dynamicCast<BuiltinType>();
+    if (builtina && builtina->isNull()) {
+        if (auto opt = b.dynamicCast<OptionalType>()) {
+            return opt;
         }
+        OptionalType::Ptr r(new OptionalType);
+        r->setBaseType(b);
+        return r;
     }
-    auto builtinb = b.dynamicCast<BuiltinType>();
-    if (builtinb) {
-        if (builtinb->isNull()) {
-            if (auto opt = a.dynamicCast<OptionalType>()) {
-                return opt;
-            }
-            auto r = new OptionalType();
-            r->setBaseType(a);
-            return AbstractType::Ptr(r);
+    const auto builtinb = b.dynamicCast<BuiltinType>();
+    if (builtinb && builtinb->isNull()) {
+        if (auto opt = a.dynamicCast<OptionalType>()) {
+            return opt;
         }
+        OptionalType::Ptr r(new OptionalType);
+        r->setBaseType(a);
+        return r;
     }
 
     if (builtina && builtinb) {
@@ -233,7 +230,7 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
 
     }
 
-    if (auto opt = a.dynamicCast<OptionalType>()) {
+    if (const auto opt = a.dynamicCast<OptionalType>()) {
         // TODO: Promotion ?
         if (opt->baseType()->equals(b.data())
             || canMergeNumericBuiltinTypes(opt->baseType(), b)
@@ -241,7 +238,7 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
             return opt;
         }
     }
-    if (auto opt = b.dynamicCast<OptionalType>()) {
+    if (const auto opt = b.dynamicCast<OptionalType>()) {
         // TODO: Builtin promotion ?
         if (opt->baseType()->equals(a.data())
             || canMergeNumericBuiltinTypes(opt->baseType(), a)

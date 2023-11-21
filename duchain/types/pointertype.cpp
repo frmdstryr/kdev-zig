@@ -107,12 +107,10 @@ void PointerType::setBaseType(const AbstractType::Ptr& type)
 QString PointerType::toString() const
 {
     auto T = baseType();
-    const auto isConst = T ? T->modifiers() & ConstModifier : false;
     const auto isArray = modifiers() & ArrayModifier;
-    QString c = isConst ? "const " : "";
-    QString baseString = T ? (c + T->toString()) : QStringLiteral("<notype>");
-    QString prefix = isArray ? "[*]" : "*";
-    return prefix + baseString + AbstractType::toString(true);
+    QString baseString = T ? T->toString() : QStringLiteral("<notype>");
+    QString prefix = isArray ? QStringLiteral("[*]") : QStringLiteral("*");
+    return prefix + AbstractType::toString() + baseString;
 }
 
 AbstractType::WhichType PointerType::whichType() const

@@ -443,6 +443,7 @@ void DUChainTest::testVarUsage_data()
     QTest::newRow("fn var order") << "pub fn main() void {\nconst a = b; const b=1; \n}" << "a/invalid" << "2,0";
     QTest::newRow("test var order") << "test {\nconst a = b; const b=1; \n}" << "a/invalid" << "2,0";
 
+
         // QTest::newRow("builtin call") << CursorInRevision(-1, -1)
     //     << "const a = @min(1, 2);\n" << QStringList { "@min/2,10,2,14" };
 
@@ -493,12 +494,17 @@ void DUChainTest::testVarType_data()
     QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int = 1" << "";
     QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float = 1.1" << "";
     QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8 = \"abc\"" << "";
+    QTest::newRow("volatile ptr") << "var io: *volatile u32 = @ptrFromInt(0x400000);" << "io" << "*volatile u32" << "";
     QTest::newRow("char lit") << "const x = 'a';" << "x" << "u8 = a" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
     QTest::newRow("enum") << "const Day = enum{Mon, Tue};" << "Day" << "Day" << "";
     QTest::newRow("enum value") << "const Day = enum{Mon, Tue}; const mon = Day.Mon;" << "mon" << "Day.Mon" << "";
+    QTest::newRow("inferred enum") << "const Day = enum{Mon, Tue}; const x: Day = .Mon;" << "x" << "Day.Mon" << "";
+    QTest::newRow("switch inferred value") << "const Day = enum{Mon, Tue}; const x: Day = switch (1) {0 => .Mon, 1=> .Tue};" << "x" << "Day.Tue" << "";
+    QTest::newRow("error set") << "const E = error{A, B};" << "E" << "E" << "";
+    QTest::newRow("error set value") << "const E = error{A, B}; const x = E.A;" << "x" << "E.A" << "";
     //QTest::newRow("enum arg") << "const Day = enum(u8){Mon, Tue}; const mon = Day.Mon;" << "mon" << "u8" << "";
     // FIXME: QTest::newRow("enum int") << "const Status = enum{Ok = 1, Error = 0};" << "Ok" << "Status" << "";
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
@@ -552,6 +558,16 @@ void DUChainTest::testVarType_data()
     QTest::newRow("if expr merge 4") << "var a: u8 = 0; var y = if (x > 2) a else 0;" << "y" << "u8" << "";
     QTest::newRow("if expr merge 5") << "var a: ?u8 = 0; var b: u8 = 0; var y = if (x > 2) a else b;" << "y" << "?u8" << "";
     QTest::newRow("if expr merge 6") << "var a: ?u8 = 0; var b: u8 = 0; var y = if (x > 2) b else a;" << "y" << "?u8" << "";
+
+    QTest::newRow("bool not 1") << "const y = !true;" << "y" << "bool = false" << "";
+    QTest::newRow("bool not 2") << "const y = !false;" << "y" << "bool = true" << "";
+    QTest::newRow("bool not 3") << "var x: bool = undefined; const y = !x;" << "y" << "bool" << "";
+    QTest::newRow("bool expr 1") << "const y = if (true and false) 1 else 2;" << "y" << "comptime_int = 2" << "";
+    QTest::newRow("bool expr 2") << "const y = if (true or false) 1 else 2;" << "y" << "comptime_int = 1" << "";
+    QTest::newRow("bool expr 3") << "const y = (true and !false);" << "y" << "bool = true" << "";
+    QTest::newRow("bool expr 4") << "var x: bool = undefined; const y = if (x and false) 1 else 2;" << "y" << "comptime_int = 2" << "";
+    // Result depends on x
+    QTest::newRow("bool expr 5") << "var x: bool = undefined; const y = if (x or false) 1 else 2;" << "y" << "mixed" << "";
 
     QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
     QTest::newRow("var fixed array type") << "const A = struct {}; var x: [2]A = undefined;" << "x" << "[2]A" << "";
@@ -655,8 +671,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("comptime type simple") << "pub fn Foo() type { return u8; } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
     QTest::newRow("comptime fn arg return") << "pub fn add(comptime T: type, a: T, b: T) T { return a + b; } test{\nconst x = add(u32, 1, 2);\n}" << "x" << "u32" << "2,0";
     QTest::newRow("comptime fn arg return error") << "pub fn parseInt(comptime T: type, a: []const u8) !T { return 1; } test{\nconst x = try parseInt(u32, 1);\n}" << "x" << "u32" << "2,0";
-    QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
-    QTest::newRow("comptime type simple block") << "pub fn Foo() type { comptime {return u8;} } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("comptime block return") << "pub fn Foo() type { comptime {return u8;} } test{\nconst x = Foo();\n}" << "x" << "u8" << "2,0";
+    QTest::newRow("comptime block struct") << "pub fn Foo() type { comptime { const T = u32; return struct {a: T};} } test{\nconst x = Foo();\n}" << "x" << "Foo::anon struct 8" << "2,0";
     QTest::newRow("comptime struct") <<
         "pub fn Foo(comptime T: type) type { return struct {a: T}; }\n"
         "test{const x = Foo(u8);\n}" << "x" << "Foo::anon struct 7" << "2,0";
@@ -675,6 +691,9 @@ void DUChainTest::testVarType_data()
         << "const Kind = enum {Char, Int}; test{\n"
            "const y: Kind = @field(Kind, \"Int\");\n}"
            << "y" << "Kind.Int" << "2,0";
+
+    // TODO: Need to be able to specialize the "type"
+    QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
 }
 
 
@@ -796,11 +815,19 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{"Struct A has no field b"} << "";
     QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{"Invalid enum field"} << "";
+    QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
+    //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
+
     QTest::newRow("struct dot init") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.a = 0}); }" << QStringList{} << "";
     QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{"Struct A has no field b"} << "";
     QTest::newRow("array init") << "const a = [_]u8{1,2};" << QStringList{} << "";
     QTest::newRow("array init type invalid") << "const a = [_]u8{1,false};" << QStringList{"Array item type mismatch at index 1"} << "";
     QTest::newRow("array init struct dot init") << "const A = struct {a: u8}; const b = [_]A{.{.a=2}};" << QStringList{} << "";
     QTest::newRow("array init struct dot init error") << "const A = struct {a: u8}; const b = [_]A{.{.a=true}};" << QStringList{"Struct field type mismatch"} << "";
+
+    QTest::newRow("@intFromFloat()") << "test{var x: f32 = 0; var y: u32 = @intFromFloat(x);\n}" <<  QStringList{} << "";
+    QTest::newRow("@floatFromInt()") << "test{var x: i32 = 0; var y: f32 = @floatFromInt(x);\n}" <<  QStringList{} << "";
+    QTest::newRow("@intCast()") << "test{var x: i32 = 0; var y: u32 = @intCast(x);\n}" <<  QStringList{} << "";
+    //QTest::newRow("@intFromFloat()") << "test{var x: f32 = 0; var y: u32 = @intFromFloat(x);\n}" << "y" << QStringList{} << "";
 }
 

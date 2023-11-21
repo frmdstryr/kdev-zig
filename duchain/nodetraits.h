@@ -105,6 +105,7 @@ constexpr bool shouldSetContextOwner(NodeKind kind)
     return (kind == Module
         || kind == ContainerDecl
         || kind == EnumDecl
+        || kind == ErrorDecl
     );
 }
 

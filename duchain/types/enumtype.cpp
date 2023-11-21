@@ -61,13 +61,17 @@ bool EnumType::equalsIgnoringValue(const AbstractType* _rhs) const
 
 bool EnumType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
 {
+    // This handles two values of same enum or two comptime known enums
+    // with the same parent enum
+    // eg @TypeOf(Status.Ok) == @TypeOf(Status.Error)
     if (equalsIgnoringValue(rhs.data()))
         return true;
+
+    // Otherwise we may have a comptime known value checking against
+    // the base eg Status == @TypeOf(Status.Error)
     if (const auto v = rhs.dynamicCast<EnumType>()) {
-        if (const auto baseType = enumType()) {
-            if (auto otherBaseType = v->enumType()) {
-                return baseType->equals(otherBaseType.data());
-            }
+        if (auto otherBaseType = v->enumType()) {
+            return equalsIgnoringValue(otherBaseType.data());
         }
     }
     return false;

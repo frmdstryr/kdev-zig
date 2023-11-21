@@ -126,6 +126,7 @@ protected:
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
 
     void buildForCapture(const ZigNode &node, const ZigNode &parent);
+    void buildErrorDecl(const ZigNode &node, const ZigNode &parent);
 
     // Import into current context
     void visitUsingnamespace(const ZigNode &node, const ZigNode &parent);
