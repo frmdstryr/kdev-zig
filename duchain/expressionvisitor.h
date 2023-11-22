@@ -74,6 +74,7 @@ public:
     VisitResult visitArrayTypeSentinel(const ZigNode &node, const ZigNode &parent);
 
     VisitResult callBuiltinThis(const ZigNode &node);
+    VisitResult callBuiltinTypeInfo(const ZigNode &node);
     VisitResult callBuiltinImport(const ZigNode &node);
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
     VisitResult callBuiltinField(const ZigNode &node);

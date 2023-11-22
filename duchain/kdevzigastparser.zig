@@ -41,24 +41,16 @@ const NodeKind = enum(u8) {
     Module, // Root
     ContainerDecl, // struct, union
     EnumDecl,
-    TemplateDecl, // fn that returns type
+    UnionDecl,
     FieldDecl, // container_field
     FunctionDecl,
-    ParmDecl,
+    ParamDecl,
     VarDecl,
     BlockDecl,
     ErrorDecl,
-    AliasDecl, // Import
     TestDecl,
     // Uses
     Call,
-    ContainerInit,
-    VarAccess,
-    FieldAccess,
-    ArrayAccess,
-    PtrAccess, // Deref
-    Literal,
-    Ident,
     If,
     For,
     While,
@@ -66,7 +58,6 @@ const NodeKind = enum(u8) {
     Defer,
     Catch,
     Usingnamespace,
-    Comptime
 };
 
 // std.mem.len does not check for null
@@ -144,6 +135,51 @@ pub fn dumpAstNodes(ast: *const Ast, nodes: []NodeIndex, stream: anytype) !void 
         try stream.print(TABLE_ROW_FORMAT, .{ i, @tagName(tag), data.lhs, data.rhs, ast.tokenSlice(main_token) });
     }
     try stream.writeAll("\n");
+}
+
+const CompletionResultType = enum(u8) {
+    Unknown = 0,
+    Field,
+};
+
+const ZCompletion = extern struct {
+    const Self = @This();
+    result_type: CompletionResultType = .Unknown,
+    name: [*c]const u8 = null,
+
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
+        const name_len = strlen(self.name);
+        if (name_len > 0) {
+            allocator.free(self.name[0 .. name_len + 1]);
+        }
+        allocator.destroy(self);
+    }
+};
+
+export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8) ?*ZCompletion {
+    const text_len = strlen(text_ptr);
+    const following_len = strlen(text_following_ptr);
+    if (text_len == 0) {
+        return null;
+    }
+    const text: [:0]const u8 = text_ptr[0..text_len :0];
+    const following: [:0]const u8 = text_following_ptr[0..following_len:0];
+    std.log.info("zig: complete: {s} {s}", .{text, following});
+
+    const allocator = gpa.allocator();
+    var completion = ZCompletion{};
+    var ast = Ast.parse(allocator, text, .zig) catch {
+        return null;
+    };
+    defer ast.deinit(allocator);
+    var stdout = std.io.getStdOut().writer();
+    dumpAstFlat(&ast, stdout) catch {};
+
+    const result: *ZCompletion = allocator.create(ZCompletion) catch {
+        return null;
+    };
+    result.* = completion;
+    return result;
 }
 
 export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
@@ -247,6 +283,13 @@ export fn destroy_error(ptr: ?*ZError) void {
     // std.log.debug("zig: destroy_error {}", .{@intFromPtr(ptr)});
     if (ptr) |err| {
         err.deinit(gpa.allocator());
+    }
+}
+
+export fn destroy_completion(ptr: ?*ZCompletion) void {
+    // std.log.debug("zig: destroy_completion {}", .{@intFromPtr(ptr)});
+    if (ptr) |completion| {
+        completion.deinit(gpa.allocator());
     }
 }
 
@@ -361,6 +404,7 @@ fn isTokenSliceEql(ast: *Ast, token: TokenIndex, value: []const u8) bool {
     return std.mem.eql(u8, ast.tokenSlice(token), value);
 }
 
+// Node kind is only needed for contexts
 export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     if (ptr == null) {
         return .Unknown;
@@ -375,30 +419,56 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
         .root => .Module,
         .fn_decl => .FunctionDecl,
         .test_decl => .TestDecl,
-        .simple_var_decl, .local_var_decl, .aligned_var_decl, .global_var_decl => .VarDecl,
-        .container_decl, .container_decl_trailing, .container_decl_two, .container_decl_two_trailing, .container_decl_arg, .container_decl_arg_trailing =>
+        .simple_var_decl,
+        .local_var_decl,
+        .aligned_var_decl,
+        .global_var_decl => .VarDecl,
+        .container_decl,
+        .container_decl_trailing,
+        .container_decl_two,
+        .container_decl_two_trailing,
+        .container_decl_arg,
+        .container_decl_arg_trailing =>
             if (isTokenSliceEql(ast, main_tokens[index], "enum"))
                 .EnumDecl
+            else if (isTokenSliceEql(ast, main_tokens[index], "union"))
+                .UnionDecl
             else
                 .ContainerDecl,
-        .block, .block_semicolon, .block_two, .block_two_semicolon, .@"comptime" => .BlockDecl,
-        .container_field_init, .container_field_align, .container_field => .FieldDecl,
+        .block,
+        .block_semicolon,
+        .block_two,
+        .block_two_semicolon,
+        .@"comptime" => .BlockDecl,
+        .container_field_init,
+        .container_field_align,
+        .container_field => .FieldDecl,
         .error_set_decl => .ErrorDecl,
-        // TODO: Param? Import? Detect if template
-        .struct_init, .struct_init_comma, .struct_init_dot, .struct_init_dot_comma, .struct_init_dot_two, .struct_init_dot_two_comma, .struct_init_one, .struct_init_one_comma => .ContainerInit,
-
-        .builtin_call, .builtin_call_comma, .builtin_call_two, .builtin_call_two_comma, .call, .call_comma, .call_one, .call_one_comma, .async_call, .async_call_comma, .async_call_one, .async_call_one_comma => .Call,
-
-        .equal_equal, .bang_equal, .less_than, .greater_than, .less_or_equal, .greater_or_equal, .mul, .div, .mod, .mul_wrap, .mul_sat, .add, .sub, .add_wrap, .sub_wrap, .add_sat, .sub_sat, .shl, .shl_sat, .shr, .bit_and, .bit_xor, .bit_or, .bool_and, .bool_or, .assign_mul, .assign_div, .assign_mod, .assign_add, .assign_sub, .assign_shl, .assign_shl_sat, .assign_shr, .assign_bit_and, .assign_bit_xor, .assign_bit_or, .assign_mul_wrap, .assign_add_wrap, .assign_sub_wrap, .assign_mul_sat, .assign_add_sat, .assign_sub_sat, .assign, .assign_destructure => .VarAccess,
-
-        .deref => .PtrAccess,
-
-        .unwrap_optional, .error_value, .field_access => .FieldAccess,
-        .array_mult, .array_cat, .array_access => .ArrayAccess,
-
-        .string_literal, .multiline_string_literal, .number_literal, .char_literal => .Literal,
-
-        .identifier => .Ident,
+        .builtin_call,
+        .builtin_call_comma,
+        .builtin_call_two,
+        .builtin_call_two_comma,
+        .call,
+        .call_comma,
+        .call_one,
+        .call_one_comma,
+        .async_call,
+        .async_call_comma,
+        .async_call_one,
+        .async_call_one_comma => .Call,
+        .tagged_union,
+        .tagged_union_trailing,
+        .tagged_union_two,
+        .tagged_union_two_trailing,
+        .tagged_union_enum_tag,
+        .tagged_union_enum_tag_trailing => .UnionDecl,
+        //.struct_init, .struct_init_comma, .struct_init_dot, .struct_init_dot_comma, .struct_init_dot_two, .struct_init_dot_two_comma, .struct_init_one, .struct_init_one_comma => .ContainerInit,
+        //.equal_equal, .bang_equal, .less_than, .greater_than, .less_or_equal, .greater_or_equal, .mul, .div, .mod, .mul_wrap, .mul_sat, .add, .sub, .add_wrap, .sub_wrap, .add_sat, .sub_sat, .shl, .shl_sat, .shr, .bit_and, .bit_xor, .bit_or, .bool_and, .bool_or, .assign_mul, .assign_div, .assign_mod, .assign_add, .assign_sub, .assign_shl, .assign_shl_sat, .assign_shr, .assign_bit_and, .assign_bit_xor, .assign_bit_or, .assign_mul_wrap, .assign_add_wrap, .assign_sub_wrap, .assign_mul_sat, .assign_add_sat, .assign_sub_sat, .assign, .assign_destructure => .VarAccess,
+        //.deref => .PtrAccess,
+        //.unwrap_optional, .error_value, .field_access => .FieldAccess,
+        //.array_mult, .array_cat, .array_access => .ArrayAccess,
+        //.string_literal, .multiline_string_literal, .number_literal, .char_literal => .Literal,
+        // .identifier => .Ident,
 
         .if_simple, .@"if" => .If,
         .for_range, .for_simple, .@"for" => .For,

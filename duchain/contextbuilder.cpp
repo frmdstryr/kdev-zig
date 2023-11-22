@@ -68,25 +68,16 @@ VisitResult ContextBuilder::visitNode(const ZigNode &node, const ZigNode &parent
     BUILD_CONTEXT_FOR(Module);
     BUILD_CONTEXT_FOR(ContainerDecl);
     BUILD_CONTEXT_FOR(EnumDecl);
-    BUILD_CONTEXT_FOR(TemplateDecl);
+    BUILD_CONTEXT_FOR(UnionDecl);
     BUILD_CONTEXT_FOR(FieldDecl);
     BUILD_CONTEXT_FOR(FunctionDecl);
     BUILD_CONTEXT_FOR(ParamDecl);
     BUILD_CONTEXT_FOR(VarDecl);
     BUILD_CONTEXT_FOR(BlockDecl);
     BUILD_CONTEXT_FOR(ErrorDecl);
-    BUILD_CONTEXT_FOR(AliasDecl);
     BUILD_CONTEXT_FOR(TestDecl);
 
     BUILD_CONTEXT_FOR(Call);
-    BUILD_CONTEXT_FOR(ContainerInit);
-    BUILD_CONTEXT_FOR(VarAccess);
-    BUILD_CONTEXT_FOR(FieldAccess);
-    BUILD_CONTEXT_FOR(ArrayAccess);
-    BUILD_CONTEXT_FOR(PtrAccess);
-    BUILD_CONTEXT_FOR(Literal);
-    BUILD_CONTEXT_FOR(Ident);
-
     BUILD_CONTEXT_FOR(If);
     BUILD_CONTEXT_FOR(For);
     BUILD_CONTEXT_FOR(While);
@@ -111,12 +102,13 @@ bool ContextBuilder::shouldSkipNode(const ZigNode &node, const ZigNode &parent)
         // decl, skip making a separate declaration/context for the
         // variable and just use the name.
         // Eg const Foo = struct {}
-        ZigNode child = node.nextChild();
+        ZigNode child = node.rhsAsNode();
         NodeKind childKind = child.kind();
         return (
             childKind == ContainerDecl
             || childKind == ErrorDecl
             || childKind == EnumDecl
+            || childKind == UnionDecl
             //|| (childKind == Call && child.spellingName() == "@import")
         );
     }

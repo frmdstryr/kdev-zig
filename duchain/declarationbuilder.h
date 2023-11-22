@@ -88,7 +88,7 @@ protected:
     template <NodeKind Kind, EnableIf<Kind == FunctionDecl> = dummy>
     KDevelop::FunctionType::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
-    template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl> = dummy>
+    template <NodeKind Kind, EnableIf<NodeTraits::isStructureDeclaration(Kind)> = dummy>
     KDevelop::StructureType::Ptr createType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind != FunctionDecl> = dummy>
@@ -100,8 +100,8 @@ protected:
     template<NodeKind Kind, EnableIf<Kind == VarDecl> = dummy>
     void setDeclData(KDevelop::Declaration *decl);
 
-    template<NodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
-    void setDeclData(KDevelop::AliasDeclaration *decl);
+    // template<NodeKind Kind, EnableIf<Kind == AliasDecl> = dummy>
+    // void setDeclData(KDevelop::AliasDeclaration *decl);
 
     template <NodeKind Kind, EnableIf<NodeTraits::isTypeDeclaration(Kind)> = dummy>
     void setDeclData(KDevelop::ClassDeclaration *decl);

@@ -19,12 +19,16 @@
 
 #include <QtTest/QtTest>
 
+#include <language/backgroundparser/backgroundparser.h>
+#include <language/codegen/coderepresentation.h>
 #include <language/duchain/ducontext.h>
 #include <language/duchain/duchainutils.h>
 #include <language/duchain/topducontext.h>
+
 #include <tests/testcore.h>
 #include <tests/autotestshell.h>
 #include <tests/testhelpers.h>
+#include <tests/testlanguagecontroller.h>
 
 #include "types/builtintype.h"
 #include "parsesession.h"
@@ -34,7 +38,9 @@
 
 using namespace KDevelop;
 
-QTEST_MAIN(DUChainTest)
+QTEST_MAIN(Zig::DUChainTest)
+
+namespace Zig {
 
 DUChainTest::DUChainTest(QObject* parent): QObject(parent)
 {
@@ -148,7 +154,21 @@ DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, b
 void DUChainTest::initTestCase()
 {
     AutoTestShell::init();
-    TestCore::initialize(Core::NoUi);
+    TestCore* core = new TestCore();
+    core->initialize(KDevelop::Core::NoUi);
+    DUChain::self()->disablePersistentStorage();
+    KDevelop::CodeRepresentation::setDiskChangesForbidden(true);
+
+    // This seems to be required for the waitForUpdate to work in tests... ?
+    // auto* langController = new TestLanguageController(core);
+    // core->setLanguageController(langController);
+    // langController->backgroundParser()->setThreadCount(4);
+    // langController->backgroundParser()->abortAllJobs();
+    // m_langSupport = new Zig::LanguageSupport(core);
+    // langController->addTestLanguage(m_langSupport, QStringList() << QStringLiteral("text/plain"));
+    // const auto languages = langController->languagesForUrl(QUrl::fromLocalFile(QStringLiteral("/foo.zig")));
+    // QCOMPARE(languages.size(), 1);
+    // QCOMPARE(languages.first(), m_langSupport);
 }
 
 void DUChainTest::sanityCheckFn()
@@ -204,6 +224,20 @@ void DUChainTest::sanityCheckStd()
     QVERIFY(decl);
     QCOMPARE(decl->identifier().toString(), QString("ns_per_us"));
     QCOMPARE(decl->abstractType()->toString(), QString("comptime_int = 1000"));
+}
+
+void DUChainTest::sanityCheckTypeInfo()
+{
+    // TODO: Why does waitForUpdate not do anything??
+    ReferencedTopDUContext builtinctx = parseStdCode("builtin.zig");
+    ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
+    QString code("const x = u8; const T = @typeInfo(x);");
+    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    QVERIFY(context.data());
+    DUChainReadLocker lock;
+    auto decls = context->findDeclarations(Identifier("T"));
+    QCOMPARE(decls.size(), 1);
+    QCOMPARE(decls.first()->abstractType()->toString(), QString("Type"));
 }
 
 void DUChainTest::sanityCheckBasicImport()
@@ -505,7 +539,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("switch inferred value") << "const Day = enum{Mon, Tue}; const x: Day = switch (1) {0 => .Mon, 1=> .Tue};" << "x" << "Day.Tue" << "";
     QTest::newRow("error set") << "const E = error{A, B};" << "E" << "E" << "";
     QTest::newRow("error set value") << "const E = error{A, B}; const x = E.A;" << "x" << "E.A" << "";
-    //QTest::newRow("enum arg") << "const Day = enum(u8){Mon, Tue}; const mon = Day.Mon;" << "mon" << "u8" << "";
+    QTest::newRow("union") << "const Payload = union {int: u32, float: f32};" << "Payload" << "Payload" << "";
+    QTest::newRow("union field") << "const Payload = union {int: u32, float: f32}; const x = Payload{.int=1};" << "x" << "Payload.int" << "";
+    QTest::newRow("union enum") << "const Payload = union(enum) {int: u32, float: f32};" << "Payload" << "Payload" << "";
+    QTest::newRow("enum arg") << "const Day = enum(u8){Mon = 0, Tue}; const mon = Day.Mon;" << "mon" << "Day.Mon = 0" << "";
     // FIXME: QTest::newRow("enum int") << "const Status = enum{Ok = 1, Error = 0};" << "Ok" << "Status" << "";
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
@@ -831,3 +868,4 @@ void DUChainTest::testProblems_data()
     //QTest::newRow("@intFromFloat()") << "test{var x: f32 = 0; var y: u32 = @intFromFloat(x);\n}" << "y" << QStringList{} << "";
 }
 
+} // end namespace zig

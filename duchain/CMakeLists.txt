@@ -16,6 +16,7 @@ set(kdevzigduchain_SRC
     types/errortype.cpp
     types/slicetype.cpp
     types/enumtype.cpp
+    types/uniontype.cpp
     types/delayedtype.cpp
 )
 

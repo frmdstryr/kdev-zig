@@ -14,12 +14,13 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#ifndef DUCHAINTEST_H
-#define DUCHAINTEST_H
+#pragma once
 
 #include <QObject>
 #include <QDir>
+// #include "../../ziglanguagesupport.h"
+
+namespace Zig {
 
 class DUChainTest : public QObject
 {
@@ -46,9 +47,12 @@ private Q_SLOTS:
     void testProblems();
     void testProblems_data();
 
+    void sanityCheckTypeInfo();
+
 private:
     QDir assetsDir;
+    // LanguageSupport* m_langSupport;
 
 };
 
-#endif // DUCHAINTEST_H
+} // end namespce zig

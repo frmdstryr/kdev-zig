@@ -34,6 +34,7 @@
 #include "zigdebug.h"
 #include "helpers.h"
 #include "types/enumtype.h"
+#include "types/uniontype.h"
 
 
 namespace Zig
@@ -112,15 +113,6 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_assign:
             visitAssign(node, parent);
             break;
-        // case VarAccess:
-        //     visitVarAccess(node, parent);
-        //     break;
-        // case ArrayAccess:
-        //     visitArrayAccess(node, parent);
-        //     break;
-        // case PtrAccess:
-        //     visitPtrAccess(node, parent);
-        //     break;
     }
     return ContextBuilder::visitNode(node, parent);
 }
@@ -349,10 +341,10 @@ bool UseBuilder::checkAndAddStructFieldUse(
 
     // Struct init
     if (auto nestedStruct = decl->abstractType().dynamicCast<StructureType>()) {
-        if (valueNode.kind() == ContainerInit) {
-            auto range = valueNode.spellingRange();
-            return checkAndAddStructInitUse(nestedStruct, valueNode, range);
-        }
+        //if (valueNode.kind() == ContainerInit) {
+        auto range = valueNode.spellingRange();
+        return checkAndAddStructInitUse(nestedStruct, valueNode, range);
+        //}
     }
 
     // TODO: Array init
@@ -792,6 +784,10 @@ VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
     }
     else if (auto enumeration = v.lastType().dynamicCast<EnumType>()) {
         return Continue; // No problem
+    }
+    else if (auto unionType = v.lastType().dynamicCast<UnionType>()) {
+        if (unionType->isEnum())
+            return Continue; // No problem
     }
     // TODO: What else can switch?
     // TODO: Check if all cases handled ?

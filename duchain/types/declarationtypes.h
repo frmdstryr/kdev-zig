@@ -28,6 +28,7 @@
 #include <language/duchain/classmemberdeclaration.h>
 #include <language/duchain/aliasdeclaration.h>
 #include "enumtype.h"
+#include "uniontype.h"
 
 #include "kdevzigastparser.h"
 #include "nodetraits.h"
@@ -44,11 +45,11 @@ struct IdType;
 //     typedef KDevelop::StructureType Type;
 // };
 
-template <NodeKind Kind>
-struct IdType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
-{
-    typedef KDevelop::TypeAliasType Type;
-};
+// template <NodeKind Kind>
+// struct IdType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
+// {
+//     typedef KDevelop::TypeAliasType Type;
+// };
 
 template <NodeKind Kind>
 struct IdType<Kind, typename std::enable_if<Kind == EnumDecl>::type>
@@ -73,22 +74,16 @@ struct DeclType<Kind, typename std::enable_if<NodeTraits::isKDevDeclaration(Kind
 
 
 template <NodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == Module || Kind == ContainerDecl>::type>
+struct DeclType<Kind, typename std::enable_if<Kind == Module || Kind == ContainerDecl || Kind == UnionDecl>::type>
 {
     typedef KDevelop::ClassDeclaration Type;
 };
 
-template <NodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
-{
-    typedef KDevelop::AliasDeclaration Type;
-};
-
-template <NodeKind Kind>
-struct DeclType<Kind, typename std::enable_if<Kind == TemplateDecl>::type>
-{
-   typedef KDevelop::ClassFunctionDeclaration Type;
-};
+// template <NodeKind Kind>
+// struct DeclType<Kind, typename std::enable_if<Kind == AliasDecl>::type>
+// {
+//     typedef KDevelop::AliasDeclaration Type;
+// };
 
 template <NodeKind Kind>
 struct DeclType<Kind, typename std::enable_if<Kind == FunctionDecl>::type>

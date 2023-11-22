@@ -73,26 +73,26 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
     NodeKind kind = node.kind();
     // qCDebug(KDEV_ZIG) << "DeclarationBuilder::visitNode" << node.index << "kind" << kind << "tag" << node.tag();
     switch (kind) {
-    case Module:
-       return buildDeclaration<Module>(node, parent);
+    case VarDecl:
+        return buildDeclaration<VarDecl>(node, parent);
+    case FieldDecl:
+        return buildDeclaration<FieldDecl>(node, parent);
+    case FunctionDecl:
+        return buildDeclaration<FunctionDecl>(node, parent);
     case ContainerDecl:
         return buildDeclaration<ContainerDecl>(node, parent);
     case EnumDecl:
         return buildDeclaration<EnumDecl>(node, parent);
-    case TemplateDecl:
-        return buildDeclaration<TemplateDecl>(node, parent);
-    case FunctionDecl:
-        return buildDeclaration<FunctionDecl>(node, parent);
-    case AliasDecl:
-        return buildDeclaration<AliasDecl>(node, parent);
-    case FieldDecl:
-        return buildDeclaration<FieldDecl>(node, parent);
-    case VarDecl:
-        return buildDeclaration<VarDecl>(node, parent);
+    case UnionDecl:
+        return buildDeclaration<UnionDecl>(node, parent);
+    //case AliasDecl:
+    //    return buildDeclaration<AliasDecl>(node, parent);
     case ErrorDecl:
         return buildDeclaration<ErrorDecl>(node, parent);
     case TestDecl:
         return buildDeclaration<TestDecl>(node, parent);
+    case Module:
+       return buildDeclaration<Module>(node, parent);
     case Usingnamespace:
         visitUsingnamespace(node, parent);
         return ContextBuilder::visitNode(node, parent);
@@ -145,16 +145,6 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
             if (auto decl = s->declaration(nullptr)) {
                 if (decl->topContext() != currentDeclaration()->topContext()) {
                     if (auto ctx = decl->internalContext()) {
-                        // qCDebug(KDEV_ZIG) << " import context" << ctx
-                        //     << "from " << decl->toString()
-                        //     << "in (" << decl->topContext()->url() << ")";
-                        // qCDebug(KDEV_ZIG) << "   into"
-                        //     << currentDeclaration()->toString()
-                        //     << "in (" << currentDeclaration()->topContext()->url() << ")";
-                        // for (auto d: ctx->localDeclarations()) {
-                        //     auto alias = new AliasDeclaration(RangeInRevision::invalid(), currentContext());
-                        //     alias->setAliasedDeclaration(d);
-                        // }
                         currentContext()->addImportedParentContext(ctx);
                     }
                 }
@@ -196,9 +186,6 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
-        // FIXME: Relative module name?
-        //QStringList parts = session->document().str().split("/");
-        //identifier = Identifier("@import " + parts.last().replace(".zig", ""));
         QString filename = session->document().str();
         QString package = Helper::qualifierPath(filename);
         identifier = Identifier(package.isEmpty() ? filename: package);
@@ -207,8 +194,6 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
         if (name.isEmpty()) {
             identifier = Identifier(node.containerName());
             declRange = node.mainTokenRange();
-        } else {
-            // identifier = Identifier(session->document().str() + name);
         }
     }
     else if (Kind == TestDecl) {
@@ -265,17 +250,42 @@ typename IdType<Kind>::Type::Ptr DeclarationBuilder::createType(const ZigNode &n
     return typename IdType<Kind>::Type::Ptr(new typename IdType<Kind>::Type);
 }
 
-template <NodeKind Kind, EnableIf<Kind == Module || Kind == ContainerDecl>>
+template <NodeKind Kind, EnableIf<NodeTraits::isStructureDeclaration(Kind)>>
 StructureType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(node);
     Q_UNUSED(parent)
-    auto structType = new StructureType();
-    Q_ASSERT(structType);
-    if (Kind == Module) {
-        structType->setModifiers(ModuleModifier);
+
+    if (Kind == Module || Kind == ContainerDecl) {
+        StructureType::Ptr structType(new StructureType);
+        if (Kind == Module) {
+            structType->setModifiers(ModuleModifier);
+        }
+        return structType;
+    } else if (Kind == UnionDecl) {
+        UnionType::Ptr unionType(new UnionType);
+        NodeTag tag = node.tag();
+        switch (tag) {
+            case NodeTag_container_decl_arg: {
+                ExpressionVisitor v(session, currentContext());
+                v.startVisiting(node.lhsAsNode(), node);
+                unionType->setBaseType(v.lastType());
+                break;
+            }
+            case NodeTag_tagged_union:
+            case NodeTag_tagged_union_trailing:
+            case NodeTag_tagged_union_two:
+            case NodeTag_tagged_union_two_trailing:
+            case NodeTag_tagged_union_enum_tag:
+            case NodeTag_tagged_union_enum_tag_trailing: {
+                // Hack ?
+                unionType->setBaseType(AbstractType::Ptr(new BuiltinType("enum")));
+                break;
+            }
+            default:
+                break;
+        }
+        return unionType;
     }
-    return StructureType::Ptr(structType);
 }
 
 template <NodeKind Kind, EnableIf<Kind == FunctionDecl>>
@@ -298,13 +308,39 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
             Q_ASSERT(parentContext->owner());
             t->setEnumType(parentContext->owner()->abstractType());
         }
+        // TODO: handle rhs ? X = 1
+        // Enum fields are always comptime known
         t->setComptimeKnownValue(node.mainToken());
+        ZigNode rhs = node.rhsAsNode();
+        if (!rhs.isRoot()) {
+            ExpressionVisitor v(session, currentContext());
+            v.startVisiting(rhs, node);
+            if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
+                if (value->isComptimeKnown()) {
+                    t->setComptimeKnownValue(value->comptimeKnownValue());
+                }
+            }
+        }
         return t;
     }
     else if (Kind == FieldDecl && node.tag() == NodeTag_error_set_decl) {
         EnumType::Ptr t(new EnumType);
         // Updated in buildErrorDecl
         return t;
+    }
+    else if (Kind == FieldDecl && parent.kind() == UnionDecl) {
+        UnionType::Ptr u(new UnionType);
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(node.lhsAsNode(), node);
+        u->setDataType(v.lastType());
+        auto parentContext = session->contextFromNode(parent);
+        Q_ASSERT(parentContext);
+        {
+            DUChainReadLocker lock;
+            Q_ASSERT(parentContext->owner());
+            u->setBaseType(parentContext->owner()->abstractType());
+        }
+        return u;
     }
     else if (Kind == VarDecl || Kind == FieldDecl) {
         const bool isConst = (Kind == VarDecl) ? node.mainToken() == QLatin1String("const") : false;
@@ -380,6 +416,7 @@ void DeclarationBuilder::setType(Declaration *decl, typename IdType<Kind>::Type 
 template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, IdentifiedType *type)
 {
+    // qCDebug(KDEV_ZIG) << "setType<Kind> IdentifiedType" << Kind;
     decl->setAlwaysForceDirect(true);
     type->setDeclaration(decl);
 }
@@ -388,7 +425,20 @@ template <NodeKind Kind>
 void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
 {
     // (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl)
+    // qCDebug(KDEV_ZIG) << "setType<Kind> AbstractType" << Kind;
+    if (Kind == FieldDecl) {
+        if (auto enumType = dynamic_cast<EnumType*>(type)) {
+            enumType->setDeclaration(decl);
+            decl->setAlwaysForceDirect(true);
+        }
+        else if (auto unionType = dynamic_cast<UnionType*>(type)) {
+            unionType->setDeclaration(decl);
+            decl->setAlwaysForceDirect(true);
+        }
+    }
     decl->setAbstractType(AbstractType::Ptr(type));
+
+
 }
 
 template <NodeKind Kind>
@@ -405,6 +455,8 @@ void DeclarationBuilder::setDeclData(ClassDeclaration *decl)
 {
     if (Kind == Module || Kind == ContainerDecl) {
         decl->setClassType(ClassDeclarationData::Struct);
+    } else if (Kind == UnionDecl) {
+        decl->setClassType(ClassDeclarationData::Union);
     }
 }
 
@@ -415,12 +467,12 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     decl->setKind(Declaration::Instance);
 }
 
-template<NodeKind Kind, EnableIf<Kind == AliasDecl>>
-void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
-{
-    decl->setIsTypeAlias(true);
-    decl->setKind(Declaration::Alias);
-}
+// template<NodeKind Kind, EnableIf<Kind == AliasDecl>>
+// void DeclarationBuilder::setDeclData(AliasDeclaration *decl)
+// {
+//     decl->setIsTypeAlias(true);
+//     decl->setKind(Declaration::Alias);
+// }
 
 template<NodeKind Kind, EnableIf<Kind != VarDecl && Kind != Module>>
 void DeclarationBuilder::setDeclData(Declaration *decl)
@@ -540,7 +592,7 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
         auto decl = createDeclaration<VarDecl>(node, parent, name, true, range);
         if (Kind == If || Kind == While) {
             // If and While captures unwrap the optional type
-            ZigNode optionalType = node.nextChild();
+            ZigNode optionalType = node.lhsAsNode();
             ExpressionVisitor v(session, currentContext());
             v.startVisiting(optionalType, node);
             if (auto opt = v.lastType().dynamicCast<OptionalType>()) {
@@ -559,7 +611,7 @@ void DeclarationBuilder::maybeBuildCapture(const ZigNode &node, const ZigNode &p
             }
         }
         else if (Kind == Catch) {
-            ZigNode errorType = node.nextChild();
+            ZigNode errorType = node.lhsAsNode();
             ExpressionVisitor v(session, currentContext());
             v.startVisiting(errorType, node);
             if (auto err = v.lastType().dynamicCast<ErrorType>()) {
@@ -744,11 +796,10 @@ void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 void DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    QString name = node.spellingName();
-    auto range = editorFindSpellingRange(node, name);
-    ZigNode child = node.nextChild();
+    QString name = node.mainToken();
+    auto range = node.mainTokenRange();
     ExpressionVisitor v(session, currentContext());
-    v.startVisiting(child, node);
+    v.startVisiting(node.lhsAsNode(), node);
     if (auto s = v.lastType().dynamicCast<StructureType>()) {
         DUChainWriteLocker lock;
         const auto isModule = s->modifiers() & ModuleModifier;

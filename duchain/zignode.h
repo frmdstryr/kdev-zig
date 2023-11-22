@@ -21,7 +21,6 @@
 #include <language/duchain/ducontext.h>
 
 #include "kdevzigastparser.h"
-
 #include "kdevzigduchain_export.h"
 
 namespace Zig
@@ -46,6 +45,7 @@ template <typename T> void noop_destructor(T *) {}
 using ZigAst = ZigAllocatedObject<ZAst, destroy_ast>;
 using ZigString = ZigAllocatedObject<const char, destroy_string>;
 using ZigError = ZigAllocatedObject<ZError, destroy_error>;
+using ZigCompletion = ZigAllocatedObject<ZCompletion, destroy_completion>;
 
 struct KDEVZIGDUCHAIN_EXPORT ZigNode
 {
@@ -55,8 +55,11 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     NodeKind kind() const;
     NodeTag tag() const;
     NodeData data() const;
+    // Prefer lhsAsNode or rhsAsNode instead of nextChild when possible
     ZigNode nextChild() const;
+    // Use data lhs as a node
     ZigNode lhsAsNode() const;
+    // Use data rhs as a node
     ZigNode rhsAsNode() const;
 
     SourceRange extent() const;
@@ -120,6 +123,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<const char, destroy_string>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZAst, destroy_ast>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZError, destroy_error>;
+template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZCompletion, destroy_completion>;
 
 }
 

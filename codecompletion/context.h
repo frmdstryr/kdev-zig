@@ -32,7 +32,7 @@ public:
                       const QString &contextText,
                       const QString &followingText,
                       const KDevelop::CursorInRevision &position,
-                      int depth);
+                      int depth = 0);
 
     QList<KDevelop::CompletionTreeItemPointer> completionItems(bool &abort, bool fullCompletion) override;
 

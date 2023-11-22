@@ -31,9 +31,10 @@ namespace NodeTraits
 constexpr bool hasContext(NodeKind kind)
 {
     return kind == ContainerDecl
+        || kind == BlockDecl
         || kind == EnumDecl
         || kind == FunctionDecl
-        || kind == BlockDecl
+        || kind == UnionDecl
         || kind == ErrorDecl
         || kind == TestDecl
         || kind == Call
@@ -64,6 +65,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == EnumDecl       ? DUContext::Enum
         :  kind == FunctionDecl   ? DUContext::Function // Function is only for arguments
         :  kind == ErrorDecl      ? DUContext::Enum
+        :  kind == UnionDecl      ? DUContext::Enum
         :  kind == TestDecl       ? DUContext::Other
         :  kind == BlockDecl      ? DUContext::Other
         :  kind == VarDecl        ? DUContext::Other
@@ -75,8 +77,6 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == Switch         ? DUContext::Other
         :  kind == Defer          ? DUContext::Other
         :  kind == Catch          ? DUContext::Other
-
-        // TODO: Template decl?
         : static_cast<DUContext::ContextType>(-1);
 }
 
@@ -94,10 +94,20 @@ constexpr bool isTypeDeclaration(NodeKind kind)
 {
     return  kind == EnumDecl
         || kind == ErrorDecl
+        || kind == UnionDecl
         || kind == ContainerDecl
         || kind == Module
     ;
 }
+
+constexpr bool isStructureDeclaration(NodeKind kind)
+{
+    return  kind == Module
+        || kind == UnionDecl
+        || kind == ContainerDecl
+    ;
+}
+
 
 // Set the owner context. Decls that can be returned by @This();
 constexpr bool shouldSetContextOwner(NodeKind kind)
@@ -106,6 +116,7 @@ constexpr bool shouldSetContextOwner(NodeKind kind)
         || kind == ContainerDecl
         || kind == EnumDecl
         || kind == ErrorDecl
+        || kind == UnionDecl
     );
 }
 
@@ -124,6 +135,7 @@ constexpr bool shouldSetComment(NodeKind kind)
         || kind == VarDecl
         || kind == FieldDecl
         || kind == ParamDecl
+        || kind == UnionDecl
         || kind == FunctionDecl
     ;
 
@@ -135,6 +147,7 @@ constexpr bool shouldUseParentName(NodeKind kind, NodeKind parentKind)
         kind == ContainerDecl
         || kind == EnumDecl
         || kind == ErrorDecl
+        || kind == UnionDecl
         // || kind == Module
     );
 }

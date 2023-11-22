@@ -19,8 +19,12 @@
 #include <language/duchain/duchain.h>
 #include <language/duchain/duchainlock.h>
 
-#include "context.h"
+
+#include "../duchain/zignode.h"
+#include "../duchain/helpers.h"
+
 #include "item.h"
+#include "context.h"
 #include "zigdebug.h"
 
 namespace Zig
@@ -50,18 +54,42 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     if (!lock.locked()) {
         return items;
     }
+    qCDebug(KDEV_ZIG) << "Invoke completion content: " << m_text << "following:" << m_followingText;
+    ZigCompletion completion(complete_expr(m_text.toUtf8(), m_followingText.toUtf8()));
 
-    auto declarations = m_duContext->allDeclarations(CursorInRevision::invalid(), m_duContext->topContext());
-    for(const QPair<Declaration *, int> &decl : declarations)
-    {
-
-        if(!decl.first || decl.first->topContext() != m_duContext->topContext())
-            continue;
-        if(decl.first->identifier() == globalImportIdentifier() || decl.first->identifier() == globalAliasIdentifier()
-            || decl.first->identifier() == Identifier())
-            continue;
-
-        items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl.first)));
+    auto top = m_duContext->topContext();
+    auto localContext = top->findContextAt(m_position);
+    if (localContext) {
+        if (completion.data()->result_type == CompletionField) {
+            QString name = completion.data()->name;
+            Declaration* decl = Helper::declarationForName(
+                name,
+                CursorInRevision::invalid(),
+                DUChainPointer<const DUContext>(localContext)
+            );
+            if (decl && decl->internalContext()) {
+                for(const auto decl : localContext->localDeclarations())
+                {
+                    if(!decl
+                        || decl->identifier() == globalImportIdentifier()
+                        || decl->identifier() == globalAliasIdentifier()
+                        || decl->identifier() == Identifier())
+                        continue;
+                    items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl)));
+                }
+            }
+        }
+    } else {
+        for(const auto &it : top->allDeclarations(CursorInRevision::invalid(), top))
+        {
+            const auto decl = it.first;
+            if(!decl
+                || decl->identifier() == globalImportIdentifier()
+                || decl->identifier() == globalAliasIdentifier()
+                || decl->identifier() == Identifier())
+                continue;
+            items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl.first)));
+        }
     }
     return items;
 }

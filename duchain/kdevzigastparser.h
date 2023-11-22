@@ -496,31 +496,23 @@ enum NodeKind
     Module, // Root
     ContainerDecl, // struct, union
     EnumDecl,
-    TemplateDecl, // fn that returns type
+    UnionDecl,
     FieldDecl, // container_field
     FunctionDecl,
     ParamDecl,
     VarDecl,
     BlockDecl,
     ErrorDecl,
-    AliasDecl, // Import
     TestDecl,
     // Uses
     Call,
-    ContainerInit,
-    VarAccess,
-    FieldAccess,
-    ArrayAccess,
-    PtrAccess, // Deref
-    Literal,
-    Ident,
     If,
     For,
     While,
     Switch,
     Defer,
     Catch,
-    Usingnamespace
+    Usingnamespace,
 };
 
 enum VisitResult
@@ -536,6 +528,17 @@ enum CaptureType
     Error
 };
 
+enum CompletionResultType
+{
+    CompletionUnknown = 0,
+    CompletionField
+};
+
+struct ZCompletion
+{
+    CompletionResultType result_type;
+    const char * name;
+};
 
 struct ZAst;
 
@@ -677,6 +680,9 @@ void destroy_ast(ZAst *tree);
 ZError *ast_error_at(const ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
+ZCompletion *complete_expr(const char *text, const char *following);
+void destroy_completion(ZCompletion *completion);
+
 NodeKind ast_node_kind(const ZAst *tree, NodeIndex node);
 NodeTag ast_node_tag(const ZAst* tree, NodeIndex node);
 NodeData ast_node_data(const ZAst *tree, NodeIndex node);
@@ -728,7 +734,6 @@ void destroy_string(const char *str);
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
 SourceRange ast_token_range(const ZAst *tree, TokenIndex token);
 SourceRange ast_node_range(const ZAst *tree, NodeIndex node);
-
 
 void ast_visit(const ZAst *tree, NodeIndex node, VisitorCallbackFn callback, void *data);
 

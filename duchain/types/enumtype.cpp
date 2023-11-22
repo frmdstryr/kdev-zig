@@ -107,10 +107,16 @@ void EnumType::setEnumType(const AbstractType::Ptr& type)
 
 QString EnumType::toString() const
 {
-    if (isComptimeKnown() && enumType()) {
-        return QString("%1.%2").arg(enumType()->toString(), comptimeKnownValue().str());
+    const auto &id = qualifiedIdentifier();
+    if (auto t = enumType().dynamicCast<EnumType>()) {
+        QString name = id.last().toString();
+        QString value = comptimeKnownValue().str();
+        if (name != value) {
+            return QString("%1.%2 = %3").arg(t->toString(), name, value);
+        }
+        return QString("%1.%2").arg(t->toString(), name);
     }
-    return qualifiedIdentifier().toString();
+    return id.toString();
 }
 
 AbstractType::WhichType EnumType::whichType() const

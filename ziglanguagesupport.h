@@ -32,7 +32,7 @@
 namespace Zig
 {
 
-class LanguageSupport
+class KDEVPLATFORMLANGUAGE_EXPORT LanguageSupport
         : public KDevelop::IPlugin
         , public KDevelop::ILanguageSupport
 {

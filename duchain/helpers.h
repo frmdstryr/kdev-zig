@@ -14,6 +14,7 @@
 #include <language/duchain/declaration.h>
 #include <language/duchain/ducontext.h>
 #include <language/duchain/topducontext.h>
+#include <language/languageexport.h>
 
 #include "kdevzigduchain_export.h"
 #include "types/builtintype.h"
@@ -51,6 +52,12 @@ public:
     // package paths it will be relative to that. Eg std/fs.zig will return std.fs
     static QString qualifierPath(const QString& currentFile);
 
+    // Import a declaration based on the qualified name
+    // eg "std.builtin.Type"
+    // WARNING: If waitForUpdate is true the duchain must not be locked
+    static KDevelop::Declaration* declarationForImportedModuleName(
+           const QString& module, const QString& currentFile, bool waitForUpdate);
+
     static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
 
     static void scheduleDependency(
@@ -72,12 +79,12 @@ public:
      *  If UnsureType with >1 matching attributes, returns an arbitrary choice.
      **/
     static KDevelop::Declaration* accessAttribute(
-        const KDevelop::AbstractType::Ptr accessed,
+        const KDevelop::AbstractType::Ptr& accessed,
         const KDevelop::IndexedIdentifier& attribute,
         const KDevelop::TopDUContext* topContext);
 
     static KDevelop::Declaration* accessAttribute(
-        const KDevelop::AbstractType::Ptr accessed,
+        const KDevelop::AbstractType::Ptr& accessed,
         const QString& attribute,
         const KDevelop::TopDUContext* topContext
     )

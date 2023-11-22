@@ -48,7 +48,7 @@ void Helper::scheduleDependency(const IndexedString& dependency, int betterThanP
     BackgroundParser* bgparser = KDevelop::ICore::self()->languageController()->backgroundParser();
     bool needsReschedule = true;
     if ( bgparser->isQueued(dependency) ) {
-        const auto priority= bgparser->priorityForDocument(dependency);
+        const auto priority = bgparser->priorityForDocument(dependency);
         if ( priority > betterThanPriority - 1 ) {
             bgparser->removeDocument(dependency);
         }
@@ -57,17 +57,18 @@ void Helper::scheduleDependency(const IndexedString& dependency, int betterThanP
         }
     }
     if ( needsReschedule ) {
+        // qCDebug(KDEV_ZIG) << "Rescheduled " << dependency << "at priority" << betterThanPriority;
         bgparser->addDocument(dependency, TopDUContext::ForceUpdate, betterThanPriority - 1,
                               nullptr, ParseJob::FullSequentialProcessing);
     }
 }
 
 Declaration* Helper::accessAttribute(
-    const AbstractType::Ptr accessed,
+    const AbstractType::Ptr& accessed,
     const KDevelop::IndexedIdentifier& attribute,
     const KDevelop::TopDUContext* topContext)
 {
-    if ( ! accessed || !topContext ) {
+    if ( !accessed.data() || !topContext ) {
         return nullptr;
     }
 
@@ -395,7 +396,7 @@ bool Helper::typesEqualIgnoringModifiers(
 
 bool Helper::isComptimeKnown(const KDevelop::AbstractType::Ptr &a)
 {
-    if (!a)
+    if (!a.data())
         return false;
     if (a->modifiers() & ComptimeModifier)
         return true;
@@ -496,6 +497,76 @@ AbstractType::Ptr Helper::evaluateUnsignedOp(
     return AbstractType::Ptr(r);
 }
 
+KDevelop::Declaration* Helper::declarationForImportedModuleName(
+        const QString& module, const QString& currentFile, bool waitForUpdate)
+{
+    QStringList parts = module.split(".");
+    if (parts.isEmpty()) {
+        return nullptr;
+    }
+    QUrl package = importPath(parts.at(0), currentFile);
+    if (package.isEmpty()) {
+        qCDebug(KDEV_ZIG) << "imported module does not exist" << module;
+        return nullptr;
+    }
+
+    DUChainReadLocker lock;
+    auto *mod = DUChain::self()->chainForDocument(package);
+
+    if (!mod && waitForUpdate) {
+        // Module not yet parsed, reschedule with a very high priority
+        // and wait for it to update
+        qCDebug(KDEV_ZIG) << "waiting for " << package << " to parse...";
+        lock.unlock();
+        IndexedString doc(package);
+        const int maxPrio = std::numeric_limits<int>::max() - 0x100;
+        Helper::scheduleDependency(doc, maxPrio);
+        mod = DUChain::self()->waitForUpdate(
+            doc, KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
+        lock.lock();
+    }
+    if (!mod || !mod->owner()) {
+        qCDebug(KDEV_ZIG) << "imported module is invalid" << module;
+        return nullptr;
+    }
+    Declaration* decl = mod->owner();
+    lock.unlock();
+    for (const auto &part: parts.mid(1)) {
+        if (part.isEmpty()) {
+            qCDebug(KDEV_ZIG) << "cant import module with empty part " << module;
+            return nullptr;
+        }
+        decl = Helper::accessAttribute(decl->abstractType(), part, decl->topContext());
+        if (!decl) {
+            qCDebug(KDEV_ZIG) << "no decl for" << part << "of" << module;
+            return nullptr;
+        }
+
+        // If the decl is a delayed import that is not yet resolved
+        // Reschedule the delayed import at a high priority and
+        // wait for it to update.
+        // TODO: This will still not work for exprs like @import("foo").bar
+        auto delayedImport = decl->abstractType().dynamicCast<DelayedType>();
+        if (waitForUpdate && delayedImport && (delayedImport->modifiers() & ModuleModifier)) {
+            IndexedString doc(delayedImport->identifier());
+            qCDebug(KDEV_ZIG) << "waiting for delayed import " << doc.str() << " to parse...";
+            // Reschedule delayed import at high priority
+            const int maxPrio = std::numeric_limits<int>::max() - 0x100;
+            Helper::scheduleDependency(doc, maxPrio);
+            mod = DUChain::self()->waitForUpdate(
+                doc,
+                KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
+            lock.lock();
+            if (!mod || !mod->owner()) {
+                qCDebug(KDEV_ZIG) << "delayed import " << doc.str() << "is empty...";
+                return nullptr;
+            }
+            decl = mod->owner();
+            lock.unlock();
+        }
+    }
+    return decl;
+}
 
 QString Helper::zigExecutablePath(IProject* project)
 {
