@@ -476,17 +476,18 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
     auto target = v.lastType();
-    if (rhs.tag() == NodeTag_enum_literal) {
+    // TODO: Check struct dot init, array dot init...
+
+    if (target.dynamicCast<EnumType>() && rhs.tag() == NodeTag_enum_literal) {
         checkAndAddEnumUse(target, rhs.mainToken(), rhs.mainTokenRange());
         return Continue;
     }
-
-    // TODO: Check struct dot init, array dot init...
 
     ExpressionVisitor valueVisitor(session, currentContext());
     valueVisitor.setInferredType(target);
     valueVisitor.startVisiting(rhs, node);
     auto value = valueVisitor.lastType();
+
 
     if (!Helper::canTypeBeAssigned(target, value)) {
         if (Helper::isMixedType(target)) {

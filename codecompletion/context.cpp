@@ -20,8 +20,9 @@
 #include <language/duchain/duchainlock.h>
 
 
-#include "../duchain/zignode.h"
-#include "../duchain/helpers.h"
+
+#include "duchain/zignode.h"
+#include "duchain/helpers.h"
 
 #include "item.h"
 #include "context.h"
@@ -54,32 +55,34 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     if (!lock.locked()) {
         return items;
     }
-    qCDebug(KDEV_ZIG) << "Invoke completion content: " << m_text << "following:" << m_followingText;
-    ZigCompletion completion(complete_expr(m_text.toUtf8(), m_followingText.toUtf8()));
-
     auto top = m_duContext->topContext();
     auto localContext = top->findContextAt(m_position);
-    if (localContext) {
-        if (completion.data()->result_type == CompletionField) {
-            QString name = completion.data()->name;
-            Declaration* decl = Helper::declarationForName(
-                name,
-                CursorInRevision::invalid(),
-                DUChainPointer<const DUContext>(localContext)
-            );
-            if (decl && decl->internalContext()) {
-                for(const auto decl : localContext->localDeclarations())
-                {
-                    if(!decl
-                        || decl->identifier() == globalImportIdentifier()
-                        || decl->identifier() == globalAliasIdentifier()
-                        || decl->identifier() == Identifier())
-                        continue;
-                    items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl)));
-                }
-            }
-        }
-    } else {
+    if (!localContext)
+        return items; // Can it be null ?
+    ZigCompletion completion(complete_expr(m_text.toUtf8(), m_followingText.toUtf8()));
+    if (!completion.data())
+        return items;
+    CompletionResultType result_type = completion.data()->result_type;
+    if (result_type == CompletionField) {
+        QString name = completion.data()->name;
+        qCDebug(KDEV_ZIG) << "Field completion on: " << name;
+        Declaration* decl = Helper::declarationForName(
+            name,
+            m_position,
+            DUChainPointer<const DUContext>(localContext));
+        if (!decl)
+            return items;
+        if (const auto t = decl->abstractType().dynamicCast<EnumType>())
+            items.append(completionsForEnum(t));
+        else if (const auto t = decl->abstractType().dynamicCast<UnionType>())
+            items.append(completionsForUnion(t));
+        else if (const auto t = decl->abstractType().dynamicCast<StructureType>())
+            items.append(completionsForStruct(t));
+        else if (const auto t = decl->abstractType().dynamicCast<SliceType>())
+            items.append(completionsForSlice(t));
+        // else what is it ?
+    }
+    else {
         for(const auto &it : top->allDeclarations(CursorInRevision::invalid(), top))
         {
             const auto decl = it.first;
@@ -88,10 +91,68 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
                 || decl->identifier() == globalAliasIdentifier()
                 || decl->identifier() == Identifier())
                 continue;
-            items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl.first)));
+            items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(decl)));
         }
     }
     return items;
 }
+
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForStruct(const StructureType::Ptr &t) const
+{
+    QList<CompletionTreeItemPointer> items;
+    const auto *top = m_duContext->topContext();
+    if (const auto ctx = t->internalContext(top)) {
+        return completionsFromLocalDecls(DUContextPointer(ctx));
+    }
+    return items;
+}
+
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForEnum(const EnumType::Ptr &t) const
+{
+    if (auto baseType = t->enumType().dynamicCast<EnumType>()) {
+        return completionsForEnum(baseType);
+    }
+    const auto *top = m_duContext->topContext();
+    if (const auto ctx = t->internalContext(top)) {
+        return completionsFromLocalDecls(DUContextPointer(ctx));
+    }
+    return {};
+}
+
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForUnion(const UnionType::Ptr &t) const
+{
+    if (auto baseType = t->baseType().dynamicCast<UnionType>()) {
+        return completionsForUnion(baseType);
+    }
+    const auto *top = m_duContext->topContext();
+    if (const auto ctx = t->internalContext(top)) {
+        return completionsFromLocalDecls(DUContextPointer(ctx));
+    }
+    return {};
+}
+
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForSlice(const SliceType::Ptr &t) const
+{
+    // TODO: .len .ptr?
+    return {};
+}
+
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsFromLocalDecls(const DUContextPointer &ctx) const
+{
+    QList<CompletionTreeItemPointer> items;
+    const auto *top = m_duContext->topContext();
+    for(auto *d : ctx->localDeclarations(top))
+    {
+        if(!d
+            || d->identifier() == globalImportIdentifier()
+            || d->identifier() == globalAliasIdentifier()
+            || d->identifier() == Identifier())
+            continue;
+        items << CompletionTreeItemPointer(new CompletionItem(DeclarationPointer(d)));
+    }
+    return items;
+}
+
+
 
 }

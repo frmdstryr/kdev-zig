@@ -140,6 +140,8 @@ pub fn dumpAstNodes(ast: *const Ast, nodes: []NodeIndex, stream: anytype) !void 
 const CompletionResultType = enum(u8) {
     Unknown = 0,
     Field,
+    BuiltinCall,
+    Identifier,
 };
 
 const ZCompletion = extern struct {
@@ -166,14 +168,43 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
     const following: [:0]const u8 = text_following_ptr[0..following_len:0];
     std.log.info("zig: complete: {s} {s}", .{text, following});
 
+    const line_start = std.mem.lastIndexOfScalar(u8, text, '\n') orelse 0;
+    const last_line = text[line_start..];
+
+
     const allocator = gpa.allocator();
     var completion = ZCompletion{};
-    var ast = Ast.parse(allocator, text, .zig) catch {
+    var ast = Ast.parse(allocator, last_line, .zig) catch {
         return null;
     };
     defer ast.deinit(allocator);
     var stdout = std.io.getStdOut().writer();
     dumpAstFlat(&ast, stdout) catch {};
+    //const decls = ast.rootDecls();
+
+    if (std.mem.endsWith(u8, last_line, ".")) {
+        completion.result_type = .Field;
+    }
+    else if (std.mem.endsWith(u8, last_line, "@\"")) {
+        completion.result_type = .Identifier;
+    }
+    else if (std.mem.endsWith(u8, last_line, "@")) {
+        completion.result_type = .BuiltinCall;
+    }
+
+    if (ast.nodes.len > 0) {
+        const i: u32 = @intCast(ast.nodes.len-1);
+        const tag: Tag = ast.nodes.items(.tag)[i];
+        switch (tag) {
+            .identifier, .container_field_init => {
+                const tok = ast.nodes.items(.main_token)[i];
+                completion.name = allocator.dupeZ(u8, ast.tokenSlice(tok)) catch {
+                    return null;
+                };
+            },
+            else => {},
+        }
+    }
 
     const result: *ZCompletion = allocator.create(ZCompletion) catch {
         return null;

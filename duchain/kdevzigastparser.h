@@ -680,7 +680,7 @@ void destroy_ast(ZAst *tree);
 ZError *ast_error_at(const ZAst* tree, uint32_t index);
 void destroy_error(ZError *err);
 
-ZCompletion *complete_expr(const char *text, const char *following);
+ZCompletion* complete_expr(const char *text, const char *following);
 void destroy_completion(ZCompletion *completion);
 
 NodeKind ast_node_kind(const ZAst *tree, NodeIndex node);

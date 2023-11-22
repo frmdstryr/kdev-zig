@@ -12,7 +12,7 @@
 
 #include "model.h"
 #include "completiondebug.h"
-#include "../../ziglanguagesupport.h"
+#include "ziglanguagesupport.h"
 
 using namespace KDevelop;
 

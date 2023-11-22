@@ -22,7 +22,10 @@
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/types/abstracttype.h>
 #include <language/duchain/types/structuretype.h>
+#include <language/duchain/navigation/abstractnavigationwidget.h>
 #include <QLabel>
+
+#include "navigation/navigationwidget.h"
 
 #include "item.h"
 
@@ -38,9 +41,7 @@ CompletionItem::CompletionItem(const KDevelop::DeclarationPointer& decl, int inh
 QWidget* CompletionItem::createExpandingWidget(const KDevelop::CodeCompletionModel* model) const
 {
     Q_UNUSED(model);
-    // TODO: No idea why this is being called in the NormalDeclarationCompletionItem
-    // this is a workaround
-    return new QLabel();
+    return new NavigationWidget(m_declaration, KDevelop::AbstractNavigationWidget::EmbeddableWidget);
 }
 
 bool CompletionItem::createsExpandingWidget() const

@@ -90,6 +90,13 @@ ecm_qt_declare_logging_category(kdevziglanguagesupport_PART_SRCS
     CATEGORY_NAME "kdevelop.languages.zig"
 )
 
+include_directories(
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/duchain
+    ${CMAKE_CURRENT_BINARY_DIR}/duchain
+)
+
 add_subdirectory(app_templates)
 add_subdirectory(duchain)
 add_subdirectory(codecompletion)
@@ -111,6 +118,9 @@ target_link_libraries(kdevziglanguagesupport
     kdevzigduchain
     kdevzigcompletion
 )
+
+get_target_property(DEFINESANDINCLUDES_INCLUDE_DIRS KDev::DefinesAndIncludesManager INTERFACE_INCLUDE_DIRECTORIES)
+include_directories(${DEFINESANDINCLUDES_INCLUDE_DIRS})
 
 install(FILES kdevzigsupport.categories DESTINATION ${KDE_INSTALL_CONFDIR})
 

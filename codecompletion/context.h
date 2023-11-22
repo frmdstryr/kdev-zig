@@ -22,6 +22,14 @@
 
 #include <kdevzigcompletion_export.h>
 
+#include "types/comptimetype.h"
+#include "types/pointertype.h"
+#include "types/builtintype.h"
+#include "types/optionaltype.h"
+#include "types/slicetype.h"
+#include "types/enumtype.h"
+#include "types/uniontype.h"
+
 namespace Zig
 {
 
@@ -35,6 +43,13 @@ public:
                       int depth = 0);
 
     QList<KDevelop::CompletionTreeItemPointer> completionItems(bool &abort, bool fullCompletion) override;
+
+    QList<KDevelop::CompletionTreeItemPointer> completionsForStruct(const StructureType::Ptr &t) const;
+    QList<KDevelop::CompletionTreeItemPointer> completionsForEnum(const EnumType::Ptr &t) const;
+    QList<KDevelop::CompletionTreeItemPointer> completionsForSlice(const SliceType::Ptr &t) const;
+    QList<KDevelop::CompletionTreeItemPointer> completionsForUnion(const UnionType::Ptr &t) const;
+
+    QList<KDevelop::CompletionTreeItemPointer> completionsFromLocalDecls(const DUContextPointer &ctx) const;
 
 private:
     QString m_followingText;

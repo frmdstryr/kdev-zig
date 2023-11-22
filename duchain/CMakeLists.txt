@@ -18,6 +18,7 @@ set(kdevzigduchain_SRC
     types/enumtype.cpp
     types/uniontype.cpp
     types/delayedtype.cpp
+    navigation//navigationwidget.cpp
 )
 
 find_package(Zig MODULE REQUIRED)

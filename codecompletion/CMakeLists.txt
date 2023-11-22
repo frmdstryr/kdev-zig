@@ -18,12 +18,13 @@ generate_export_header(kdevzigcompletion
 
 add_dependencies(kdevzigcompletion
     kdevzigduchain
+    kdevzigastparser
 )
 
 target_link_libraries(kdevzigcompletion LINK_PRIVATE
     KDev::Interfaces
     KDev::Language
-    kdevpythonduchain
+    kdevzigduchain
 )
 
 install(TARGETS kdevzigcompletion DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
