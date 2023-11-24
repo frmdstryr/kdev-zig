@@ -72,15 +72,7 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
             DUChainPointer<const DUContext>(localContext));
         if (!decl)
             return items;
-        if (const auto t = decl->abstractType().dynamicCast<EnumType>())
-            items.append(completionsForEnum(t));
-        else if (const auto t = decl->abstractType().dynamicCast<UnionType>())
-            items.append(completionsForUnion(t));
-        else if (const auto t = decl->abstractType().dynamicCast<StructureType>())
-            items.append(completionsForStruct(t));
-        else if (const auto t = decl->abstractType().dynamicCast<SliceType>())
-            items.append(completionsForSlice(t));
-        // else what is it ?
+        items.append(completionsForType(decl->abstractType()));
     }
     else {
         for(const auto &it : top->allDeclarations(CursorInRevision::invalid(), top))
@@ -97,14 +89,33 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     return items;
 }
 
+QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForType(const AbstractType::Ptr &T) const
+{
+    if (const auto t = T.dynamicCast<PointerType>())
+        return completionsForPointer(t);
+    if (const auto t = T.dynamicCast<EnumType>())
+        return completionsForEnum(t);
+    if (const auto t = T.dynamicCast<UnionType>())
+        return completionsForUnion(t);
+    if (const auto t = T.dynamicCast<StructureType>())
+        return completionsForStruct(t);
+    if (const auto t = T.dynamicCast<SliceType>())
+        return completionsForSlice(t);
+    return {};
+}
+
+QList<KDevelop::CompletionTreeItemPointer>  CompletionContext::completionsForPointer(const PointerType::Ptr &t) const
+{
+    return completionsForType(t->baseType());
+}
+
 QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForStruct(const StructureType::Ptr &t) const
 {
-    QList<CompletionTreeItemPointer> items;
     const auto *top = m_duContext->topContext();
     if (const auto ctx = t->internalContext(top)) {
         return completionsFromLocalDecls(DUContextPointer(ctx));
     }
-    return items;
+    return {};
 }
 
 QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForEnum(const EnumType::Ptr &t) const

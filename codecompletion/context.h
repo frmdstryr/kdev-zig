@@ -44,6 +44,8 @@ public:
 
     QList<KDevelop::CompletionTreeItemPointer> completionItems(bool &abort, bool fullCompletion) override;
 
+    QList<KDevelop::CompletionTreeItemPointer> completionsForType(const AbstractType::Ptr &t) const;
+    QList<KDevelop::CompletionTreeItemPointer> completionsForPointer(const PointerType::Ptr &t) const;
     QList<KDevelop::CompletionTreeItemPointer> completionsForStruct(const StructureType::Ptr &t) const;
     QList<KDevelop::CompletionTreeItemPointer> completionsForEnum(const EnumType::Ptr &t) const;
     QList<KDevelop::CompletionTreeItemPointer> completionsForSlice(const SliceType::Ptr &t) const;
