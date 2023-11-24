@@ -139,19 +139,6 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
     if (kind == FunctionDecl) {
         updateFunctionDeclReturnType(node);
     }
-    else if (kind == VarDecl|| kind == ParamDecl || kind  == FieldDecl) {
-        if (auto s = lastType().dynamicCast<StructureType>()) {
-            DUChainWriteLocker lock;
-            if (auto decl = s->declaration(nullptr)) {
-                if (decl->topContext() != currentDeclaration()->topContext()) {
-                    if (auto ctx = decl->internalContext()) {
-                        currentContext()->addImportedParentContext(ctx);
-                    }
-                }
-            }
-        }
-    }
-
 }
 
 template<NodeKind Kind>
