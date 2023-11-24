@@ -122,12 +122,15 @@ void UnionType::setDataType(const AbstractType::Ptr& type)
     d_func_dynamic()->m_dataType = IndexedType(type);
 }
 
-bool UnionType::isEnum() const
+AbstractType::Ptr UnionType::enumType() const
 {
     if (auto unionType = baseType().dynamicCast<UnionType>())
-        return unionType->isEnum();
-    if (auto base = baseType().dynamicCast<BuiltinType>())
-        return (base->toString() == QLatin1String("enum"));
+        return unionType->enumType();
+    if (auto base = baseType().dynamicCast<BuiltinType>()) {
+        if (base->toString() == QLatin1String("enum")) {
+            return AbstractType::Ptr(const_cast<UnionType*>(this));
+        }
+    }
     return baseType().dynamicCast<EnumType>();
 }
 

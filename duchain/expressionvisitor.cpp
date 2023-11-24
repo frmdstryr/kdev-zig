@@ -118,6 +118,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitStructInit(node, parent);
     case NodeTag_error_union:
         return visitErrorUnion(node, parent);
+    case NodeTag_error_value:
+        return visitErrorValue(node, parent);
     case NodeTag_call:
     case NodeTag_call_comma:
     case NodeTag_call_one:
@@ -405,9 +407,16 @@ VisitResult ExpressionVisitor::visitNumberLiteral(const ZigNode &node, const Zig
 VisitResult ExpressionVisitor::visitCharLiteral(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    BuiltinType::Ptr t(new BuiltinType("u8"));
-    t->setComptimeKnownValue(node.mainToken().at(1)); // Remove the ''
-    encounter(t);
+    QString c = node.mainToken();
+    if (c.size() > 2) {
+        // Remove the '' but keep escapes eg '\n'
+        // qCDebug(KDEV_ZIG) << "visit char lit" << c << "size" << c.size();
+        BuiltinType::Ptr t(new BuiltinType("u8"));
+        t->setComptimeKnownValue(c.mid(1, c.size()-2));
+        encounter(t);
+    } else {
+        encounterUnknown();
+    }
     return Continue;
 }
 
@@ -583,6 +592,8 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         return callBuiltinImport(node);
     } else if (name == QLatin1String("@typeInfo")) {
         return callBuiltinTypeInfo(node);
+    } else if (name == QLatin1String("@TypeOf")) {
+        return callBuiltinTypeOf(node);
     } else if (name == QLatin1String("@fieldParentPtr")) {
         return callBuiltinFieldParentPtr(node);
     } else if (name == QLatin1String("@field")) {
@@ -782,16 +793,87 @@ VisitResult ExpressionVisitor::callBuiltinThis(const ZigNode &node)
     return Continue;
 }
 
-VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
+VisitResult ExpressionVisitor::callBuiltinTypeOf(const ZigNode &node)
 {
-    // TODO: Figure out how to make sure it resolves the imports?
-    auto stdBuiltinType = Helper::declarationForImportedModuleName(
-        "std.builtin.Type", session()->document().str(), true);
-    if (stdBuiltinType) {
-        encounterLvalue(DeclarationPointer(stdBuiltinType));
+    if (isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        encounter(v.lastType()); // TODO: Flag for instance/type ?
     } else {
         encounterUnknown();
     }
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
+{
+    auto decl = Helper::declarationForImportedModuleName(
+        "std.builtin.Type", session()->document().str(), true);
+    if (decl) {
+        auto Type = decl->abstractType().dynamicCast<UnionType>();
+        if (isBuiltinCallTwo(node) && Type) {
+            ExpressionVisitor v(this);
+            v.startVisiting(node.lhsAsNode(), node);
+            QString typeName;
+            if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
+                if (value->isType())
+                    typeName = "Type";
+                else if (value->isVoid())
+                    typeName = "Void";
+                else if (value->isBool())
+                    typeName = "Bool";
+                else if (value->isComptimeInt())
+                    typeName = "ComptimeInt";
+                else if (value->isComptimeFloat())
+                    typeName = "ComptimeFloat";
+                else if (value->isInteger())
+                    typeName = "Int";
+                else if (value->isFloat())
+                    typeName = "Float";
+                else if (value->isUndefined())
+                    typeName = "Undefined";
+                else if (value->isNull())
+                    typeName = "Null";
+                else if (value->isFrame())
+                    typeName = "Frame";
+                else if (value->isAnyframe())
+                    typeName = "AnyFrame";
+                else if (value->isNoreturn())
+                    typeName = "NoReturn";
+            } else if (v.lastType().dynamicCast<FunctionType>()) {
+                typeName = "Fn";
+            } else if (v.lastType().dynamicCast<UnionType>()) {
+                typeName = "Union"; // Must come before struct
+            } else if (v.lastType().dynamicCast<StructureType>()) {
+                typeName = "Struct";
+            } else if (v.lastType().dynamicCast<ErrorType>()) {
+                typeName = "ErrorUnion"; // TODO: Is this right ?
+            } else if (v.lastType().dynamicCast<PointerType>()) {
+                typeName = "Pointer";
+            } else if (v.lastType().dynamicCast<OptionalType>()) {
+                typeName = "Optional";
+            } else if (auto enumType = v.lastType().dynamicCast<EnumType>()) {
+                // TOOD: Error set ?
+                if (enumType->enumType().dynamicCast<EnumType>())
+                    typeName = "EnumLiteral";
+                else
+                    typeName = "Enum";
+            } else if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+                if (slice->dimension() > 0)
+                    typeName = "Array";
+                else
+                    typeName = "Slice";
+            }
+
+            if (auto T = Helper::accessAttribute(Type, typeName, topContext())) {
+                encounterLvalue(DeclarationPointer(T));
+                return Continue;
+            }
+        }
+        encounterLvalue(DeclarationPointer(decl));
+        return Continue;
+    }
+    encounterUnknown();
     return Continue;
 }
 
@@ -1018,6 +1100,13 @@ VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNod
     errType->setBaseType(typeVisitor.lastType());
     errType->setErrorType(errorVisitor.lastType());
     encounter(errType);
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitErrorValue(const ZigNode &node, const ZigNode &parent)
+{
+    // TODO: get actual value
+    encounter(BuiltinType::newFromName("anyerror"));
     return Continue;
 }
 
@@ -1412,11 +1501,49 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
 {
     Q_UNUSED(parent);
     // TODO: It's possible to check the range
-    // ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(this);
     v.startVisiting(node.lhsAsNode(), node);
-    if (auto slice = v.lastType().dynamicCast<SliceType>()) {
-        encounter(slice->elementType());
+
+    // Ptr is walked automatically
+    auto T = v.lastType();
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
+    if (auto slice = T.dynamicCast<SliceType>()) {
+        auto elementType = slice->elementType();
+
+        // Copy const
+        if ((slice->modifiers() & AbstractType::ConstModifier)
+            && !(elementType->modifiers() & AbstractType::ConstModifier)
+        ) {
+            AbstractType::Ptr e(elementType->clone());
+            e->setModifiers(elementType->modifiers() | AbstractType::ConstModifier);
+            elementType = e;
+        }
+
+        // If element is a char/u8 copy comptime known value
+        auto v = elementType.dynamicCast<BuiltinType>();
+        if (slice->isComptimeKnown() && (slice->dimension() > 0) && v && v->isChar()) {
+            ExpressionVisitor v2(this);
+            v2.startVisiting(node.rhsAsNode(), node);
+
+            auto index = v2.lastType().dynamicCast<BuiltinType>();
+            if (index && index->isComptimeKnown() && index->isUnsigned()) {
+                bool ok;
+                const auto i = index->comptimeKnownValue().str().toULongLong(&ok, 0);
+                if (ok) {
+                    QString str = slice->comptimeKnownValue().str();
+                    if (i < static_cast<qulonglong>(str.size())) {
+                        BuiltinType::Ptr e(static_cast<BuiltinType*>(v->clone()));
+                        e->setComptimeKnownValue(str.at(i));
+                        elementType = e;
+                    }
+                }
+            }
+        }
+
+        // TODO: if index is comptime known set
+        encounter(elementType);
     } else {
         encounterUnknown();
     }

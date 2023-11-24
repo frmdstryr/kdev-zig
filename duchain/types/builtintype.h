@@ -54,6 +54,7 @@ public:
     void setDataType(const IndexedString &dataType);
     inline void setDataType(const QString &dataType) { setDataType(IndexedString(dataType)); }
 
+    bool isChar() const; // c_char or u8
     bool isSigned() const;
     bool isUnsigned() const;
     bool isFloat() const;
@@ -68,14 +69,14 @@ public:
 
     // "null" (does not check nullptr)
     bool isNull() const;
-    // "undefined"
     bool isUndefined() const;
-    // "type"
     bool isType() const;
-    // "anytype"
     bool isAnytype() const;
-    // "void"
     bool isVoid() const;
+    bool isAnyframe() const;
+    bool isFrame() const;
+    bool isOpaque() const;
+    bool isNoreturn() const;
 
     // Get bitsize of an int (-1 if not in or unkown type)
     int bitsize() const;

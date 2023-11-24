@@ -237,7 +237,7 @@ void DUChainTest::sanityCheckTypeInfo()
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier("T"));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), QString("Type"));
+    QCOMPARE(decls.first()->abstractType()->toString(), QString("std.builtin.Type::Int"));
 }
 
 void DUChainTest::sanityCheckBasicImport()
@@ -528,8 +528,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int = 1" << "";
     QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float = 1.1" << "";
     QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8 = \"abc\"" << "";
+    QTest::newRow("const str index") << "const y = \"abc\"; const x = y[0];" << "x" << "const u8 = a" << "";
     QTest::newRow("volatile ptr") << "var io: *volatile u32 = @ptrFromInt(0x400000);" << "io" << "*volatile u32" << "";
     QTest::newRow("char lit") << "const x = 'a';" << "x" << "u8 = a" << "";
+    // QTest::newRow("char lit esc") << "const x = '\n';" << "x" << "u8 = \n" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
@@ -587,6 +589,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("if expr 2") << "var x = if (false) 1 else 2;" << "x" << "comptime_int = 2" << "";
     QTest::newRow("if expr 3") << "var x: ?u8 = 0; var y = if (x) |z| z else 2;" << "y" << "u8" << "";
     QTest::newRow("if expr 4") << "const T = if (1 > 2) u8 else u32;" << "T" << "u32" << "";
+    QTest::newRow("if expr str") << "const s = if (x) \"true\" else \"false\";" << "s" << "*const [:0]u8" << "";
     //QTest::newRow("if expr 4") << "var y = if (null) |z| z else 2;" << "y" << "comptime_int = 2" << "";
     QTest::newRow("if expr merge bool") << "var y = if (x > 2) true else !true;" << "y" << "bool" << "";
     QTest::newRow("if expr merge 1") << "var y = if (x > 2) null else false;" << "y" << "?bool" << "";
@@ -792,6 +795,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{"Attempt to unwrap non-optional type"} << "";
     QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{"Attempt to index non-array type"} << "";
     QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{"Array index is not an integer type"} << "";
+    QTest::newRow("const str ptr index") << "const x = \"abcd\"; const y = x[0];" << QStringList{} << "";
     QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{"Array index is not an integer type"} << "";
     QTest::newRow("enum") << "const Status = enum{Ok, Error}; const x: Status = .Ok;" << QStringList{} << "";
     QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{"Invalid enum field Invalid"} << "";
@@ -807,6 +811,8 @@ void DUChainTest::testProblems_data()
     QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; }" << QStringList{} << "";
     QTest::newRow("enum comp") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Ok) {}};" << QStringList{} << "";
     QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}}" << QStringList{"Invalid enum field Bad"} << "";
+    QTest::newRow("union enum switch") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}} }" << QStringList{} << "";
+    QTest::newRow("union enum switch invalid") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}, .bool=>{}} }" << QStringList{"Invalid enum field bool"} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";

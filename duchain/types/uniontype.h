@@ -85,8 +85,14 @@ public:
      */
     AbstractType::Ptr dataType() const;
 
-    // Whether it can be used in switches
-    bool isEnum() const;
+    // Enum if it can be used in switches.
+    // May be null or may be a union in the case of union(enum)
+    AbstractType::Ptr enumType() const;
+
+    inline bool isEnum() const
+    {
+        return enumType().data();
+    }
 
     QString toString() const override;
 

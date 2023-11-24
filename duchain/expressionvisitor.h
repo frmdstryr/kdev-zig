@@ -51,6 +51,7 @@ public:
     VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIdentifier(const ZigNode &node, const ZigNode &parent);
     VisitResult visitErrorUnion(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitErrorValue(const ZigNode &node, const ZigNode &parent);
     VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
@@ -75,6 +76,7 @@ public:
 
     VisitResult callBuiltinThis(const ZigNode &node);
     VisitResult callBuiltinTypeInfo(const ZigNode &node);
+    VisitResult callBuiltinTypeOf(const ZigNode &node);
     VisitResult callBuiltinImport(const ZigNode &node);
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
     VisitResult callBuiltinField(const ZigNode &node);

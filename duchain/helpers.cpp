@@ -248,6 +248,26 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
         }
     }
 
+    // Two strings with different dimensions (eg `if (x) "true" else "false"`)
+    // merge into a type with no size like *const [:0]u8
+    if (const auto aptr = a.dynamicCast<PointerType>()) {
+        const auto bptr = b.dynamicCast<PointerType>();
+        if (bptr && aptr->modifiers() == bptr->modifiers()) {
+            const auto sa = aptr->baseType().dynamicCast<SliceType>();
+            const auto sb = bptr->baseType().dynamicCast<SliceType>();
+            if (sa && sa->equalsIgnoringValueAndDimension(sb.data())) {
+                PointerType::Ptr ptr(new PointerType);
+                SliceType::Ptr slice(new SliceType);
+                slice->setElementType(sa->elementType());
+                slice->setModifiers(sa->modifiers());
+                slice->setSentinel(sa->sentinel());
+                ptr->setBaseType(slice);
+                ptr->setModifiers(aptr->modifiers());
+                return ptr;
+            }
+        }
+    }
+
     // Else, idk how to merge so its mixed
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }

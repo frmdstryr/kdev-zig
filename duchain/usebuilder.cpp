@@ -554,14 +554,19 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
     ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v1(session, currentContext());
     v1.startVisiting(lhs, node);
+    auto T = v1.lastType();
 
-    if (auto slice = v1.lastType().dynamicCast<SliceType>()) {
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
+    if (auto slice = T.dynamicCast<SliceType>()) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(session, currentContext());
         v2.startVisiting(rhs, node);
         if (auto index = v2.lastType().dynamicCast<BuiltinType>()) {
+            // TODO: Check range if known ?
             if (index->isInteger()) {
-                auto decl = v1.lastDeclaration();
+                auto decl = v1.lastDeclaration(); // Is this correct ?
                 auto useRange = lhs.spellingRange();
                 if (decl && decl->range() != useRange) {
                     UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
@@ -915,8 +920,14 @@ bool UseBuilder::checkAndAddEnumUse(
         const QString &enumName,
         const KDevelop::RangeInRevision &useRange)
 {
-    auto enumeration = accessed.dynamicCast<EnumType>();
-    if (!enumeration){
+    AbstractType::Ptr enumType(accessed.dynamicCast<EnumType>());
+    if (!enumType.data()) {
+        if (auto unionType = accessed.dynamicCast<UnionType>()) {
+            enumType = unionType->enumType();
+        }
+    }
+
+    if (!enumType.data()) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -927,7 +938,7 @@ bool UseBuilder::checkAndAddEnumUse(
         return false;
     }
 
-    auto decl = Helper::accessAttribute(enumeration, enumName, topContext());
+    auto decl = Helper::accessAttribute(enumType, enumName, topContext());
     // TODO: Verify decl is an enumeration type and not a fn or something
     if (!decl) {
         ProblemPointer p = ProblemPointer(new Problem());
@@ -935,7 +946,7 @@ bool UseBuilder::checkAndAddEnumUse(
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         DUChainWriteLocker lock;
-        p->setDescription(i18n("Invalid enum field %1 on %2", enumName, enumeration->toString()));
+        p->setDescription(i18n("Invalid enum field %1 on %2", enumName, enumType->toString()));
         topContext()->addProblem(p);
         return false;
     }

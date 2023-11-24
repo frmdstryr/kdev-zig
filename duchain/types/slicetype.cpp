@@ -52,7 +52,7 @@ AbstractType* SliceType::clone() const
     return new SliceType(*this);
 }
 
-bool SliceType::equalsIgnoringValue(const AbstractType* _rhs) const
+bool SliceType::equalsIgnoringValueAndDimension(const AbstractType* _rhs) const
 {
     if (this == _rhs)
         return true;
@@ -61,13 +61,21 @@ bool SliceType::equalsIgnoringValue(const AbstractType* _rhs) const
     Q_ASSERT(dynamic_cast<const SliceType*>(_rhs));
     const auto* rhs = static_cast<const SliceType*>(_rhs);
     TYPE_D(SliceType);
-    if (d->m_dimension != rhs->d_func()->m_dimension)
-        return false;
     if (d->m_sentinel != rhs->d_func()->m_sentinel)
         return false;
     return d->m_elementType == rhs->d_func()->m_elementType;
 
 }
+
+bool SliceType::equalsIgnoringValue(const AbstractType* _rhs) const
+{
+    if (!equalsIgnoringValueAndDimension(_rhs))
+        return false;
+    const auto* rhs = static_cast<const SliceType*>(_rhs);
+    // Check dimension
+    return d_func()->m_dimension == rhs->d_func()->m_dimension;
+}
+
 
 int SliceType::dimension() const
 {

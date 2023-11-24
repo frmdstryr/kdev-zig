@@ -54,7 +54,7 @@ public:
     AbstractType* clone() const override;
 
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
-
+    bool equalsIgnoringValueAndDimension(const AbstractType* rhs) const;
 
     // Check for *const [x:0]u8 implicitly casting to []u8
     // or &[x]T to []T

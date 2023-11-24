@@ -162,6 +162,15 @@ uint BuiltinType::hash() const
         << d_func()->m_data.hash() << ComptimeType::hash();
 }
 
+bool BuiltinType::isChar() const
+{
+    STATIC_INDEXED_STR(u8);
+    STATIC_INDEXED_STR(c_char);
+    return (d_func()->m_data == indexed_u8
+        || d_func()->m_data == indexed_c_char
+    );
+}
+
 bool BuiltinType::isUnsigned() const
 {
     // TODO: Set flags instead of doing this ?
@@ -303,6 +312,29 @@ bool BuiltinType::isVoid() const
     return d_func()->m_data == indexed_void;
 }
 
+bool BuiltinType::isAnyframe() const
+{
+    STATIC_INDEXED_STR(anyframe);
+    return d_func()->m_data == indexed_anyframe;
+}
+
+bool BuiltinType::isFrame() const
+{
+    STATIC_INDEXED_STR(frame);
+    return d_func()->m_data == indexed_frame;
+}
+
+bool BuiltinType::isOpaque() const
+{
+    STATIC_INDEXED_STR(opaque);
+    return d_func()->m_data == indexed_opaque;
+}
+
+bool BuiltinType::isNoreturn() const
+{
+    STATIC_INDEXED_STR(noreturn);
+    return d_func()->m_data == indexed_noreturn;
+}
 
 int BuiltinType::bitsize() const
 {
