@@ -602,6 +602,10 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         return callBuiltinIntFromFloat(node);
     } else if (name == QLatin1String("@floatFromInt")) {
         return callBuiltinFloatFromInt(node);
+    } else if (name == QLatin1String("@intFromBool")) {
+        return callBuiltinIntFromBool(node);
+    } else if (name == QLatin1String("@boolFromInt")) {
+        return callBuiltinBoolFromInt(node);
     } else if (name == QLatin1String("@intCast")) {
         return callBuiltinIntCast(node);
     } else if (name == QLatin1String("@enumFromInt")) {
@@ -708,7 +712,7 @@ VisitResult ExpressionVisitor::callBuiltinIntFromFloat(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinFloatFromInt(const ZigNode &node)
 {
-    qCDebug(KDEV_ZIG) << "callBuiltinFloatFromInt";
+    // qCDebug(KDEV_ZIG) << "callBuiltinFloatFromInt";
     const auto result = inferredType().dynamicCast<BuiltinType>();
     if (result && result->isFloat() && isBuiltinCallTwo(node)) {
         ExpressionVisitor v(this);
@@ -719,6 +723,57 @@ VisitResult ExpressionVisitor::callBuiltinFloatFromInt(const ZigNode &node)
             encounter(result);
             return Continue;
         }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinIntFromBool(const ZigNode &node)
+{
+    const auto result = inferredType().dynamicCast<BuiltinType>();
+    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isBool()) {
+            if (value->isTrue() || value->isFalse()) {
+                BuiltinType::Ptr r(static_cast<BuiltinType*>(result->clone()));
+                r->setComptimeKnownValue(value->isTrue() ? "1" : "0");
+                encounter(r);
+            } else {
+                encounter(result);
+            }
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinBoolFromInt(const ZigNode &node)
+{
+    if (isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        const auto value = v.lastType().dynamicCast<BuiltinType>();
+        if (value && value->isInteger()) {
+            if (value->isComptimeKnown()) {
+                bool ok;
+                bool val = false;
+                QString s = value->comptimeKnownValue().str();
+                if (value->isSigned()) {
+                    val = s.toLongLong(&ok, 0);
+                } else {
+                    val = s.toULongLong(&ok, 0);
+                }
+                if (ok) {
+                    encounter(BuiltinType::newFromName( val ? "true" : "false"));
+                    return Continue;
+                }
+            }
+        }
+        encounter(BuiltinType::newFromName("bool"));
+        return Continue;
     }
     encounterUnknown();
     return Continue;

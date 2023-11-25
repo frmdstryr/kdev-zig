@@ -705,16 +705,12 @@ export fn ast_var_is_const(ptr: ?*Ast, index: NodeIndex) bool {
 export fn ast_var_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[index];
-            return switch (tag) {
-                .simple_var_decl => ast.simpleVarDecl(index).ast.type_node,
-                .aligned_var_decl => ast.alignedVarDecl(index).ast.type_node,
-                .global_var_decl => ast.globalVarDecl(index).ast.type_node,
-                .local_var_decl => ast.localVarDecl(index).ast.type_node,
-                // All are data.lhs
-                .container_field, .container_field_align, .container_field_init => ast.nodes.items(.data)[index].lhs,
-                else => 0,
-            };
+            if (ast.fullVarDecl(index)) |var_data| {
+                return var_data.ast.type_node;
+            }
+            if (ast.fullContainerField(index)) |field_data| {
+                return field_data.ast.type_expr;
+            }
         }
     }
     return 0;
@@ -723,18 +719,12 @@ export fn ast_var_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
 export fn ast_var_value(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[index];
-            return switch (tag) {
-                .simple_var_decl,
-                .aligned_var_decl,
-                .global_var_decl,
-                .local_var_decl,
-                .container_field_init, => ast.nodes.items(.data)[index].rhs,
-                // TODO:
-                // .container_field,
-                // .container_field_align,
-                else => 0,
-            };
+            if (ast.fullVarDecl(index)) |var_data| {
+                return var_data.ast.init_node;
+            }
+            if (ast.fullContainerField(index)) |field_data| {
+                return field_data.ast.value_expr;
+            }
         }
     }
     return 0;

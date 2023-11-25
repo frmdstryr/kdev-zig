@@ -548,6 +548,7 @@ void DUChainTest::testVarType_data()
     // FIXME: QTest::newRow("enum int") << "const Status = enum{Ok = 1, Error = 0};" << "Ok" << "Status" << "";
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
+    QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {\n s: S\n};" << "s" << "S" << "A";
     QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";
     QTest::newRow("fn !void") << "pub fn main() !void {}" << "main" << "function !void ()"<< "";
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
@@ -648,6 +649,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("@field()") << "const Foo = struct {a: u8}; test{var x = Foo{}; var y = @field(x, \"a\");\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@field() expr") << "const Foo = struct {a: u8}; test{const f = \"a\"; var x = Foo{}; var y = @field(x, f);\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
+    QTest::newRow("cast @boolFromInt()") << "const y: u8 = 7; const x = @boolFromInt(y);" << "x" << "bool = true" << "";
+    QTest::newRow("cast @boolFromInt() 2") << "const y: i8 = 1; const x = @boolFromInt(-y);" << "x" << "bool = true" << "";
+    QTest::newRow("cast @intFromBool()") << "const x: u8 = @intFromBool(true);" << "x" << "u8 = 1" << "";
+    QTest::newRow("cast @intFromBool() 2") << "const x: i8 = @intFromBool(false);" << "x" << "i8 = 0" << "";
     QTest::newRow("@fieldParentPtr()") <<
         "const Point = struct {x: i32=0, y: i32=0};\n"
         "test{var point = Point{}; const p = @fieldParentPtr(Point, \"x\", &point.x);\n}"
@@ -801,7 +806,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{"Attempted to access enum field on non-enum type"} << "";
     QTest::newRow("enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Error; \n}" << QStringList{} << "1,0";
-    QTest::newRow("invalid enumr assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum assign invalid ") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("enum switch case 2") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("enum switch case 3") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error, .Bad => {}}}" << QStringList{"Invalid enum field Bad"} << "";
@@ -858,6 +863,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{"Struct A has no field b"} << "";
     QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{"Invalid enum field"} << "";
+    QTest::newRow("struct field default enum ") << "const S = enum {Ok, Err}; const A = struct {s: S = .Ok};" << QStringList{} << "";
+    QTest::newRow("struct field default enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S = .NotOk};" << QStringList{"Invalid enum field NotOk"} << "";
+    QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; text { var a = A{.a = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
     //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
 

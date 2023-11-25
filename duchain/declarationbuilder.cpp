@@ -287,6 +287,7 @@ template <NodeKind Kind, EnableIf<!NodeTraits::isTypeDeclaration(Kind) && Kind !
 AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigNode &parent)
 {
     if (Kind == FieldDecl && parent.kind() == EnumDecl) {
+        // Enum field
         EnumType::Ptr t(new EnumType);
         auto parentContext = session->contextFromNode(parent);
         Q_ASSERT(parentContext);
@@ -311,11 +312,13 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         return t;
     }
     else if (Kind == FieldDecl && node.tag() == NodeTag_error_set_decl) {
+        // Error field
         EnumType::Ptr t(new EnumType);
         // Updated in buildErrorDecl
         return t;
     }
     else if (Kind == FieldDecl && parent.kind() == UnionDecl) {
+        // Union field
         UnionType::Ptr u(new UnionType);
         ExpressionVisitor v(session, currentContext());
         v.startVisiting(node.lhsAsNode(), node);
@@ -329,55 +332,60 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         }
         return u;
     }
-    else if (Kind == VarDecl || Kind == FieldDecl) {
-        const bool isConst = (Kind == VarDecl) ? node.mainToken() == QLatin1String("const") : false;
+    else if (Kind == FieldDecl) {
+        // Struct field
+        ZigNode typeNode = node.varType();
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(typeNode, node);
+        return v.lastType();
+    } else if (Kind == VarDecl) {
+        const bool isConst = node.mainToken() == QLatin1String("const");
         ZigNode typeNode = node.varType();
         ZigNode valueNode = node.varValue();
 
-        // Type and value
-        if (!typeNode.isRoot()) {
-            ExpressionVisitor typeVisitor(session, currentContext());
-            typeVisitor.startVisiting(typeNode, node);
-            auto t = typeVisitor.lastType();
-            // Skip for fields / var, that also requires tracking changes...
-            if (!isConst || valueNode.isRoot())
-                return t; // No value
-
-            // TODO: Should it skip fields?
-            // If the value is assigned try set the comptime known value
-            if (auto type = dynamic_cast<ComptimeType*>(t.data())) {
-                ExpressionVisitor v(session, currentContext());
-                v.setInferredType(t);
-                v.startVisiting(valueNode, node);
-
-                // If we have a builtin type and a comptime known value
-                // clone the type and copy the value. This is so the type
-                // info not lost. Eg `const x: u8 = 1` will keep the u8 type.
-                if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
-                    if (value->isComptimeKnown()) {
-                        auto comptimeType = dynamic_cast<ComptimeType*>(t->clone());
-                        Q_ASSERT(comptimeType);
-                        comptimeType->setComptimeKnownValue(value->comptimeKnownValue());
-                        return comptimeType->asType();
-                    }
-                }
-                // If we have another comptime known value return the value
-                // This may be an enum field, string or something
-                // TODO: This can squash an error if the type is not correct
-                else if (auto value = dynamic_cast<ComptimeType*>(v.lastType().data())) {
-                    if (value->isComptimeKnown()) {
-                        return value->asType();
-                    }
-                }
-            }
-            return t; // Has a value but could be another variable/expression, etc..
-        }
-        // Only have value
-        else if (!valueNode.isRoot()) {
+        // Value only
+        if (typeNode.isRoot()) {
             ExpressionVisitor v(session, currentContext());
             v.startVisiting(valueNode, node);
             return v.lastType();
         }
+
+        // Type and value
+        ExpressionVisitor typeVisitor(session, currentContext());
+        typeVisitor.startVisiting(typeNode, node);
+        auto t = typeVisitor.lastType();
+        // Skip for fields / var, that also requires tracking changes...
+        if (!isConst || valueNode.isRoot())
+            return t; // No value
+
+        // TODO: Should it skip fields?
+        // If the value is assigned try set the comptime known value
+        if (auto type = dynamic_cast<ComptimeType*>(t.data())) {
+            ExpressionVisitor v(session, currentContext());
+            v.setInferredType(t);
+            v.startVisiting(valueNode, node);
+
+            // If we have a builtin type and a comptime known value
+            // clone the type and copy the value. This is so the type
+            // info not lost. Eg `const x: u8 = 1` will keep the u8 type.
+            if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
+                if (value->isComptimeKnown()) {
+                    auto comptimeType = dynamic_cast<ComptimeType*>(t->clone());
+                    Q_ASSERT(comptimeType);
+                    comptimeType->setComptimeKnownValue(value->comptimeKnownValue());
+                    return comptimeType->asType();
+                }
+            }
+            // If we have another comptime known value return the value
+            // This may be an enum field, string or something
+            // TODO: This can squash an error if the type is not correct
+            else if (auto value = dynamic_cast<ComptimeType*>(v.lastType().data())) {
+                if (value->isComptimeKnown()) {
+                    return value->asType();
+                }
+            }
+        }
+        return t; // Has a value but could be another variable/expression, etc..
     }
     else if (Kind ==  ParamDecl) {
         // Function arg node is the type
@@ -414,13 +422,17 @@ void DeclarationBuilder::setType(Declaration *decl, AbstractType *type)
     // (Kind == VarDecl || Kind == ParamDecl || Kind == FieldDecl)
     // qCDebug(KDEV_ZIG) << "setType<Kind> AbstractType" << Kind;
     if (Kind == FieldDecl) {
-        if (auto enumType = dynamic_cast<EnumType*>(type)) {
-            enumType->setDeclaration(decl);
-            decl->setAlwaysForceDirect(true);
-        }
-        else if (auto unionType = dynamic_cast<UnionType*>(type)) {
-            unionType->setDeclaration(decl);
-            decl->setAlwaysForceDirect(true);
+        // Set enum and union fields as a direct declarations, but not struct fields
+        auto parent = decl->context()->owner();
+        if (parent && (parent->type<EnumType>() || parent->type<UnionType>())) {
+            if (auto enumType = dynamic_cast<EnumType*>(type)) {
+                enumType->setDeclaration(decl);
+                decl->setAlwaysForceDirect(true);
+            }
+            if (auto unionType = dynamic_cast<UnionType*>(type)) {
+                unionType->setDeclaration(decl);
+                decl->setAlwaysForceDirect(true);
+            }
         }
     }
     decl->setAbstractType(AbstractType::Ptr(type));

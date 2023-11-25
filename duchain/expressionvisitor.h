@@ -86,6 +86,8 @@ public:
     VisitResult callBuiltinIntCast(const ZigNode &node);
     VisitResult callBuiltinEnumFromInt(const ZigNode &node);
     VisitResult callBuiltinIntFromEnum(const ZigNode &node);
+    VisitResult callBuiltinBoolFromInt(const ZigNode &node);
+    VisitResult callBuiltinIntFromBool(const ZigNode &node);
 
     /**
      * Return the self type of a function call node

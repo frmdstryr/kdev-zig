@@ -61,7 +61,9 @@ public:
     static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
 
     static void scheduleDependency(
-        const KDevelop::IndexedString& dependency, int betterThanPriority);
+        const KDevelop::IndexedString& dependency,
+        int betterThanPriority,
+        QObject* notifyWhenReady = nullptr);
 
     static KDevelop::Declaration* declarationForName(
         const QString& name,

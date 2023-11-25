@@ -270,6 +270,61 @@ VisitResult UseBuilder::visitStructInit(const ZigNode &node, const ZigNode &pare
     return Continue;
 }
 
+AssignmentCheckResult UseBuilder::checkGenericAssignment(
+    const KDevelop::AbstractType::Ptr &lhs,
+    const ZigNode &node,
+    const ZigNode &parent)
+{
+    auto target = lhs;
+    if (auto opt = target.dynamicCast<OptionalType>()) {
+        target = opt->baseType();
+    }
+    NodeTag tag = node.tag();
+    if (auto enumeration = target.dynamicCast<EnumType>()) {
+        if (tag == NodeTag_enum_literal) {
+            bool ok = checkAndAddEnumUse(
+                enumeration,
+                node.mainToken(),
+                node.mainTokenRange()
+            );
+            return {ok, false, enumeration};
+        }
+    }
+
+    if (auto s = target.dynamicCast<StructureType>()) {
+        if (tag == NodeTag_struct_init_dot
+            || tag == NodeTag_struct_init_dot_comma
+            || tag == NodeTag_struct_init_dot_two
+            || tag == NodeTag_struct_init_dot_two_comma
+        ) {
+            TokenIndex tok = ast_node_main_token(node.ast, node.index);
+            auto dotRange = node.tokenRange(tok - 1);
+            bool ok = checkAndAddStructInitUse(s, node, dotRange);
+            return {ok, false, s};
+        }
+    }
+
+    if (auto s = target.dynamicCast<SliceType>()) {
+        if (tag == NodeTag_struct_init_dot
+            || tag == NodeTag_array_init_dot
+            || tag == NodeTag_array_init_dot_comma
+            || tag == NodeTag_array_init_dot_two
+            || tag == NodeTag_array_init_dot_two_comma
+        ) {
+            TokenIndex tok = ast_node_main_token(node.ast, node.index);
+            auto dotRange = node.tokenRange(tok - 1);
+            bool ok = checkAndAddArrayInitUse(s, node, dotRange);
+            return {ok, false, s};
+        }
+    }
+
+    ExpressionVisitor v(session, currentContext());
+    v.setInferredType(target);
+    v.startVisiting(node, parent);
+    bool ok = Helper::canTypeBeAssigned(lhs, v.lastType());
+    return {ok, !ok, v.lastType()};
+}
+
 bool UseBuilder::checkAndAddStructInitUse(
     const KDevelop::StructureType::Ptr &structType,
     const ZigNode &structInitNode,
@@ -293,8 +348,10 @@ bool UseBuilder::checkAndAddStructInitUse(
     if (decl->range() != useRange) {
         UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
     }
+    auto unionType = decl->type<UnionType>();
     // TODO: Check fields
     const auto n = structInitNode.structInitCount();
+
     bool ok = true;
     for (uint32_t i=0; i < n; i++) {
         FieldInitData fieldData = structInitNode.structInitAt(i);
@@ -303,6 +360,18 @@ bool UseBuilder::checkAndAddStructInitUse(
         auto useRange = structInitNode.tokenRange(fieldData.name_token);
         if (!checkAndAddStructFieldUse(structType, fieldName, fieldValue, structInitNode, useRange)) {
             ok = false;
+        }
+
+        if (unionType && i > 1) {
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Hint);
+            p->setDescription(i18n("Union can only have one field"));
+            DUChainWriteLocker lock;
+            topContext()->addProblem(p);
+            ok = false;
+            break; // Show for all ?
         }
     }
     return ok;
@@ -332,40 +401,14 @@ bool UseBuilder::checkAndAddStructFieldUse(
         UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
     }
 
-    // Enum field
-    if (auto enumeration = decl->abstractType().dynamicCast<EnumType>()) {
-        if (valueNode.tag() == NodeTag_enum_literal) {
-            return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
+    auto target = decl->abstractType();
+    if (auto unionType = decl->type<UnionType>()) {
+        if (unionType->dataType()) {
+            target = unionType->dataType();
         }
     }
-
-    // Struct init
-    if (auto nestedStruct = decl->abstractType().dynamicCast<StructureType>()) {
-        //if (valueNode.kind() == ContainerInit) {
-        auto range = valueNode.spellingRange();
-        return checkAndAddStructInitUse(nestedStruct, valueNode, range);
-        //}
-    }
-
-    // TODO: Array init
-    if (auto sliceType = decl->abstractType().dynamicCast<SliceType>()) {
-        auto tag = valueNode.tag();
-        if (tag == NodeTag_array_init_dot
-            || tag == NodeTag_array_init_dot_comma
-            || tag == NodeTag_array_init_dot_two
-            || tag == NodeTag_array_init_dot_two_comma
-        ) {
-            auto range = valueNode.spellingRange();
-            return checkAndAddArrayInitUse(sliceType, valueNode, range);
-        }
-    }
-
-    // Generic field assignment
-    qCDebug(KDEV_ZIG) << "Assign struct field" << fieldName;
-    ExpressionVisitor v(session, currentContext());
-    v.setInferredType(decl->abstractType());
-    v.startVisiting(valueNode, structInitNode);
-    if (!Helper::canTypeBeAssigned(decl->abstractType(), v.lastType())) {
+    auto result = checkGenericAssignment(target, valueNode, structInitNode);
+    if (result.mismatch) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -373,9 +416,10 @@ bool UseBuilder::checkAndAddStructFieldUse(
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Struct field type mismatch. Expected %1 got %2",
-            decl->abstractType()->toString(), v.lastType()->toString()));
+            decl->abstractType()->toString(), result.value->toString()));
         topContext()->addProblem(p);
         return false;
+
     }
     return true;
 }
@@ -421,29 +465,8 @@ bool UseBuilder::checkAndAddArrayItemUse(
         const ZigNode &arrayInitNode,
         const KDevelop::RangeInRevision &useRange)
 {
-    if (auto s = itemType.dynamicCast<StructureType>()) {
-        auto tag = valueNode.tag();
-        if (tag == NodeTag_struct_init_dot
-            || tag == NodeTag_struct_init_dot_comma
-            || tag == NodeTag_struct_init_dot_two
-            || tag == NodeTag_struct_init_dot_two_comma
-        ) {
-            TokenIndex tok = ast_node_main_token(valueNode.ast, valueNode.index);
-            auto dotRange = valueNode.tokenRange(tok - 1);
-            return checkAndAddStructInitUse(s, valueNode, dotRange);
-        }
-        // return checkAndAddStructInitUse(s, valueNode, valueNode.spellingRange());
-    }
-
-    if (auto enumeration = itemType.dynamicCast<EnumType>()) {
-        if (valueNode.tag() == NodeTag_enum_literal) {
-            return checkAndAddEnumUse(enumeration, valueNode.mainToken(), valueNode.mainTokenRange());
-        }
-    }
-
-    ExpressionVisitor v(session, currentContext());
-    v.startVisiting(valueNode, arrayInitNode);
-    if (!Helper::canTypeBeAssigned(itemType, v.lastType())) {
+    auto result = checkGenericAssignment(itemType, valueNode, arrayInitNode);
+    if (result.mismatch) {
         if (Helper::isMixedType(itemType)) {
             return Continue; // Probably not implemented or resolved yet
         }
@@ -454,7 +477,7 @@ bool UseBuilder::checkAndAddArrayItemUse(
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Array item type mismatch at index %1. Expected %2 got %3",
-            itemIndex, itemType->toString(), v.lastType()->toString()));
+            itemIndex, itemType->toString(), result.value->toString()));
         topContext()->addProblem(p);
     }
     return true;
@@ -476,20 +499,8 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
     auto target = v.lastType();
-    // TODO: Check struct dot init, array dot init...
-
-    if (target.dynamicCast<EnumType>() && rhs.tag() == NodeTag_enum_literal) {
-        checkAndAddEnumUse(target, rhs.mainToken(), rhs.mainTokenRange());
-        return Continue;
-    }
-
-    ExpressionVisitor valueVisitor(session, currentContext());
-    valueVisitor.setInferredType(target);
-    valueVisitor.startVisiting(rhs, node);
-    auto value = valueVisitor.lastType();
-
-
-    if (!Helper::canTypeBeAssigned(target, value)) {
+    auto result = checkGenericAssignment(target, rhs, node);
+    if (result.mismatch) {
         if (Helper::isMixedType(target)) {
             return Continue; // Probably not implemented or resolved yet
         }
@@ -500,7 +511,7 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Assignment type mismatch. Expected %1 got %2",
-            target->toString(), value->toString()));
+            target->toString(), result.value));
         topContext()->addProblem(p);
     }
     return Continue;
@@ -848,71 +859,28 @@ bool UseBuilder::checkAndAddFnArgUse(
         topContext()->addProblem(p);
         return false;
     }
-    NodeTag tag = argValueNode.tag();
-
-    // Check inferred enum literal fields
-    // eg var x = call(.Foo);
-    if (auto enumeration = argType.dynamicCast<EnumType>()) {
-        if (tag == NodeTag_enum_literal) {
-            return checkAndAddEnumUse(
-                enumeration,
-                argValueNode.mainToken(),
-                argValueNode.mainTokenRange()
-            );
-        }
-    }
-
-    if (auto s = argType.dynamicCast<StructureType>()) {
-        if (tag == NodeTag_struct_init_dot
-            || tag == NodeTag_struct_init_dot_comma
-            || tag == NodeTag_struct_init_dot_two
-            || tag == NodeTag_struct_init_dot_two_comma
-        ) {
-            TokenIndex tok = ast_node_main_token(argValueNode.ast, argValueNode.index);
-            auto dotRange = argValueNode.tokenRange(tok - 1);
-            return checkAndAddStructInitUse(s, argValueNode, dotRange);
-        }
-    }
-
-    if (auto s = argType.dynamicCast<SliceType>()) {
-        if (tag == NodeTag_struct_init_dot
-            || tag == NodeTag_array_init_dot
-            || tag == NodeTag_array_init_dot_comma
-            || tag == NodeTag_array_init_dot_two
-            || tag == NodeTag_array_init_dot_two_comma
-        ) {
-            // TODO: Inferred types are always resolved by zig
-            TokenIndex tok = ast_node_main_token(argValueNode.ast, argValueNode.index);
-            auto dotRange = argValueNode.tokenRange(tok - 1);
-            return checkAndAddArrayInitUse(s, argValueNode, dotRange);
-        }
-    }
 
     if (auto templateParam = argType.dynamicCast<DelayedType>()) {
         // TODO: Check if argument is instance or type ?
         return false;
     }
 
-    auto useRange = argValueNode.range();
-    ExpressionVisitor v(session, currentContext());
-    v.setInferredType(argType);
-    v.startVisiting(argValueNode, callNode);
-    if (Helper::canTypeBeAssigned(argType, v.lastType())) {
-        return true; // Simple case
+    auto result = checkGenericAssignment(argType, argValueNode, callNode);
+    if (result.mismatch) {
+        if (Helper::isMixedType(argType)) {
+            return false; // Don't show error if we don't know the target type
+        }
+        auto useRange = argValueNode.range();
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Hint);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n("Argument %1 type mismatch. Expected %2 got %3", argIndex + 1,
+                            argType->toString(), result.value->toString()));
+        topContext()->addProblem(p);
     }
-
-    if (Helper::isMixedType(argType)) {
-        return false; // Don't show error if we don't know the target type
-    }
-    ProblemPointer p = ProblemPointer(new Problem());
-    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
-    p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
-    DUChainWriteLocker lock;
-    p->setDescription(i18n("Argument %1 type mismatch. Expected %2 got %3", argIndex + 1,
-                        argType->toString(), v.lastType()->toString()));
-    topContext()->addProblem(p);
-    return false;
+    return true;
 }
 
 bool UseBuilder::checkAndAddEnumUse(

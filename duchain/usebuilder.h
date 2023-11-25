@@ -33,6 +33,13 @@ namespace Zig
 
 using UseBuilderBase = KDevelop::AbstractUseBuilder<ZigNode, QString, ContextBuilder>;
 
+struct AssignmentCheckResult
+{
+    bool ok;
+    bool mismatch;
+    AbstractType::Ptr value;
+};
+
 class KDEVZIGDUCHAIN_EXPORT UseBuilder : public UseBuilderBase
 {
 public:
@@ -90,6 +97,11 @@ public:
         const KDevelop::AbstractType::Ptr &accessed,
         const QString &enumName,
         const KDevelop::RangeInRevision &useRange);
+
+    AssignmentCheckResult checkGenericAssignment(
+        const KDevelop::AbstractType::Ptr &lhs,
+        const ZigNode &node,
+        const ZigNode &parent);
 
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;

@@ -43,7 +43,10 @@ bool Helper::projectPackagesLoaded;
 QMap<QString, QString> Helper::projectPackages;
 
 
-void Helper::scheduleDependency(const IndexedString& dependency, int betterThanPriority)
+void Helper::scheduleDependency(
+    const IndexedString& dependency,
+    int betterThanPriority,
+    QObject* notifyWhenReady)
 {
     BackgroundParser* bgparser = KDevelop::ICore::self()->languageController()->backgroundParser();
     bool needsReschedule = true;
@@ -59,7 +62,7 @@ void Helper::scheduleDependency(const IndexedString& dependency, int betterThanP
     if ( needsReschedule ) {
         // qCDebug(KDEV_ZIG) << "Rescheduled " << dependency << "at priority" << betterThanPriority;
         bgparser->addDocument(dependency, TopDUContext::ForceUpdate, betterThanPriority - 1,
-                              nullptr, ParseJob::FullSequentialProcessing);
+                              notifyWhenReady, ParseJob::FullSequentialProcessing);
     }
 }
 
