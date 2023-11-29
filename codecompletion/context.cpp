@@ -65,13 +65,22 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     CompletionResultType result_type = completion.data()->result_type;
     if (result_type == CompletionField) {
         QString name = completion.data()->name;
+        QStringList parts = name.split(".");
         qCDebug(KDEV_ZIG) << "Field completion on: " << name;
         Declaration* decl = Helper::declarationForName(
-            name,
+            parts.at(0),
             m_position,
             DUChainPointer<const DUContext>(localContext));
         if (!decl)
             return items;
+        if (parts.size() > 1) {
+            for (const auto &attr : parts.mid(1)) {
+                decl = Helper::accessAttribute(decl->abstractType(), attr, top);
+                if (!decl)
+                    return items;
+            }
+        }
+
         items.append(completionsForType(decl->abstractType()));
     }
     else {

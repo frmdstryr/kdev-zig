@@ -336,6 +336,18 @@ bool BuiltinType::isNoreturn() const
     return d_func()->m_data == indexed_noreturn;
 }
 
+bool BuiltinType::isTrap() const
+{
+    STATIC_INDEXED_STR(trap);
+    return d_func()->m_data == indexed_trap;
+}
+
+bool BuiltinType::isUnreachable() const
+{
+    STATIC_INDEXED_STR(unreachable);
+    return d_func()->m_data == indexed_unreachable;
+}
+
 int BuiltinType::bitsize() const
 {
     if (isVoid())
@@ -394,6 +406,8 @@ bool BuiltinType::isBuiltinType(const QString& name)
         || name == QLatin1String("c_longlong")
         || name == QLatin1String("c_ulonglong")
         || name == QLatin1String("c_longdouble")
+        || name == QLatin1String("trap") // @panic / @compileError
+        || name == QLatin1String("unreachable")
     );
 }
 

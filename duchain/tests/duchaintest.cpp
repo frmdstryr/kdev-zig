@@ -526,6 +526,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("const bool") << "const x = true;" << "x" << "bool = true" << "";
     QTest::newRow("var bool") << "var x: bool = undefined;" << "x" << "bool" << "";
     QTest::newRow("comp int") << "const x = 1;" << "x" << "comptime_int = 1" << "";
+    QTest::newRow("comp int hex") << "const x = 0xff;" << "x" << "comptime_int = 0xff" << "";
+    QTest::newRow("comp int bin") << "const x = 0b11;" << "x" << "comptime_int = 0b11" << "";
     QTest::newRow("comp float") << "const x = 1.1;" << "x" << "comptime_float = 1.1" << "";
     QTest::newRow("const str") << "const x = \"abc\";" << "x" << "*const [3:0]u8 = \"abc\"" << "";
     QTest::newRow("const str index") << "const y = \"abc\"; const x = y[0];" << "x" << "const u8 = a" << "";
@@ -580,8 +582,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("negate comptime") << "var x = 1; var y = -x;" << "y" << "comptime_int = -1" << "";
     QTest::newRow("negate unsigned") << "var x: u8 = 1; var y = -x;" << "y" << "mixed" << "";
     QTest::newRow("negate float") << "var x: f32 = 1; var y = -x;" << "y" << "f32" << "";
-    QTest::newRow("math expression") << "var x: f32 = 1; var y = (1 + -x);" << "y" << "f32" << "";
-    QTest::newRow("math expression 2") << "var x: f32 = 1; var y = (1/x + -2*x);" << "y" << "f32" << "";
+    QTest::newRow("math expr") << "var x: f32 = 1; var y = (1 + -x);" << "y" << "f32" << "";
+    QTest::newRow("math expr 2") << "var x: f32 = 1; var y = (1/x + -2*x);" << "y" << "f32" << "";
+    QTest::newRow("math expr infer lhs") << "var x: bool = undefined; const v = @as(u8, @intFromBool(x)) | @intFromBool(1);" << "v" << "u8" << "";
+    //QTest::newRow("math expr infer rhs") << "var x: bool = undefined; const v = @intFromBool(1) | @as(u8, @intFromBool(x));" << "v" << "u8" << "";
     QTest::newRow("try") << "pub fn main() !f32 {return 1;}\ntest{\nvar x = try main(); \n}" << "x" << "f32"<< "3,0";
     QTest::newRow("orelse") << "var x: ?i8 = null; var y = x orelse 1;" << "y" << "i8" << "";
     QTest::newRow("orelse bad") << "var x: i8 = 0; var y = x orelse 1;" << "y" << "mixed" << "";
@@ -688,6 +692,8 @@ void DUChainTest::testVarType_data()
     // Imported namespaces
     QTest::newRow("no usingnamespace") << "const A = struct {const a = 1;}; const B = struct { var x = a;\n};" << "x" << "mixed" << "B";
     QTest::newRow("usingnamespace") << "const A = struct {const a = 1;}; const B = struct { usingnamespace A; var x = a;\n};" << "x" << "comptime_int" << "B";
+
+    QTest::newRow("switch") << "var a: u1 = 1; const x = switch (a) {0=> \"zero\", 1=> \"one\"};" << "x" << "*const [:0]u8" << "x";
 
     QTest::newRow("var order") << "const A = 1 << B; const B = @as(u32, 1);\n" << "A" << "u32" << "";
     QTest::newRow("aliased struct") <<
@@ -833,6 +839,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn call enum arg inferred") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Ok); }" << QStringList{} << "";
     QTest::newRow("fn call enum arg") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(Status.Ok); }" << QStringList{} << "";
     QTest::newRow("fn call enum arg inferred invalid") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Missing); }" << QStringList{"Invalid enum field Missing"} << "";
+    QTest::newRow("fn call arg if inferred") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var x: bool = undefined; var y = foo(if (x) .Ok else .Error); }" << QStringList{} << "";
     QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{"Argument 1 type mismatch. Expected u8 got bool"} << "";
     QTest::newRow("fn call implicit cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u8 = 1; var y = foo(x); }" << QStringList{} << "";
     QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{"type mismatch"} << "";
@@ -857,6 +864,11 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{"type mismatch"} << "";
     QTest::newRow("fn arg slice to const") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(x[0..]); }" << QStringList{} << "";
     QTest::newRow("fn arg ptr to const slice") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(&x); }" << QStringList{} << "";
+    QTest::newRow("fn error ok") << "pub fn write(msg: []const u8) !void {} test{ try write(\"abcd\"); }" << QStringList{} << "";
+    QTest::newRow("fn error ok 2") << "pub fn write(msg: []const u8) !void {} test{ const r = write(\"abcd\"); }" << QStringList{} << "";
+    QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
+    QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{"Error is ignored"} << "";
+    QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{"Return value is ignored"} << "";
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";

@@ -30,12 +30,12 @@
 #include "types/pointertype.h"
 #include "types/optionaltype.h"
 #include "types/delayedtype.h"
+#include "types/enumtype.h"
+#include "types/uniontype.h"
+#include "types/errortype.h"
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
-#include "types/enumtype.h"
-#include "types/uniontype.h"
-
 
 namespace Zig
 {
@@ -112,6 +112,9 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
             break;
         case NodeTag_assign:
             visitAssign(node, parent);
+            break;
+        case NodeTag_try:
+            visitTry(node, parent);
             break;
     }
     return ContextBuilder::visitNode(node, parent);
@@ -253,6 +256,53 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
     }
+    auto returnType = fn->returnType();
+    if (auto errorType = returnType.dynamicCast<ErrorType>()) {
+        returnType = errorType->baseType();
+        switch (parent.tag()) {
+            case NodeTag_block:
+            case NodeTag_block_semicolon:
+            case NodeTag_block_two:
+            case NodeTag_block_two_semicolon: {
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
+                p->setSource(IProblem::SemanticAnalysis);
+                p->setSeverity(IProblem::Warning);
+                p->setDescription(i18n("Error is ignored"));
+                DUChainWriteLocker lock;
+                topContext()->addProblem(p);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+     switch (parent.tag()) {
+        case NodeTag_block:
+        case NodeTag_block_semicolon:
+        case NodeTag_block_two:
+        case NodeTag_block_two_semicolon: {
+            auto builtin = returnType.dynamicCast<BuiltinType>();
+            if (builtin && builtin->isVoid()) {
+                // ok
+            } else if (Helper::isMixedType(returnType)) {
+                // maybe an error, idk
+            } else {
+                ProblemPointer p = ProblemPointer(new Problem());
+                p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
+                p->setSource(IProblem::SemanticAnalysis);
+                p->setSeverity(IProblem::Warning);
+                p->setDescription(i18n("Return value is ignored"));
+                DUChainWriteLocker lock;
+                topContext()->addProblem(p);
+            }
+        }
+        default:
+            break;
+     }
+
+
     return Continue;
 }
 
@@ -488,7 +538,8 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
-    if (lhs.tag() == NodeTag_identifier) {
+    const NodeTag tag = lhs.tag();
+    if (tag == NodeTag_identifier) {
         if (lhs.mainToken() == QLatin1String("_")) {
             // TODO: Check if it is used ?
             return Continue; // Discard
@@ -504,8 +555,9 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
         if (Helper::isMixedType(target)) {
             return Continue; // Probably not implemented or resolved yet
         }
+        auto useRange = (tag == NodeTag_field_access) ? node.tokenRange(lhs.data().rhs) : lhs.range();
         ProblemPointer p = ProblemPointer(new Problem());
-        p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+        p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
         DUChainWriteLocker lock;
@@ -607,13 +659,15 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
 VisitResult UseBuilder::visitUnwrapOptional(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    ZigNode owner = node.nextChild(); // access lhs
+    ZigNode lhs = node.lhsAsNode(); // access lhs
     ExpressionVisitor v(session, currentContext());
-    v.startVisiting(owner, node);
+    v.startVisiting(lhs, node);
     auto T = v.lastType();
-    if (auto ptr = T.dynamicCast<PointerType>()) {
+    if (auto ptr = T.dynamicCast<PointerType>())
         T = ptr->baseType();
-    }
+    if (Helper::isMixedType(T))
+        return Continue; // Maybe error, ignore
+
     auto useRange = node.range();
     if (auto s = T.dynamicCast<OptionalType>()) {
         auto decl = Helper::declarationForIdentifiedType(s->baseType(), nullptr);
@@ -626,8 +680,30 @@ VisitResult UseBuilder::visitUnwrapOptional(const ZigNode &node, const ZigNode &
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
+    p->setSeverity(IProblem::Warning);
     p->setDescription(i18n("Attempt to unwrap non-optional type"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+}
+
+VisitResult UseBuilder::visitTry(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode lhs = node.lhsAsNode(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(lhs, node);
+    if (Helper::isMixedType(v.lastType()))
+        return Continue; // May be an error, idk
+    if (auto errorType = v.lastType().dynamicCast<ErrorType>())
+        return Continue;
+
+    auto useRange = lhs.range();
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Warning);
+    p->setDescription(i18n("Try on non-error type"));
     DUChainWriteLocker lock;
     topContext()->addProblem(p);
     return Continue;
@@ -640,6 +716,8 @@ VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
     ZigNode owner = node.nextChild(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
+    if (Helper::isMixedType(v.lastType()))
+        return Continue; // May be an error, idk
     auto useRange = node.range();
     if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
         auto decl = Helper::declarationForIdentifiedType(ptr->baseType(), nullptr);
@@ -652,7 +730,7 @@ VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
     ProblemPointer p = ProblemPointer(new Problem());
     p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
     p->setSource(IProblem::SemanticAnalysis);
-    p->setSeverity(IProblem::Hint);
+    p->setSeverity(IProblem::Warning);
     p->setDescription(i18n("Attempt to dereference non-pointer type"));
     DUChainWriteLocker lock;
     topContext()->addProblem(p);
@@ -710,7 +788,7 @@ VisitResult UseBuilder::visitIf(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(cond, node);
     QString capture = node.captureName(CaptureType::Payload);
-    if (capture.isEmpty()) {
+    if (capture.isEmpty() && !Helper::isMixedType(v.lastType())) {
         if (auto builtin = v.lastType().dynamicCast<BuiltinType>()) {
             if (builtin->isBool()) {
                 return Continue; // Ok
@@ -719,10 +797,11 @@ VisitResult UseBuilder::visitIf(const ZigNode &node, const ZigNode &parent)
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, cond.range().castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
         if (auto optional = v.lastType().dynamicCast<OptionalType>()) {
+            p->setSeverity(IProblem::Warning);
             p->setDescription(i18n("Used if on optional type with no capture or comparison"));
         } else {
+            p->setSeverity(IProblem::Hint);
             p->setDescription(i18n("if condition is not a bool"));
         }
         DUChainWriteLocker lock;

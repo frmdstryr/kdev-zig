@@ -431,6 +431,7 @@ VisitResult ExpressionVisitor::visitEnumLiteral(const ZigNode &node, const ZigNo
             return Continue;
         }
     }
+    // qCDebug(KDEV_ZIG) << "visit enum unknown";
     encounterUnknown();
     return Continue;
 }
@@ -681,6 +682,12 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@hasDecl")
     ) {
         encounter(BuiltinType::newFromName("bool"));
+    } else if (
+        name == QLatin1String("@panic")
+        || name == QLatin1String("@compileError")
+        || name == QLatin1String("@compileLog")
+    ) {
+        encounter(BuiltinType::newFromName("trap"));
     } else {
         encounterUnknown();
     }
@@ -863,7 +870,7 @@ VisitResult ExpressionVisitor::callBuiltinTypeOf(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
 {
     auto decl = Helper::declarationForImportedModuleName(
-        "std.builtin.Type", session()->document().str(), true);
+        "std.builtin.Type", session()->document().str());
     if (decl) {
         auto Type = decl->abstractType().dynamicCast<UnionType>();
         if (isBuiltinCallTwo(node) && Type) {
@@ -1262,14 +1269,25 @@ VisitResult ExpressionVisitor::visitMathExpr(const ZigNode &node, const ZigNode 
     Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
 
     ExpressionVisitor v1(this);
     v1.startVisiting(lhs, node);
+    // TODO: What does zig do? Try to infer from other side?
+    // if (Helper::isMixedType(T)) {
+    //     ExpressionVisitor v2(this);
+    //     v2.startVisiting(rhs, node);
+    //
+    //     ExpressionVisitor v3(this);
+    //     v3.setInferredType(v2.lastType());
+    //     v3.startVisiting(lhs, node);
+    //     T = v1.lastType();
+    // }
 
     // Check if lhs & rhs are compatable
     if (const auto a = v1.lastType().dynamicCast<BuiltinType>()) {
-        ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(this);
+        v2.setInferredType(a); // TODO:
         v2.startVisiting(rhs, node);
         if (const auto b = v2.lastType().dynamicCast<BuiltinType>()) {
             // If both are comptime known try to evaluate the expr
@@ -1289,6 +1307,7 @@ VisitResult ExpressionVisitor::visitMathExpr(const ZigNode &node, const ZigNode 
                 || (a->isUnsigned() && b->isUnsigned())
             ) {
                 // TODO: Evaluate comptime known expr
+                // TODO: Does not expand widths eg u1 | u8 --> u8
                 encounter(a->isComptimeKnown() ? b : a);
                 return Continue;
             }
@@ -1409,6 +1428,7 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
         thenContext = context()->findContextAt(range.end);
     }
     ExpressionVisitor thenExpr(this, thenContext);
+    thenExpr.setInferredType(inferredType());
 
     auto elseContext = context();
     if (if_data.error_token != INVALID_TOKEN) {
@@ -1417,6 +1437,7 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
         elseContext = context()->findContextAt(range.end);
     }
     ExpressionVisitor elseExpr(this, elseContext);
+    elseExpr.setInferredType(inferredType());
 
     condExpr.startVisiting(condNode, node);
 
@@ -1458,6 +1479,13 @@ VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &p
     ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v(this);
     v.startVisiting(lhs, node);
+
+    const NodeSubRange subrange = node.subRange();
+    if (!subrange.isValid()) {
+        qCDebug(KDEV_ZIG) << "switch subrange is invalid" << node.index;
+        encounterUnknown();
+        return Continue;
+    }
     if (const auto switchValue = dynamic_cast<ComptimeType*>(v.lastType().data())) {
         if (switchValue->isComptimeKnown()) {
             // {
@@ -1465,12 +1493,6 @@ VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &p
             //     qCDebug(KDEV_ZIG) << "switch is comptime known" << switchValue->toString();
             // }
             // Try to return matching case
-            const NodeSubRange subrange = node.subRange();
-            if (!subrange.isValid()) {
-                qCDebug(KDEV_ZIG) << "switch subrange is invalid" << node.index;
-                encounterUnknown();
-                return Continue;
-            }
             for (uint32_t j=subrange.start; j<subrange.end; j++) {
                 const ZigNode caseNode = node.extraDataAsNode(j);
                 Q_ASSERT(!caseNode.isRoot());
@@ -1499,8 +1521,30 @@ VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &p
             }
         }
     }
-    // TODO: Merge result types of switch ?
-    encounterUnknown();
+
+    AbstractType::Ptr resultType;
+    for (uint32_t j=subrange.start; j<subrange.end; j++) {
+        const ZigNode caseNode = node.extraDataAsNode(j);
+        ZigNode caseValue = {caseNode.ast, caseNode.data().rhs};
+        ExpressionVisitor valueVisitor(this);
+        valueVisitor.setInferredType(inferredType());
+        valueVisitor.startVisiting(caseValue, caseNode);
+        if (auto builtin = valueVisitor.lastType().dynamicCast<BuiltinType>()) {
+            if (builtin->isTrap() || builtin->isUnreachable())
+                continue; // skip @panic, @compileError, unreachable branches
+        }
+        if (!resultType.data()) {
+            resultType = valueVisitor.lastType();
+        } else {
+            resultType = Helper::mergeTypes(resultType, valueVisitor.lastType(), context());
+        }
+    }
+    if (resultType.data()) {
+        encounter(resultType);
+    } else {
+        encounterUnknown();
+    }
+
     return Continue;
 }
 

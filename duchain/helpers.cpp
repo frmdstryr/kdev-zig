@@ -175,6 +175,17 @@ bool Helper::canMergeNumericBuiltinTypes(
 KDevelop::AbstractType::Ptr Helper::removeComptimeValue(
         const KDevelop::AbstractType::Ptr &a)
 {
+    if (auto t = a.dynamicCast<EnumType>()) {
+        if (t->enumType().data())
+            return t->enumType(); // Use Eg if Status.Ok, return Status
+        return a;
+    }
+    if (auto t = a.dynamicCast<UnionType>()) {
+        if (t->baseType().data())
+            return t->baseType(); // Use Eg if Payload.Int, return Payload
+        return t;
+    }
+
     if (auto comptimeType = dynamic_cast<const ComptimeType*>(a.data())) {
         if (comptimeType->isComptimeKnown()) {
             auto copy = dynamic_cast<ComptimeType*>(a->clone());
@@ -193,12 +204,18 @@ KDevelop::AbstractType::Ptr Helper::mergeTypes(
     const KDevelop::DUContext* context)
 {
     Q_UNUSED(context);
+    // {
+    //     DUChainReadLocker lock;
+    //     qCDebug(KDEV_ZIG) << "Helper::mergeTypes a=" << a->toString() << "b=" << b->toString();
+    // }
     if ( a->equals(b.data()) ) {
         return a;
     }
     if (const auto t = dynamic_cast<ComptimeType*>(a.data()) ) {
+        // qCDebug(KDEV_ZIG) << "two comptime types";
         if ( t->equalsIgnoringValue(b.data()) ) {
             // FIXME: This removes comptime_int/comptime_float value...
+            // qCDebug(KDEV_ZIG) << "equal ignoring value";
             return removeComptimeValue(t->asType());
         }
     }
@@ -521,7 +538,7 @@ AbstractType::Ptr Helper::evaluateUnsignedOp(
 }
 
 KDevelop::Declaration* Helper::declarationForImportedModuleName(
-        const QString& module, const QString& currentFile, bool waitForUpdate)
+        const QString& module, const QString& currentFile)
 {
     QStringList parts = module.split(".");
     if (parts.isEmpty()) {
@@ -536,18 +553,18 @@ KDevelop::Declaration* Helper::declarationForImportedModuleName(
     DUChainReadLocker lock;
     auto *mod = DUChain::self()->chainForDocument(package);
 
-    if (!mod && waitForUpdate) {
-        // Module not yet parsed, reschedule with a very high priority
-        // and wait for it to update
-        qCDebug(KDEV_ZIG) << "waiting for " << package << " to parse...";
-        lock.unlock();
-        IndexedString doc(package);
-        const int maxPrio = std::numeric_limits<int>::max() - 0x100;
-        Helper::scheduleDependency(doc, maxPrio);
-        mod = DUChain::self()->waitForUpdate(
-            doc, KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
-        lock.lock();
-    }
+    // if (!mod && waitForUpdate) {
+    //     // Module not yet parsed, reschedule with a very high priority
+    //     // and wait for it to update
+    //     qCDebug(KDEV_ZIG) << "waiting for " << package << " to parse...";
+    //     lock.unlock();
+    //     IndexedString doc(package);
+    //     const int maxPrio = std::numeric_limits<int>::max() - 0x100;
+    //     Helper::scheduleDependency(doc, maxPrio);
+    //     mod = DUChain::self()->waitForUpdate(
+    //         doc, KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
+    //     lock.lock();
+    // }
     if (!mod || !mod->owner()) {
         qCDebug(KDEV_ZIG) << "imported module is invalid" << module;
         return nullptr;
@@ -569,24 +586,24 @@ KDevelop::Declaration* Helper::declarationForImportedModuleName(
         // Reschedule the delayed import at a high priority and
         // wait for it to update.
         // TODO: This will still not work for exprs like @import("foo").bar
-        auto delayedImport = decl->abstractType().dynamicCast<DelayedType>();
-        if (waitForUpdate && delayedImport && (delayedImport->modifiers() & ModuleModifier)) {
-            IndexedString doc(delayedImport->identifier());
-            qCDebug(KDEV_ZIG) << "waiting for delayed import " << doc.str() << " to parse...";
-            // Reschedule delayed import at high priority
-            const int maxPrio = std::numeric_limits<int>::max() - 0x100;
-            Helper::scheduleDependency(doc, maxPrio);
-            mod = DUChain::self()->waitForUpdate(
-                doc,
-                KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
-            lock.lock();
-            if (!mod || !mod->owner()) {
-                qCDebug(KDEV_ZIG) << "delayed import " << doc.str() << "is empty...";
-                return nullptr;
-            }
-            decl = mod->owner();
-            lock.unlock();
-        }
+        // auto delayedImport = decl->abstractType().dynamicCast<DelayedType>();
+        // if (waitForUpdate && delayedImport && (delayedImport->modifiers() & ModuleModifier)) {
+        //     IndexedString doc(delayedImport->identifier());
+        //     qCDebug(KDEV_ZIG) << "waiting for delayed import " << doc.str() << " to parse...";
+        //     // Reschedule delayed import at high priority
+        //     const int maxPrio = std::numeric_limits<int>::max() - 0x100;
+        //     Helper::scheduleDependency(doc, maxPrio);
+        //     mod = DUChain::self()->waitForUpdate(
+        //         doc,
+        //         KDevelop::TopDUContext::AllDeclarationsAndContexts).data();
+        //     lock.lock();
+        //     if (!mod || !mod->owner()) {
+        //         qCDebug(KDEV_ZIG) << "delayed import " << doc.str() << "is empty...";
+        //         return nullptr;
+        //     }
+        //     decl = mod->owner();
+        //     lock.unlock();
+        // }
     }
     return decl;
 }

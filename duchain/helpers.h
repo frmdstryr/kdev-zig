@@ -54,9 +54,8 @@ public:
 
     // Import a declaration based on the qualified name
     // eg "std.builtin.Type"
-    // WARNING: If waitForUpdate is true the duchain must not be locked
     static KDevelop::Declaration* declarationForImportedModuleName(
-           const QString& module, const QString& currentFile, bool waitForUpdate);
+           const QString& module, const QString& currentFile);
 
     static QVector<QUrl> getSearchPaths(const QUrl& workingOnDocument);
 

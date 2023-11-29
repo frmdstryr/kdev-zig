@@ -32,7 +32,7 @@ using namespace KDevelop;
 QTEST_MAIN(Zig::CompletionTest)
 
 static int testId = 0;
-static QString basepath = "/tmp/__kdevzigcompletiontest.dir/";
+static QString basepath = "/tmp/kdevzigcompletiontest.dir/";
 
 namespace Zig {
 
@@ -72,6 +72,8 @@ ReferencedTopDUContext makeAndParseFile(QString filename, QString contents) {
 
 void CompletionTest::initShell()
 {
+    QDir d;
+    d.mkpath(basepath);
     AutoTestShell::init();
     TestCore* core = new TestCore();
     core->initialize(KDevelop::Core::NoUi);
@@ -90,8 +92,6 @@ void CompletionTest::initShell()
     QCOMPARE(languages.size(), 1);
     QCOMPARE(languages.first(), m_langSupport);
 
-    QDir d;
-    d.mkpath(basepath);
 }
 
 const QList<CompletionTreeItem*> CompletionTest::invokeCompletionOn(const QString& initCode, const QString& invokeCode)
@@ -225,6 +225,18 @@ void CompletionTest::testFieldAccess_data()
         << "const A = struct {a: u8, b:u8};\n"
            "const x = A{};\n"
            "const y = x.%INVOKE" << "%CURSOR" << "a";
+    QTest::newRow("nested struct")
+        << "const C = struct {a: u8, b:u8};\n"
+           "const B = struct {c: C};\n"
+           "const A = struct {b: B };\n"
+           "const x = A{};\n"
+           "x.b.c.%INVOKE" << "%CURSOR" << "a";
+    QTest::newRow("nested struct assign")
+        << "const B = struct {a: u8, b:u8};\n"
+           "const A = struct {b: B };\n"
+           "const x = A{};\n"
+           "const y = x.b.%INVOKE" << "%CURSOR" << "a";
+
 }
 
 

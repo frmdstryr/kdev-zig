@@ -47,6 +47,17 @@ AbstractType* UnionType::clone() const
     return new UnionType(*this);
 }
 
+// bool UnionType::equals(const AbstractType* _rhs) const
+// {
+//     if (!equalsIgnoringValue(_rhs))
+//         return false;
+//     Q_ASSERT(dynamic_cast<const UnionType*>(_rhs));
+//     const auto* rhs = static_cast<const UnionType*>(_rhs);
+//     if (d_func()->m_dataType != rhs->d_func()->m_dataType)
+//         return false;
+//     return ComptimeType::equals(rhs);
+// }
+
 bool UnionType::equalsIgnoringValue(const AbstractType* _rhs) const
 {
     if (this == _rhs)
@@ -61,6 +72,26 @@ bool UnionType::equalsIgnoringValue(const AbstractType* _rhs) const
         (d_func()->m_baseType == rhs->d_func()->m_baseType)
         && (d_func()->m_dataType == rhs->d_func()->m_dataType)
     );
+
+    // if (d_func()->m_id == rhs->d_func()->m_id)
+    //     return true; // Same decl
+    //
+    // // Two values of same base type
+    // if (d_func()->m_baseType && rhs->d_func()->m_baseType)
+    //     return d_func()->m_baseType == rhs->d_func()->m_baseType;
+    // // value to base
+    // if (d_func()->m_baseType)
+    //     return d_func()->m_baseType.abstractType()->equals(rhs);
+    // // base to value
+    // if (rhs->d_func()->m_baseType)
+    //     return rhs->d_func()->m_baseType.abstractType()->equals(this);
+    //
+    // // Don't check data type here as it depends on value
+    // // eg with const Payload = union {Int: u32, Float: f32};
+    // // we want Payload.Int and Payload.Float to equal ignoring the value
+    // // for a union.
+    // //return (d_func()->m_dataType == rhs->d_func()->m_dataType);
+    // return false;
 }
 
 bool UnionType::canValueBeAssigned(const AbstractType::Ptr &rhs) const

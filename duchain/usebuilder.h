@@ -58,10 +58,12 @@ public:
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
     VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
     VisitResult visitUnwrapOptional(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitTry(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIdent(const ZigNode &node, const ZigNode &parent);
     VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitchCase(const ZigNode &node, const ZigNode &parent);
+
 
     bool checkAndAddFnArgUse(
         const KDevelop::AbstractType::Ptr &argType,

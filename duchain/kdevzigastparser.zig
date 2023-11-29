@@ -192,13 +192,55 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
         completion.result_type = .BuiltinCall;
     }
 
+
     if (ast.nodes.len > 0) {
         const i: u32 = @intCast(ast.nodes.len-1);
-        const tag: Tag = ast.nodes.items(.tag)[i];
+        const tags = ast.nodes.items(.tag);
+        const node_data = ast.nodes.items(.data);
+        const main_tokens = ast.nodes.items(.main_token);
+        const tag: Tag = tags[i];
         switch (tag) {
-            .identifier, .container_field_init => {
-                const tok = ast.nodes.items(.main_token)[i];
+            .identifier => {
+                const tok = main_tokens[i];
                 completion.name = allocator.dupeZ(u8, ast.tokenSlice(tok)) catch {
+                    return null;
+                };
+            },
+            .field_access => {
+                const d = node_data[i];
+                if (d.lhs == 0) {
+                    return null;
+                }
+                if (tags[d.lhs] == .identifier) {
+                    const start_tok = main_tokens[d.lhs];
+                    const start_loc = ast.tokenLocation(0, start_tok);
+                    const start = start_loc.line_start + start_loc.column;
+                    const end_loc = ast.tokenLocation(0, d.rhs);
+                    const attr = ast.tokenSlice(d.rhs);
+                    const end = end_loc.line_start + end_loc.column + attr.len;
+                    if (end > start) {
+                        const name = ast.source[start..end];
+                        completion.name = allocator.dupeZ(u8, name) catch {
+                            return null;
+                        };
+                    }
+                }
+                return null;
+            },
+            .container_field_init => {
+                const tok = main_tokens[i];
+                const d = node_data[i];
+                var name = ast.tokenSlice(tok);
+                if (d.lhs != 0) {
+                    if (tags[d.lhs] == .field_access) {
+                        const start = ast.tokenLocation(0, tok);
+                        const end = ast.tokenLocation(0, d.rhs);
+                        if (end.line_end - 1 > start.line_start) {
+                            name = ast.source[start.line_start..end.line_end - 1];
+                        }
+                    }
+                }
+                completion.name = allocator.dupeZ(u8, name) catch {
                     return null;
                 };
             },

@@ -77,6 +77,8 @@ public:
     bool isFrame() const;
     bool isOpaque() const;
     bool isNoreturn() const;
+    bool isTrap() const;
+    bool isUnreachable() const;
 
     // Get bitsize of an int (-1 if not in or unkown type)
     int bitsize() const;

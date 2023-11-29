@@ -50,13 +50,25 @@ bool EnumType::equalsIgnoringValue(const AbstractType* _rhs) const
     if (this == _rhs)
         return true;
 
-    if (!EnumTypeBase::equalsIgnoringValue(_rhs))
+    // The identified types will not match since each enum value has its own
+    // declaration so only check the AbstractType
+    if (!AbstractType::equals(_rhs))
         return false;
 
     Q_ASSERT(dynamic_cast<const EnumType*>(_rhs));
     const auto* rhs = static_cast<const EnumType*>(_rhs);
 
-    return d_func()->m_enumType == rhs->d_func()->m_enumType;
+    if (d_func()->m_id == rhs->d_func()->m_id)
+        return true; // Same type and value
+    // May be same type with different values
+    if (d_func()->m_enumType && rhs->d_func()->m_enumType)
+        return d_func()->m_enumType == rhs->d_func()->m_enumType;
+    // May have either enum value against enum type on either side
+    if (d_func()->m_enumType)
+        return d_func()->m_enumType.abstractType()->equals(_rhs);
+    if (rhs->d_func()->m_enumType)
+        return rhs->d_func()->m_enumType.abstractType()->equals(this);
+    return false;
 }
 
 bool EnumType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
