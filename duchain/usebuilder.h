@@ -59,6 +59,7 @@ public:
     VisitResult visitDeref(const ZigNode &node, const ZigNode &parent);
     VisitResult visitUnwrapOptional(const ZigNode &node, const ZigNode &parent);
     VisitResult visitTry(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitCatch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIdent(const ZigNode &node, const ZigNode &parent);
     VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
@@ -69,7 +70,8 @@ public:
         const KDevelop::AbstractType::Ptr &argType,
         const uint32_t argIndex,
         const ZigNode &argValueNode,
-        const ZigNode &callNode);
+        const ZigNode &callNode,
+        QMap<KDevelop::IndexedString, KDevelop::AbstractType::Ptr> &resolvedArgTypes);
 
     bool checkAndAddStructInitUse(
         const KDevelop::StructureType::Ptr &structType,

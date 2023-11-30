@@ -567,9 +567,10 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
     }
 
     if (node.returnsInferredError()) {
-        auto *errType = new ErrorType();
+        ErrorType::Ptr errType(new ErrorType);
         errType->setBaseType(returnType);
-        returnType = AbstractType::Ptr(errType);
+        // TODO: Should it set type to anyerror?
+        returnType = errType;
     }
     DUChainWriteLocker lock;
     fn->setReturnType(returnType);

@@ -36,6 +36,7 @@
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
+#include "delayedtypevisitor.h"
 
 namespace Zig
 {
@@ -115,6 +116,9 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
             break;
         case NodeTag_try:
             visitTry(node, parent);
+            break;
+        case NodeTag_catch:
+            visitCatch(node, parent);
             break;
     }
     return ContextBuilder::visitNode(node, parent);
@@ -223,7 +227,7 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         if (requiredArgs == 1) {
             p->setDescription(i18n("Expected 1 argument"));
         } else {
@@ -236,9 +240,10 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 
     // Check fn arguments
     uint32_t i = 0;
+    QMap<IndexedString, AbstractType::Ptr> resolvedArgTypes;
     for (const auto &arg: args.mid(startArg)) {
         ZigNode argValueNode = node.callParamAt(i);
-        checkAndAddFnArgUse(arg, i, argValueNode, node);
+        checkAndAddFnArgUse(arg, i, argValueNode, node, resolvedArgTypes);
         i += 1;
     }
 
@@ -246,7 +251,7 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, node.mainTokenRange().castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         const auto extra = n - requiredArgs;
         if (extra == 1) {
             p->setDescription(i18n("Function has an extra argument"));
@@ -439,7 +444,7 @@ bool UseBuilder::checkAndAddStructFieldUse(
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         DUChainWriteLocker lock;
         p->setDescription(
             i18n("Struct %1 has no field %2", structType->toString(), fieldName));
@@ -452,6 +457,9 @@ bool UseBuilder::checkAndAddStructFieldUse(
     }
 
     auto target = decl->abstractType();
+    if (Helper::isMixedType(target)) {
+        return false;
+    }
     if (auto unionType = decl->type<UnionType>()) {
         if (unionType->dataType()) {
             target = unionType->dataType();
@@ -459,10 +467,13 @@ bool UseBuilder::checkAndAddStructFieldUse(
     }
     auto result = checkGenericAssignment(target, valueNode, structInitNode);
     if (result.mismatch) {
+        if (Helper::isMixedType(result.value)) {
+            return false;
+        }
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Struct field type mismatch. Expected %1 got %2",
@@ -495,6 +506,9 @@ bool UseBuilder::checkAndAddArrayInitUse(
         const ZigNode &arrayInitNode,
         const KDevelop::RangeInRevision &useRange)
 {
+    if (Helper::isMixedType(sliceType->elementType())) {
+        return true; // No point in checking
+    }
     const auto n = arrayInitNode.arrayInitCount();
     bool ok = true;
     for (uint32_t i=0; i < n; i++) {
@@ -517,13 +531,13 @@ bool UseBuilder::checkAndAddArrayItemUse(
 {
     auto result = checkGenericAssignment(itemType, valueNode, arrayInitNode);
     if (result.mismatch) {
-        if (Helper::isMixedType(itemType)) {
-            return Continue; // Probably not implemented or resolved yet
+        if (Helper::isMixedType(result.value)) {
+            return true; // Probably not implemented or resolved yet
         }
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Array item type mismatch at index %1. Expected %2 got %3",
@@ -550,20 +564,23 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
     auto target = v.lastType();
+    if (Helper::isMixedType(target)) {
+        return Continue; // Probably not implemented or resolved yet
+    }
     auto result = checkGenericAssignment(target, rhs, node);
     if (result.mismatch) {
-        if (Helper::isMixedType(target)) {
-            return Continue; // Probably not implemented or resolved yet
+        if (Helper::isMixedType(result.value)) {
+            return Continue;
         }
         auto useRange = (tag == NodeTag_field_access) ? node.tokenRange(lhs.data().rhs) : lhs.range();
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         DUChainWriteLocker lock;
         p->setDescription(i18n(
             "Assignment type mismatch. Expected %1 got %2",
-            target->toString(), result.value));
+            target->toString(), result.value->toString()));
         topContext()->addProblem(p);
     }
     return Continue;
@@ -577,7 +594,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     if (attr.isEmpty()) {
         return Continue;
     }
-    ZigNode owner = node.nextChild(); // access lhs
+    ZigNode owner = node.lhsAsNode(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
     auto T = v.lastType();
@@ -590,6 +607,10 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
         }
     }
 
+    if (Helper::isMixedType(T)) {
+        return Continue; // Ignore
+    }
+
     auto *decl = Helper::accessAttribute(T, attr, topContext());
     RangeInRevision useRange = editorFindSpellingRange(node, attr);
     if (!decl) {
@@ -598,7 +619,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
-        p->setSeverity(IProblem::Hint);
+        p->setSeverity(IProblem::Warning);
         p->setDescription(i18n("No field %1 on %2", attr, ident));
         topContext()->addProblem(p);
     }
@@ -708,6 +729,54 @@ VisitResult UseBuilder::visitTry(const ZigNode &node, const ZigNode &parent)
     topContext()->addProblem(p);
     return Continue;
 }
+
+VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    ZigNode lhs = node.lhsAsNode(); // access lhs
+    ExpressionVisitor v(session, currentContext());
+    v.startVisiting(lhs, node);
+    if (Helper::isMixedType(v.lastType()))
+        return Continue; // May be an error, idk
+    if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
+
+        if (Helper::isMixedType(errorType->baseType())) {
+            return Continue;
+        }
+
+        ExpressionVisitor v2(session, currentContext());
+        v2.startVisiting(node.rhsAsNode(), node);
+        if (Helper::isMixedType(v2.lastType())) {
+            return Continue;
+        }
+
+        if (!Helper::canTypeBeAssigned(errorType->baseType(), v2.lastType())) {
+            auto useRange = node.range();
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Warning);
+            DUChainWriteLocker lock;
+            p->setDescription(i18n("Incompatible types %1 and %2",
+                errorType->baseType()->toString(),
+                v2.lastType()->toString()
+            ));
+            topContext()->addProblem(p);
+        }
+        return Continue;
+    }
+
+    auto useRange = lhs.range();
+    ProblemPointer p = ProblemPointer(new Problem());
+    p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
+    p->setSource(IProblem::SemanticAnalysis);
+    p->setSeverity(IProblem::Warning);
+    p->setDescription(i18n("Catch on non-error type"));
+    DUChainWriteLocker lock;
+    topContext()->addProblem(p);
+    return Continue;
+}
+
 
 VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
 {
@@ -921,7 +990,8 @@ bool UseBuilder::checkAndAddFnArgUse(
         const KDevelop::AbstractType::Ptr &argType,
         const uint32_t argIndex,
         const ZigNode &argValueNode,
-        const ZigNode &callNode)
+        const ZigNode &callNode,
+        QMap<KDevelop::IndexedString, KDevelop::AbstractType::Ptr> &resolvedArgTypes)
 {
     // {
     //     DUChainReadLocker lock;
@@ -939,14 +1009,34 @@ bool UseBuilder::checkAndAddFnArgUse(
         return false;
     }
 
+    // Resolve comptime type param
     if (auto templateParam = argType.dynamicCast<DelayedType>()) {
         // TODO: Check if argument is instance or type ?
-        return false;
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(argValueNode, callNode);
+        resolvedArgTypes.insert(templateParam->identifier(), v.lastType());
+        return true;
+    }
+    auto resolvedType = argType;
+    if (resolvedArgTypes.size() > 0) {
+        DelayedTypeFinder finder;
+        argType->accept(&finder);
+        if (finder.delayedTypes.size() > 0) {
+            // This parameter depends on a delayed type
+            for (const auto &t : finder.delayedTypes) {
+                Q_ASSERT(!t->identifier().isEmpty());
+                auto it = resolvedArgTypes.constFind(t->identifier());
+                if (it != resolvedArgTypes.constEnd()) {
+                    SimpleTypeExchanger exchanger(t, *it);
+                    resolvedType = exchanger.exchange(AbstractType::Ptr(resolvedType->clone()));
+                }
+            }
+        }
     }
 
-    auto result = checkGenericAssignment(argType, argValueNode, callNode);
+    auto result = checkGenericAssignment(resolvedType, argValueNode, callNode);
     if (result.mismatch) {
-        if (Helper::isMixedType(argType)) {
+        if (Helper::isMixedType(resolvedType)) {
             return false; // Don't show error if we don't know the target type
         }
         auto useRange = argValueNode.range();
@@ -956,7 +1046,7 @@ bool UseBuilder::checkAndAddFnArgUse(
         p->setSeverity(IProblem::Hint);
         DUChainWriteLocker lock;
         p->setDescription(i18n("Argument %1 type mismatch. Expected %2 got %3", argIndex + 1,
-                            argType->toString(), result.value->toString()));
+                            resolvedType->toString(), result.value->toString()));
         topContext()->addProblem(p);
     }
     return true;

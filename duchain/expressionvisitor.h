@@ -66,6 +66,7 @@ public:
     VisitResult visitOrelse(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBlock(const ZigNode &node, const ZigNode &parent);
 
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);

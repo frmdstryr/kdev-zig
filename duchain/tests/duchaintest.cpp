@@ -537,6 +537,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
     QTest::newRow("var ?*u8") << "var x: ?*u8 = 0;" << "x" << "?*u8" << "";
+    QTest::newRow("void block") << "const x = {};" << "x" << "void" << "";
     QTest::newRow("enum") << "const Day = enum{Mon, Tue};" << "Day" << "Day" << "";
     QTest::newRow("enum value") << "const Day = enum{Mon, Tue}; const mon = Day.Mon;" << "mon" << "Day.Mon" << "";
     QTest::newRow("inferred enum") << "const Day = enum{Mon, Tue}; const x: Day = .Mon;" << "x" << "Day.Mon" << "";
@@ -859,6 +860,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn opt base wrong") << "pub fn foo(bar: ?u8) void {} test {var x: ?i8 = 0; const y = foo(x); }" << QStringList{"type mismatch"} << "";
     QTest::newRow("fn type arg") << "pub fn foo(comptime T: type) void {} test {const y = foo(u8); }" << QStringList{} << "";
     // QTest::newRow("fn type arg null") << "pub fn foo(comptime T: type) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn type arg 2") << "pub fn foo(comptime T: type, bar: []const T) void {} test {const y = foo(u8, \"abcd\"); }" << QStringList{} << "";
+    QTest::newRow("fn type arg 3") << "pub fn foo(comptime T: type, bar: []const T) void {} test {const y = foo(u16, \"abcd\"); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn type arg 4") << "pub fn foo(comptime T: type, bar: []const T) []const T { return bar; } test {const x = foo(u8, \"abcd\"); const y = foo(u8, x); \n}" << QStringList{} << "1,0";
     QTest::newRow("fn arg []const u8") << "pub fn foo(bar: []const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn arg [:0]const u8") << "pub fn foo(bar: [:0]const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{"type mismatch"} << "";
@@ -869,6 +873,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
     QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{"Error is ignored"} << "";
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{"Return value is ignored"} << "";
+    QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{"Incompatible types"} << "";
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";

@@ -210,9 +210,12 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitSwitch(node, parent);
     //case NodeTag_switch_case:
     //case NodeTag_switch_case_inline:
-    case NodeTag_grouped_expression:
     case NodeTag_block:
     case NodeTag_block_semicolon:
+    case NodeTag_block_two:
+    case NodeTag_block_two_semicolon:
+        return visitBlock(node, parent);
+    case NodeTag_grouped_expression:
     //case NodeTag_block_two:
     // case NodeTag_block_two_semicolon:
     case NodeTag_await:
@@ -225,6 +228,13 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     // TODO: Thereset
 
     return Break;
+}
+
+VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &parent)
+{
+    // TODO: Labeled block ?
+    encounter(BuiltinType::newFromName("void"));
+    return Continue;
 }
 
 VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNode &parent)
@@ -637,6 +647,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@shlExact")
         || name == QLatin1String("@shrExact")
         || name == QLatin1String("@mulAdd")
+        || name == QLatin1String("@atomicLoad")
     ) {
         ExpressionVisitor v(this);
         v.startVisiting(node.nextChild(), node);
@@ -1090,7 +1101,7 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     }
 
     auto returnType = func->returnType();
-    // Shortcut, builtintypes have delayed types
+    // Shortcut, builtintypes cant have delayed types
     if (returnType.dynamicCast<BuiltinType>()) {
         encounter(returnType);
         return Continue;
@@ -1113,33 +1124,29 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     DelayedTypeFinder finder;
     returnType->accept(&finder);
     if (finder.delayedTypes.size() > 0) {
+        qCDebug(KDEV_ZIG) << "visit delayed return type";
         uint32_t i = 0;
+        // Resolve types
+        QMap<IndexedString, AbstractType::Ptr> resolvedTypes;
         for (const auto &arg: args.mid(startArg)) {
             if (auto param = arg.dynamicCast<Zig::DelayedType>()) {
-                bool found = false;
-                Q_ASSERT(!param->identifier().isEmpty());
-                for (const auto &t : finder.delayedTypes) {
-                    Q_ASSERT(!t->identifier().isEmpty());
-                    if (param->identifier() == t->identifier()) {
-                        found = true;
-                        finder.delayedTypes.removeAll(t);
-                        break;
-                    }
-                }
-                if (!found)
-                    continue;
-
                 ZigNode argValueNode = node.callParamAt(i);
                 if (!argValueNode.isRoot()) {
                     ExpressionVisitor valueVisitor(this);
                     valueVisitor.startVisiting(argValueNode, node);
-                    const auto value = valueVisitor.lastType();
-                    // WARNING: This does NOT work with empty types
-                    SimpleTypeExchanger exchanger(param, value);
-                    returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
+                    resolvedTypes.insert(param->identifier(), valueVisitor.lastType());
                 }
             }
             i += 1;
+        }
+
+        // Replace resolved
+        for (const auto &t: finder.delayedTypes) {
+            auto value = resolvedTypes.constFind(t->identifier());
+            if (value != resolvedTypes.constEnd()) {
+                SimpleTypeExchanger exchanger(t, *value);
+                returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
+            }
         }
     }
     encounter(returnType);

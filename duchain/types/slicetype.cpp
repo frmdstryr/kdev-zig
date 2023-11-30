@@ -129,7 +129,19 @@ void SliceType::accept0(TypeVisitor* v) const
 
 void SliceType::exchangeTypes(TypeExchanger* exchanger)
 {
-    d_func_dynamic()->m_elementType = IndexedType(exchanger->exchange(d_func()->m_elementType.abstractType()));
+    const auto oldType = d_func()->m_elementType.abstractType();
+    auto newType = exchanger->exchange(oldType);
+    if (oldType.data() != newType.data()) {
+        // TODO: Should it copy all modifiers?
+        if (oldType->modifiers() & ConstModifier
+            && !(newType->modifiers() & ConstModifier)
+        ) {
+            AbstractType::Ptr copy(newType->clone());
+            copy->setModifiers(newType->modifiers() | ConstModifier);
+            newType = copy;
+        }
+    }
+    d_func_dynamic()->m_elementType = IndexedType(newType);
 }
 
 AbstractType::WhichType SliceType::whichType() const
