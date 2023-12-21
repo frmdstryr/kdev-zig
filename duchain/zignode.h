@@ -83,6 +83,7 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     ZigNode returnType() const;
     bool returnsInferredError() const;
 
+    QString fnName() const;
     uint32_t fnParamCount() const;
     ParamData fnParamData(uint32_t i) const;
 

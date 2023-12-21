@@ -133,6 +133,7 @@ protected:
 
     // If call is a fn that returns a type, create a new decl for the type
     void visitCall(const ZigNode &node, const ZigNode &parent);
+
 };
 
 }

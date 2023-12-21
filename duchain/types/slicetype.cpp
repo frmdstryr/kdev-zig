@@ -163,6 +163,7 @@ bool SliceType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
 
     if (d_func()->m_dimension != 0)
         return false;
+
     // if target is const a non const can be used
     if (elementType()->modifiers() & AbstractType::ConstModifier) {
         if (const auto v = rhs.dynamicCast<SliceType>()) {
@@ -173,6 +174,13 @@ bool SliceType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
             if (const auto v = ptr->baseType().dynamicCast<SliceType>()) {
                 // TODO: const and sentinel ?
                 return Helper::typesEqualIgnoringModifiers(elementType(), v->elementType());
+            }
+        }
+    } else if (const auto ptr = rhs.dynamicCast<PointerType>()) {
+        // eg []u8 *[4]u8
+        if (const auto v = ptr->baseType().dynamicCast<SliceType>()) {
+            if (!(v->modifiers() & AbstractType::ConstModifier)) {
+                return elementType()->equals(v->elementType().data());
             }
         }
     }

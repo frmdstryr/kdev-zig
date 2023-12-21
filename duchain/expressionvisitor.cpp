@@ -208,6 +208,11 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_switch:
     case NodeTag_switch_comma:
         return visitSwitch(node, parent);
+    case NodeTag_fn_proto:
+    case NodeTag_fn_proto_simple:
+    case NodeTag_fn_proto_one:
+    case NodeTag_fn_proto_multi:
+        return visitFnProto(node, parent);
     //case NodeTag_switch_case:
     //case NodeTag_switch_case_inline:
     case NodeTag_block:
@@ -1715,6 +1720,35 @@ VisitResult ExpressionVisitor::visitArrayTypeSentinel(const ZigNode &node, const
     }
 
     encounter(sliceType);
+    return Continue;
+}
+
+
+VisitResult ExpressionVisitor::visitFnProto(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    PointerType::Ptr ptr(new PointerType);
+    ptr->setModifiers(AbstractType::ConstModifier);
+    QString name = node.fnName();
+    Declaration* decl = nullptr;
+    if (!name.isEmpty()) {
+        decl = Helper::declarationForName(
+            name,
+            CursorInRevision::invalid(),
+            DUChainPointer<const DUContext>(context())
+        );
+    }
+    if (decl) {
+        ptr->setBaseType(decl->abstractType());
+    } else {
+        FunctionType::Ptr fn(new FunctionType);
+        ExpressionVisitor v(this);
+        v.startVisiting(node.returnType(), node);
+        // TODO: Parse params
+        fn->setReturnType(v.lastType());
+        ptr->setBaseType(fn);
+    }
+    encounter(ptr);
     return Continue;
 }
 

@@ -71,6 +71,11 @@ bool ZigNode::returnsInferredError() const
     return ast_fn_returns_inferred_error(ast, index);
 }
 
+QString ZigNode::fnName() const
+{
+    return tokenSlice(ast_fn_name(ast, index));
+}
+
 uint32_t ZigNode::fnParamCount() const
 {
     return ast_fn_param_count(ast, index);

@@ -549,7 +549,7 @@ void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
     auto returnType = v.lastType();
 
     if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
-        if (builtin->isType()) {
+        if (builtin->isType() && node.tag() == NodeTag_fn_decl) {
             // DUChainWriteLocker lock;
             FunctionVisitor f(session, currentContext());
             NodeData data = node.data();

@@ -702,6 +702,7 @@ NodeSubRange ast_sub_range(const ZAst *tree, NodeIndex node);
 
 // fn proto/decl
 NodeIndex ast_fn_return_type(const ZAst *tree, NodeIndex node);
+TokenIndex ast_fn_name(const ZAst *tree, NodeIndex node);
 bool ast_fn_returns_inferred_error(const ZAst *tree, NodeIndex node);
 uint32_t ast_fn_param_count(const ZAst *tree, NodeIndex node);
 ParamData ast_fn_param_at(const ZAst *tree, NodeIndex node, uint32_t i);

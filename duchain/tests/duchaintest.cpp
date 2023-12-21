@@ -557,6 +557,9 @@ void DUChainTest::testVarType_data()
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";
     QTest::newRow("fn arg") << "pub fn main(a: bool) void {}" << "main" << "function void (bool)"<< "";
     QTest::newRow("fn anytype") << "pub fn main(a: anytype) void {}" << "main" << "function void (anytype)"<< "";
+    QTest::newRow("extern fn") << "extern fn add(a: u8, b: u8) u8;" << "add" << "function u8 (u8, u8)"<< "";
+    // TOOD: Why is it not *const ??
+    QTest::newRow("extern fn ptr") << "extern fn foo_add(a: u8, b: u8) u8; const add = foo_add;" << "add" << "function u8 (u8, u8)"<< "";
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
     QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
     QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
@@ -614,6 +617,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("bool expr 4") << "var x: bool = undefined; const y = if (x and false) 1 else 2;" << "y" << "comptime_int = 2" << "";
     // Result depends on x
     QTest::newRow("bool expr 5") << "var x: bool = undefined; const y = if (x or false) 1 else 2;" << "y" << "mixed" << "";
+    QTest::newRow("fn ptr") << "const x = fn() bool;" << "x" << "*const function bool ()" << "";
 
     QTest::newRow("var fixed array") << "var x: [2]u8 = undefined;" << "x" << "[2]u8" << "";
     QTest::newRow("var fixed array type") << "const A = struct {}; var x: [2]A = undefined;" << "x" << "[2]A" << "";
@@ -844,6 +848,8 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{"Argument 1 type mismatch. Expected u8 got bool"} << "";
     QTest::newRow("fn call implicit cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u8 = 1; var y = foo(x); }" << QStringList{} << "";
     QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn call slice") << "pub fn foo(x: []u8) void {} test {var x: [2]u8 = undefined; var y = foo(&x); }" << QStringList{} << "";
+    // QTest::newRow("fn call slice 2") << "pub fn foo(x: []u8) void {} test {const x = [2]u8{1, 2}; var y = foo(&x); }" << QStringList{} << "";
     QTest::newRow("struct fn call") << "const Foo = struct {pub fn foo(self: Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call ptr") << "const Foo = struct {pub fn foo(self: *Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call arg") << "const Foo = struct {pub fn foo(self: Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";

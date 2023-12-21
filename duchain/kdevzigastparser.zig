@@ -490,7 +490,11 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     const tag: Tag = ast.nodes.items(.tag)[index];
     return switch (tag) {
         .root => .Module,
-        .fn_decl => .FunctionDecl,
+        .fn_decl,
+        .fn_proto,
+        .fn_proto_multi,
+        .fn_proto_one,
+        .fn_proto_simple => .FunctionDecl,
         .test_decl => .TestDecl,
         .simple_var_decl,
         .local_var_decl,
@@ -788,20 +792,27 @@ export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: NodeIndex) bool {
     return false;
 }
 
+export fn ast_fn_name(ptr: ?*Ast, index: NodeIndex) TokenIndex {
+    if (ptr) |ast| {
+        if (index < ast.nodes.len) {
+            var buf: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buf, index)) |proto| {
+                if (proto.name_token) |tok| {
+                    return tok;
+                }
+            }
+        }
+    }
+    return INVALID_TOKEN;
+}
+
 export fn ast_fn_return_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     if (ptr) |ast| {
         if (index < ast.nodes.len) {
-            const data_items = ast.nodes.items(.data);
-            const main_tokens = ast.nodes.items(.main_token);
-            const tag = ast.nodes.items(.tag)[index];
-            return switch (tag) {
-                .fn_decl => data_items[data_items[index].lhs].rhs,
-                .builtin_call_two, .builtin_call_two_comma => if (isTokenSliceEql(ast, main_tokens[index], "@as"))
-                    data_items[index].lhs
-                else
-                    0,
-                else => 0,
-            };
+            var buf: [1]Ast.Node.Index = undefined;
+            if (ast.fullFnProto(&buf, index)) |proto| {
+                return proto.ast.return_type;
+            }
         }
     }
     return 0;
