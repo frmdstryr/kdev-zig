@@ -506,8 +506,12 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
                     // Eg comptime T: type, create a delayed type that can
                     // be resolved at the call site
                     Zig::DelayedType::Ptr t(new Zig::DelayedType);
-                    Q_ASSERT(!paramName.isEmpty());
-                    t->setIdentifier(paramName);
+                    if (paramName.isEmpty()) {
+                        // fn proto can skip name so just use the arg index
+                        t->setIdentifier(QString("%1").arg(i));
+                    } else {
+                        t->setIdentifier(paramName);
+                    }
                     param->setAbstractType(t);
                 } else if (param->abstractType()->modifiers() & ComptimeModifier) {
                     // No change needed
