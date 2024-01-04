@@ -48,6 +48,7 @@ constexpr bool hasContext(NodeKind kind)
         // var/field need to have internal context if they use @import
         || kind == VarDecl
         || kind == FieldDecl
+        || kind == FnProto
     ;
 }
 
@@ -64,6 +65,7 @@ constexpr KDevelop::DUContext::ContextType contextType(NodeKind kind)
         :  kind == ContainerDecl  ? DUContext::Class
         :  kind == EnumDecl       ? DUContext::Enum
         :  kind == FunctionDecl   ? DUContext::Function // Function is only for arguments
+        :  kind == FnProto        ? DUContext::Function
         :  kind == ErrorDecl      ? DUContext::Enum
         :  kind == UnionDecl      ? DUContext::Enum
         :  kind == TestDecl       ? DUContext::Other

@@ -560,6 +560,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("extern fn") << "extern fn add(a: u8, b: u8) u8;" << "add" << "function u8 (u8, u8)"<< "";
     // TOOD: Why is it not *const ??
     QTest::newRow("extern fn ptr") << "extern fn foo_add(a: u8, b: u8) u8; const add = foo_add;" << "add" << "function u8 (u8, u8)"<< "";
+    //QTest::newRow("struct field fn ptr") << "const Math = struct { add: fn(a: u8, b: u8) u8}; test { const m = Math{}; const y = m.add(1, 2);\n" << "y" << "u8"<< "1, 0";
     QTest::newRow("fn err!void") << "const WriteError = error{EndOfStream};\npub fn main() WriteError!void {}" << "main" << "function WriteError!void ()"<< "";
     QTest::newRow("var struct") << "const Foo = struct {a: u8};\ntest {\nvar f = Foo{};}" << "f" << "Foo" << "2,0";
     QTest::newRow("field access") << "const Foo = struct {a: u8=0};\ntest {\nvar f = Foo{}; var b = f.a;\n}" << "b" << "u8" << "3,0";
@@ -849,6 +850,8 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn call implicit cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u8 = 1; var y = foo(x); }" << QStringList{} << "";
     QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{"type mismatch"} << "";
     QTest::newRow("fn call slice") << "pub fn foo(x: []u8) void {} test {var x: [2]u8 = undefined; var y = foo(&x); }" << QStringList{} << "";
+    QTest::newRow("extern fn call") << "extern fn add_char(a: u8, b: u8) u8; pub const add = add_char; test {var r = add(1, 2); }" << QStringList{} << "";
+
     // QTest::newRow("fn call slice 2") << "pub fn foo(x: []u8) void {} test {const x = [2]u8{1, 2}; var y = foo(&x); }" << QStringList{} << "";
     QTest::newRow("struct fn call") << "const Foo = struct {pub fn foo(self: Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call ptr") << "const Foo = struct {pub fn foo(self: *Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
@@ -880,6 +883,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{"Error is ignored"} << "";
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{"Return value is ignored"} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{"Incompatible types"} << "";
+    QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
+    QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
+    QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{"Incompatible types"} << "";
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";
@@ -888,7 +894,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{"Invalid enum field"} << "";
     QTest::newRow("struct field default enum ") << "const S = enum {Ok, Err}; const A = struct {s: S = .Ok};" << QStringList{} << "";
     QTest::newRow("struct field default enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S = .NotOk};" << QStringList{"Invalid enum field NotOk"} << "";
-    QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; text { var a = A{.a = .Ok}; }" << QStringList{} << "";
+    QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; test { var a = A{.a = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
     //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
 

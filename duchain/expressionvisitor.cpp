@@ -203,8 +203,7 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     //case NodeTag_if_simple: // not expr?
         return visitIf(node, parent);
     case NodeTag_return:
-        visitChildren(node, parent);
-        return Continue;
+        return visitReturn(node, parent);
     case NodeTag_switch:
     case NodeTag_switch_comma:
         return visitSwitch(node, parent);
@@ -220,6 +219,7 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
     case NodeTag_block_two:
     case NodeTag_block_two_semicolon:
         return visitBlock(node, parent);
+
     case NodeTag_grouped_expression:
     //case NodeTag_block_two:
     // case NodeTag_block_two_semicolon:
@@ -237,8 +237,24 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
 
 VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &parent)
 {
+    // Visit children to set return type if any
+    visitChildren(node, parent);
     // TODO: Labeled block ?
     encounter(BuiltinType::newFromName("void"));
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitReturn(const ZigNode &node, const ZigNode &parent)
+{
+    const auto lhs = node.lhsAsNode();
+    if (lhs.isRoot()) {
+        setReturnType(BuiltinType::newFromName("void"));
+    } else {
+        ExpressionVisitor v(this);
+        v.startVisiting(lhs, node);
+        setReturnType(v.lastType());
+    }
+    visitChildren(node, parent);
     return Continue;
 }
 
@@ -1739,13 +1755,25 @@ VisitResult ExpressionVisitor::visitFnProto(const ZigNode &node, const ZigNode &
         );
     }
     if (decl) {
+        encounterLvalue(DeclarationPointer(decl));
         ptr->setBaseType(decl->abstractType());
     } else {
         FunctionType::Ptr fn(new FunctionType);
-        ExpressionVisitor v(this);
-        v.startVisiting(node.returnType(), node);
-        // TODO: Parse params
-        fn->setReturnType(v.lastType());
+
+        const auto n = node.fnParamCount();
+        for (uint32_t i=0; i < n; i++) {
+            auto paramData = node.fnParamData(i);
+            ZigNode paramType = {node.ast, paramData.type_expr};
+            ExpressionVisitor v(this);
+            v.startVisiting(paramType, node);
+            fn->addArgument(v.lastType(), i);
+        }
+
+        {
+            ExpressionVisitor v(this);
+            v.startVisiting(node.returnType(), node);
+            fn->setReturnType(v.lastType());
+        }
         ptr->setBaseType(fn);
     }
     encounter(ptr);

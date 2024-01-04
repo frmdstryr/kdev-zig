@@ -58,6 +58,7 @@ const NodeKind = enum(u8) {
     Defer,
     Catch,
     Usingnamespace,
+    FnProto
 };
 
 // std.mem.len does not check for null
@@ -490,11 +491,11 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     const tag: Tag = ast.nodes.items(.tag)[index];
     return switch (tag) {
         .root => .Module,
-        .fn_decl,
+        .fn_decl => .FunctionDecl,
         .fn_proto,
         .fn_proto_multi,
         .fn_proto_one,
-        .fn_proto_simple => .FunctionDecl,
+        .fn_proto_simple => .FnProto,
         .test_decl => .TestDecl,
         .simple_var_decl,
         .local_var_decl,

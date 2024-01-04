@@ -119,8 +119,8 @@ protected:
     void setType(KDevelop::Declaration *decl, KDevelop::StructureType *type);
 
     // Before children are visited
-    void updateFunctionDeclArgs(const ZigNode &node);
-    void updateFunctionDeclReturnType(const ZigNode &node);
+    void updateFunctionArgs(const ZigNode &node, const ZigNode &parent);
+    void updateFunctionReturnType(const ZigNode &node, const ZigNode &parent);
 
     template <NodeKind Kind, EnableIf<NodeTraits::canHaveCapture(Kind)> = dummy>
     void maybeBuildCapture(const ZigNode &node, const ZigNode &parent);
@@ -133,6 +133,8 @@ protected:
 
     // If call is a fn that returns a type, create a new decl for the type
     void visitCall(const ZigNode &node, const ZigNode &parent);
+
+    void visitFnProto(const ZigNode &node, const ZigNode &parent);
 
 };
 

@@ -513,6 +513,7 @@ enum NodeKind
     Defer,
     Catch,
     Usingnamespace,
+    FnProto
 };
 
 enum VisitResult

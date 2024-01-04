@@ -85,6 +85,7 @@ VisitResult ContextBuilder::visitNode(const ZigNode &node, const ZigNode &parent
     BUILD_CONTEXT_FOR(Defer);
     BUILD_CONTEXT_FOR(Catch);
     BUILD_CONTEXT_FOR(Usingnamespace);
+    BUILD_CONTEXT_FOR(FnProto);
 
     BUILD_CONTEXT_FOR(Unknown);
 
@@ -97,7 +98,8 @@ VisitResult ContextBuilder::visitNode(const ZigNode &node, const ZigNode &parent
 bool ContextBuilder::shouldSkipNode(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    if (node.kind() == VarDecl) {
+    const NodeKind kind = node.kind();
+    if (kind == VarDecl) {
         // When we get a var decl followed by a container or error
         // decl, skip making a separate declaration/context for the
         // variable and just use the name.

@@ -95,13 +95,17 @@ VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &pa
        return buildDeclaration<Module>(node, parent);
     case Usingnamespace:
         visitUsingnamespace(node, parent);
-        return ContextBuilder::visitNode(node, parent);
+        break;
     case Call:
         visitCall(node, parent);
-        return ContextBuilder::visitNode(node, parent);
+        break;
+    case FnProto:
+       visitFnProto(node, parent);
+       break;
     default:
-        return ContextBuilder::visitNode(node, parent);
+        break;
     }
+    return ContextBuilder::visitNode(node, parent);
 }
 
 // This is invoked within the nodes context
@@ -117,8 +121,8 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
 
     switch (kind) {
     case FunctionDecl:
-        updateFunctionDeclArgs(node);
-        break;
+         updateFunctionArgs(node, parent);
+         break;
     case ErrorDecl:
         buildErrorDecl(node, parent);
         break;
@@ -137,7 +141,7 @@ void DeclarationBuilder::visitChildren(const ZigNode &node, const ZigNode &paren
     ContextBuilder::visitChildren(node, parent);
 
     if (kind == FunctionDecl) {
-        updateFunctionDeclReturnType(node);
+        updateFunctionReturnType(node, parent);
     }
 }
 
@@ -479,7 +483,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
     Q_UNUSED(decl);
 }
 
-void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
+void DeclarationBuilder::updateFunctionArgs(const ZigNode &node, const ZigNode &parent)
 {
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
@@ -534,13 +538,15 @@ void DeclarationBuilder::updateFunctionDeclArgs(const ZigNode &node)
         closeDeclaration();
 
     }
+
     DUChainWriteLocker lock;
-    // Set the return type to mixed, it will be updated later
+    // Set the return type to mixed, it will be updated later as it may
+    // be inferred from the body
     fn->setReturnType(AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed)));
     decl->setAbstractType(fn);
 }
 
-void DeclarationBuilder::updateFunctionDeclReturnType(const ZigNode &node)
+void DeclarationBuilder::updateFunctionReturnType(const ZigNode &node, const ZigNode &parent)
 {
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
@@ -734,6 +740,22 @@ void DeclarationBuilder::buildErrorDecl(const ZigNode &node, const ZigNode &pare
         errorValueType->setComptimeKnownValue(name);
         DUChainWriteLocker lock;
         decl->setAbstractType(errorValueType);
+        closeDeclaration();
+    }
+}
+
+void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent)
+{
+    if (parent.tag() != NodeTag_fn_decl) {
+        auto range = node.spellingRange();
+        QString name = node.fnName();
+        Declaration* decl = createDeclaration<FunctionDecl>(node, parent, name, false, range);
+        {
+            openContext(&node, NodeTraits::contextType(FunctionDecl), &name);
+            updateFunctionArgs(node, parent);
+            updateFunctionReturnType(node, parent);
+            closeContext();
+        }
         closeDeclaration();
     }
 }

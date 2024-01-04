@@ -190,9 +190,9 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
     v.startVisiting(child, node);
 
     QString functionName = child.spellingName();
-    auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>();
     RangeInRevision useRange = editorFindSpellingRange(child, functionName);
-    if (!decl) {
+    auto fn = v.lastType().dynamicCast<FunctionType>();
+    if (!fn) {
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -203,11 +203,13 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         return Continue;
     }
 
-    if (decl->range() != useRange) {
-        UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+    // TODO: It may be a a renamed or extern fn that the visitor
+    if (auto decl = v.lastDeclaration().dynamicCast<FunctionDeclaration>()) {
+        if (decl->range() != useRange) {
+            UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
+        }
     }
-    auto fn = decl->abstractType().dynamicCast<FunctionType>();
-    Q_ASSERT(fn);
+
     const auto n = node.callParamCount();
     const auto args = fn->arguments();
 
@@ -751,6 +753,11 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
         }
 
         if (!Helper::canTypeBeAssigned(errorType->baseType(), v2.lastType())) {
+            if (v2.returnType()) {
+                // Eg catch with return block
+                // TODO: Should check fn return is correct type?
+                return Continue;
+            }
             auto useRange = node.range();
             ProblemPointer p = ProblemPointer(new Problem());
             p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));

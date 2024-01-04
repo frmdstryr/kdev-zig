@@ -67,6 +67,7 @@ public:
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBlock(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitReturn(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFnProto(const ZigNode &node, const ZigNode &parent);
 
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
@@ -131,9 +132,22 @@ public:
         return m_inferredType;
     }
 
+    /**
+     * If the expression is a block and a return is was encountered
+     */
+    void setReturnType(const KDevelop::AbstractType::Ptr& t) {
+        m_returnType = t;
+    }
+
+    // May be null
+    const KDevelop::AbstractType::Ptr& returnType() const {
+        return m_returnType;
+    }
+
 protected:
     ParseSession* m_session;
     KDevelop::AbstractType::Ptr m_inferredType;
+    KDevelop::AbstractType::Ptr m_returnType;
     KDevelop::FunctionType::Ptr m_currentFunction;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
 
