@@ -29,7 +29,11 @@ ProjectConfigPage::ProjectConfigPage(KDevelop::IPlugin* self, const KDevelop::Pr
 void Zig::ProjectConfigPage::apply()
 {
     m_configGroup.writeEntry("zigExecutable", m_ui->zigExecutable->text());
-    m_configGroup.writeEntry("zigPackages", m_ui->zigPackages->toPlainText());
+    QString pkgs = m_ui->zigPackages->toPlainText();
+    if (!pkgs.endsWith('\n')) {
+        pkgs.append('\n');
+    }
+    m_configGroup.writeEntry("zigPackages",  pkgs);
     // remove cached paths, so they are updated on the next parse job run
     {
         QMutexLocker lock(&Helper::cacheMutex);
