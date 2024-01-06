@@ -179,7 +179,7 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
         return null;
     };
     defer ast.deinit(allocator);
-    var stdout = std.io.getStdOut().writer();
+    const stdout = std.io.getStdOut().writer();
     dumpAstFlat(&ast, stdout) catch {};
     //const decls = ast.rootDecls();
 
@@ -1509,7 +1509,7 @@ test "child-node" {
 
 pub fn assertNodeIndexValid(ast: *const Ast, child: NodeIndex, parent: NodeIndex) void {
     if (child == 0 or child > ast.nodes.len) {
-        var stderr = std.io.getStdErr().writer();
+        const stderr = std.io.getStdErr().writer();
         dumpAstFlat(ast, stderr) catch {};
         std.log.err("zig: ast_visit child index {} from parent {} is out of range or will create a loop", .{ child, parent });
         assert(false);
