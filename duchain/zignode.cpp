@@ -140,7 +140,7 @@ ZigNode ZigNode::forInputAt(uint32_t i) const
 QString ZigNode::tokenSlice(TokenIndex i) const
 {
     if (i == INVALID_TOKEN) {
-        return "";
+        return QStringLiteral("");
     }
     ZigString name = ZigString(ast_token_slice(ast, i));
     return QString::fromUtf8(*name);
@@ -201,7 +201,7 @@ QString ZigNode::spellingName() const
 {
     TokenIndex tok = ast_node_name_token(ast, index);
     if (tok == INVALID_TOKEN) {
-        return "";
+        return QStringLiteral("");
     }
     ZigString name = ZigString(ast_token_slice(ast, tok));
     const char *str = name.data();
@@ -234,16 +234,16 @@ QString ZigNode::comment() const
     if (name.data()) {
         return QString::fromUtf8(name.data());
     }
-    return "";
+    return QStringLiteral("");
 
 }
 
 QString ZigNode::containerName() const
 {
     if (kind() == ContainerDecl) {
-        return QString("anon %1 %2").arg(mainToken()).arg(index);
+        return QStringLiteral("anon %1 %2").arg(mainToken()).arg(index);
     }
-    return "";
+    return QStringLiteral("");
 }
 
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>

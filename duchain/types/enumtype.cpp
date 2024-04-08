@@ -124,9 +124,9 @@ QString EnumType::toString() const
         QString name = id.last().toString();
         QString value = comptimeKnownValue().str();
         if (name != value) {
-            return QString("%1.%2 = %3").arg(t->toString(), name, value);
+            return QStringLiteral("%1.%2 = %3").arg(t->toString(), name, value);
         }
-        return QString("%1.%2").arg(t->toString(), name);
+        return QStringLiteral("%1.%2").arg(t->toString(), name);
     }
     return id.toString();
 }

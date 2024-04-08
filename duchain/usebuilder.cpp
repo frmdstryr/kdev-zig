@@ -149,7 +149,7 @@ VisitResult UseBuilder::visitBuiltinCall(const ZigNode &node, const ZigNode &par
             if (url.isEmpty()) {
                 p->setSeverity(IProblem::Warning);
                 p->setDescription(i18n("Import \"%1\" does not exist", importName));
-                if (importName.endsWith(".zig")) {
+                if (importName.endsWith(QStringLiteral(".zig"))) {
                     p->setExplanation(i18n("File not found"));
                 } else {
                     p->setExplanation(i18n("Package path not defined"));
@@ -617,7 +617,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     RangeInRevision useRange = editorFindSpellingRange(node, attr);
     if (!decl) {
         DUChainWriteLocker lock;
-        QString ident = T ? T->toString() : "unknown"; // T toString needs lock
+        QString ident = T ? T->toString() : QStringLiteral("unknown"); // T toString needs lock
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);

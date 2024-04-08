@@ -41,12 +41,12 @@ ParseSessionData::~ParseSessionData()
 
 void ParseSessionData::parse()
 {
-    m_ast = parse_ast(m_document.c_str(), m_contents);
+    m_ast = parse_ast(m_document.c_str(), m_contents.constData());
 }
 
 KDevelop::IndexedString ParseSession::languageString()
 {
-    static const KDevelop::IndexedString langString("Zig");
+    static const KDevelop::IndexedString langString(QStringLiteral("Zig"));
     return langString;
 }
 

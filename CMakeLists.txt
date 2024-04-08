@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
 # KDE Gear version, managed by release service script
-set(RELEASE_SERVICE_VERSION_MAJOR "23")
-set(RELEASE_SERVICE_VERSION_MINOR "08")
-set(RELEASE_SERVICE_VERSION_MICRO "2")
+set(RELEASE_SERVICE_VERSION_MAJOR "24")
+set(RELEASE_SERVICE_VERSION_MINOR "01")
+set(RELEASE_SERVICE_VERSION_MICRO "85")
 
 # generate patch level from release service version
 set(_micro ${RELEASE_SERVICE_VERSION_MICRO})
@@ -19,20 +19,25 @@ set(KDEVPLATFORM_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
-set(QT_MIN_VERSION "5.15.0")
-set(KF5_DEP_VERSION "5.78.0")
-set(KDE_INSTALL_USE_QT_SYS_PATHS YES)
+if (BUILD_WITH_QT6)
+    set(KF_MAJOR_VERSION "6")
+    set(QT_MIN_VERSION "6.4.0")
+    set(KF_MIN_VERSION "5.240.0")
+else()
+    set(KF_MAJOR_VERSION "5")
+    set(QT_MIN_VERSION "5.15.2")
+    set(KF_MIN_VERSION "5.78.0")
+endif()
+#set(KDE_INSTALL_USE_QT_SYS_PATHS YES)
 
-find_package (ECM ${KF5_DEP_VERSION} REQUIRED NO_MODULE)
+find_package (ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH} ${ECM_MODULE_PATH})
 
 include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 
-
 include(GenerateExportHeader)
-include(CMakePackageConfigHelpers)
 
 include(ECMAddTests)
 include(ECMSetupVersion)
@@ -45,16 +50,26 @@ endif()
 add_definitions( -DTRANSLATION_DOMAIN=\"kdevzig\" )
 
 
-find_package(Qt5 ${QT_MIN_VERSION} CONFIG REQUIRED Core Widgets Test)
-find_package(KF5 ${KF5_DEP_VERSION} REQUIRED COMPONENTS
+find_package(Qt${QT_MAJOR_VERSION} ${QT_MIN_VERSION} CONFIG REQUIRED Core Widgets Test)
+find_package(KF${KF_MAJOR_VERSION} ${KF_MIN_VERSION} REQUIRED COMPONENTS
     I18n
     ThreadWeaver
     TextEditor
 )
 
+if(QT_MAJOR_VERSION STREQUAL 6)
+    find_package(Qt6Core5Compat ${QT_MIN_VERSION} CONFIG REQUIRED)
+    find_package(KF6TextWidgets ${KF_MIN_VERSION} CONFIG REQUIRED)
+    find_package(KF6KCMUtils ${KF_MIN_VERSION} CONFIG REQUIRED)
+    include_directories(
+        "/usr/include/KF6/KCMUtils"
+        "/usr/include/KF6/KCMUtilsCore")
+endif()
+
 list(APPEND CMAKE_PREFIX_PATH "/home/jrm/projects/kdevelop/kdevplatform")
 find_package(KDevPlatform ${KDEVPLATFORM_DEP_VERSION} CONFIG)
 find_package(KDevelop ${KDEVPLATFORM_VERSION} REQUIRED)
+
 
 if(NOT CMAKE_VERSION VERSION_LESS "3.10.0" AND KF5_VERSION VERSION_LESS "5.42.0")
     # Avoids bogus warnings with CMake 3.10+, KF5.42+ has workaround
@@ -113,8 +128,8 @@ kdevplatform_add_plugin(kdevziglanguagesupport JSON kdevzigsupport.json
 target_link_libraries(kdevziglanguagesupport
     KDev::Interfaces
     KDev::Language
-    KF5::ThreadWeaver
-    KF5::TextEditor
+    KF${KF_MAJOR_VERSION}::ThreadWeaver
+    KF${KF_MAJOR_VERSION}::TextEditor
     kdevzigduchain
     kdevzigcompletion
 )

@@ -169,13 +169,13 @@ QString UnionType::toString() const
 {
     const auto &id = qualifiedIdentifier();
     if (const auto unionType = baseType().dynamicCast<UnionType>()) {
-        QString r = QString("%1.%2: %3").arg(
+        QString r = QStringLiteral("%1.%2: %3").arg(
                 unionType->toString(),
                 id.last().toString(),
                 dataType() ? dataType()->toString() : QLatin1String("<notype>")
         );
         if (isComptimeKnown()) {
-            return QString("%1 = %2").arg(r, comptimeKnownValue().str());
+            return QStringLiteral("%1 = %2").arg(r, comptimeKnownValue().str());
         }
         return r;
     }

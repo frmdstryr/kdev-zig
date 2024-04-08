@@ -59,13 +59,13 @@ QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort,
     auto localContext = top->findContextAt(m_position);
     if (!localContext)
         return items; // Can it be null ?
-    ZigCompletion completion(complete_expr(m_text.toUtf8(), m_followingText.toUtf8()));
+    ZigCompletion completion(complete_expr(m_text.toUtf8().constData(), m_followingText.toUtf8().constData()));
     if (!completion.data())
         return items;
     CompletionResultType result_type = completion.data()->result_type;
     if (result_type == CompletionField) {
-        QString name = completion.data()->name;
-        QStringList parts = name.split(".");
+        QString name = QString::fromUtf8(completion.data()->name);
+        QStringList parts = name.split(QLatin1Char('.'));
         qCDebug(KDEV_ZIG) << "Field completion on: " << name;
         Declaration* decl = Helper::declarationForName(
             parts.at(0),

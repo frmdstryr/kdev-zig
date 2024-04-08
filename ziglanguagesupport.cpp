@@ -28,7 +28,6 @@
 #include <language/codecompletion/codecompletion.h>
 
 #include <KPluginFactory>
-#include <KPluginLoader>
 
 #include <QReadWriteLock>
 #include <QStandardPaths>
@@ -72,7 +71,7 @@ LanguageSupport::~LanguageSupport()
 
 QString LanguageSupport::name() const
 {
-    return "Zig";
+    return QLatin1String("Zig");
 }
 
 KDevelop::ParseJob *LanguageSupport::createParseJob(const KDevelop::IndexedString &url)
@@ -87,22 +86,22 @@ ICodeHighlighting *LanguageSupport::codeHighlighting() const
 
 SourceFormatterItemList LanguageSupport::sourceFormatterItems() const
 {
-    SourceFormatterStyle zigFormatter("zig fmt");
-    zigFormatter.setCaption("zig fmt");
+    SourceFormatterStyle zigFormatter(QLatin1String("zig fmt"));
+    zigFormatter.setCaption(QLatin1String("zig fmt"));
     zigFormatter.setDescription(i18n("Format source with zig fmt."));
     zigFormatter.setMimeTypes(SourceFormatterStyle::MimeList {
-        SourceFormatterStyle::MimeHighlightPair { "text/zig", "Zig" },
-        SourceFormatterStyle::MimeHighlightPair { "text/x-zig", "Zig" }
+        SourceFormatterStyle::MimeHighlightPair { QLatin1String("text/zig"), QLatin1String("Zig") },
+        SourceFormatterStyle::MimeHighlightPair { QLatin1String("text/x-zig"), QLatin1String("Zig") }
     });
 
-    QString zigPath = QStandardPaths::findExecutable("zig");
+    QString zigPath = QStandardPaths::findExecutable(QLatin1String("zig"));
     if (zigPath.isEmpty()) {
         qCDebug(KDEV_ZIG) << "Could not find the zig executable";
-        zigPath = "/usr/bin/zig";
+        zigPath = QLatin1String("/usr/bin/zig");
     }
-    zigFormatter.setContent(zigPath + " fmt $TMPFILE");
+    zigFormatter.setContent(QLatin1String("%1 fmt $TMPFILE").arg(zigPath));
 
-    return SourceFormatterItemList { SourceFormatterStyleItem { "customscript", zigFormatter } };
+    return SourceFormatterItemList { SourceFormatterStyleItem { QLatin1String("customscript"), zigFormatter } };
 }
 
 int LanguageSupport::perProjectConfigPages() const

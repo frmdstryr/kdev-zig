@@ -176,7 +176,7 @@ KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
     if (node && !node->isEmpty()) {
         QString qualifier = Helper::qualifierPath(session->document().str());
-        QString ident = qualifier.isEmpty() ? *node : qualifier + '.' + *node;
+        QString ident = qualifier.isEmpty() ? *node : QStringLiteral("%1.%2").arg(qualifier, *node);
         // qDebug() << "ident" << ident;
         return QualifiedIdentifier(ident);
     }

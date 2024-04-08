@@ -18,7 +18,7 @@ ProjectConfigPage::ProjectConfigPage(KDevelop::IPlugin* self, const KDevelop::Pr
     : KDevelop::ConfigPage(self, nullptr, parent)
     , m_ui(new Ui_ProjectConfig)
 {
-    m_configGroup = options.project->projectConfiguration()->group("kdevzigsupport");
+    m_configGroup = options.project->projectConfiguration()->group(QLatin1String("kdevzigsupport"));
     m_ui->setupUi(this);
     m_project = options.project;
     // So apply button activates
@@ -30,8 +30,8 @@ void Zig::ProjectConfigPage::apply()
 {
     m_configGroup.writeEntry("zigExecutable", m_ui->zigExecutable->text());
     QString pkgs = m_ui->zigPackages->toPlainText();
-    if (!pkgs.endsWith('\n')) {
-        pkgs.append('\n');
+    if (!pkgs.endsWith(QLatin1Char('\n'))) {
+        pkgs.append(QLatin1Char('\n'));
     }
     m_configGroup.writeEntry("zigPackages",  pkgs);
     // remove cached paths, so they are updated on the next parse job run

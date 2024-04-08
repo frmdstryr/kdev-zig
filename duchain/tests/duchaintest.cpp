@@ -44,8 +44,8 @@ namespace Zig {
 
 DUChainTest::DUChainTest(QObject* parent): QObject(parent)
 {
-    assetsDir = QDir(DUCHAIN_ZIG_DATA_DIR);
-    if (!assetsDir.cd("data")) {
+    assetsDir = QDir(QStringLiteral(DUCHAIN_ZIG_DATA_DIR));
+    if (!assetsDir.cd(QStringLiteral("data"))) {
         qFatal("Failed find data directory for test files. Aborting");
     }
 }
@@ -56,7 +56,7 @@ static RangeInRevision rangeFromString(const QString &values) {
     if (values.trimmed() == QLatin1String("invalid")) {
         return RangeInRevision::invalid();
     }
-    auto parts = values.trimmed().split(",");
+    auto parts = values.trimmed().split(QLatin1Char(','));
     Q_ASSERT(parts.size() == 4);
     CursorInRevision start(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
     CursorInRevision end(parts[2].trimmed().toInt(), parts[3].trimmed().toInt());
@@ -67,17 +67,17 @@ static RangeInRevision rangeFromString(const QString &values) {
 DUContextPointer moduleInternalContext(ReferencedTopDUContext topContext) {
     return DUContextPointer(topContext);
 
-    // If Module context is used in nodetypes.h
-    auto decls = topContext->localDeclarations();
-    Q_ASSERT(decls.size() == 1);
-    auto mod = decls.first();
-    Q_ASSERT(mod);
-    Q_ASSERT(mod->abstractType()->modifiers() & Zig::ModuleModifier);
-    Q_ASSERT(mod->internalContext());
-    return DUContextPointer(mod->internalContext());
+    // // If Module context is used in nodetypes.h
+    // auto decls = topContext->localDeclarations();
+    // Q_ASSERT(decls.size() == 1);
+    // auto mod = decls.first();
+    // Q_ASSERT(mod);
+    // Q_ASSERT(mod->abstractType()->modifiers() & Zig::ModuleModifier);
+    // Q_ASSERT(mod->internalContext());
+    // return DUContextPointer(mod->internalContext());
 }
 
-ReferencedTopDUContext parseCode(QString code, QString name)
+ReferencedTopDUContext parseCode(const QString &code, const QString &name)
 {
     using namespace Zig;
     qDebug() << "\nparse" << name << "\n";
@@ -101,16 +101,17 @@ ReferencedTopDUContext parseCode(QString code, QString name)
     return context;
 }
 
-ReferencedTopDUContext parseFile(QString filename)
+ReferencedTopDUContext parseFile(const QString &filename)
 {
     QFile f(filename);
     Q_ASSERT(f.open(QIODevice::ReadOnly));
-    return parseCode(f.readAll(), filename);
+    QString code = QString::fromUtf8(f.readAll());
+    return parseCode(code, filename);
 }
 
-ReferencedTopDUContext parseStdCode(QString path)
+ReferencedTopDUContext parseStdCode(const QString &path)
 {
-    QString filename = Zig::Helper::stdLibPath(nullptr) + "/" + path;
+    QString filename = QStringLiteral("%1/%2").arg(Zig::Helper::stdLibPath(nullptr), path);
     return parseFile(filename);
 }
 
@@ -125,8 +126,8 @@ DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, b
         return topContext;
     }
 
-    if (name.contains(",")) {
-        auto parts = name.split(",");
+    if (name.contains(QLatin1Char(','))) {
+        auto parts = name.split(QLatin1Char(','));
         CursorInRevision cursor(parts[0].trimmed().toInt(), parts[1].trimmed().toInt());
         return topContext->findContextAt(cursor, true);
     }
@@ -173,77 +174,77 @@ void DUChainTest::initTestCase()
 
 void DUChainTest::sanityCheckFn()
 {
-    QString code("fn main() !void {}");
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    QString code(QStringLiteral("fn main() !void {}"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    auto decls = context->findDeclarations(Identifier("main"));
+    auto decls = context->findDeclarations(Identifier(QLatin1String("main")));
     QCOMPARE(decls.size(), 1);
     Declaration *funcDeclaration = decls.first();
     QVERIFY(funcDeclaration);
-    QCOMPARE(funcDeclaration->identifier().toString(), QString("main"));
-    QCOMPARE(funcDeclaration->abstractType()->toString(), QString("function !void ()"));
+    QCOMPARE(funcDeclaration->identifier().toString(), QLatin1String("main"));
+    QCOMPARE(funcDeclaration->abstractType()->toString(), QLatin1String("function !void ()"));
 }
 
 void DUChainTest::sanityCheckVar()
 {
-    QString code("const X = 1;");
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    QString code(QStringLiteral("const X = 1;"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
-    auto decls = context->findDeclarations(Identifier("X"));
+    auto decls = context->findDeclarations(Identifier(QLatin1String("X")));
     QCOMPARE(decls.size(), 1);
     Declaration *varDeclaration = decls.first();
     QVERIFY(varDeclaration);
-    QCOMPARE(varDeclaration->identifier().toString(), QString("X"));
-    QCOMPARE(varDeclaration->abstractType()->toString(), QString("comptime_int = 1"));
+    QCOMPARE(varDeclaration->identifier().toString(), QLatin1String("X"));
+    QCOMPARE(varDeclaration->abstractType()->toString(), QLatin1String("comptime_int = 1"));
 }
 
 void DUChainTest::sanityCheckStd()
 {
     // return; // Disable/
     // FIXME: This only works if modules imported inside std are already parsed...
-    ReferencedTopDUContext timecontext = parseStdCode("time.zig");
-    ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
-    QString code("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;");
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext timecontext = parseStdCode(QLatin1String("time.zig"));
+    ReferencedTopDUContext stdcontext = parseStdCode(QLatin1String("std.zig"));
+    QString code(QStringLiteral("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
     DUChainReadLocker lock;
-    auto decls = context->findDeclarations(Identifier("std"));
+    auto decls = context->findDeclarations(Identifier(QLatin1String("std")));
     QCOMPARE(decls.size(), 1);
     // QCOMPARE(decls.first()->abstractType()->toString(), "struct std"); // std
     QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
-    decls = context->findDeclarations(Identifier("time"));
+    decls = context->findDeclarations(Identifier(QLatin1String("time")));
     QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // time
     QCOMPARE(decls.size(), 1);
-    decls = context->findDeclarations(Identifier("ns_per_us"));
+    decls = context->findDeclarations(Identifier(QLatin1String("ns_per_us")));
     QCOMPARE(decls.size(), 1);
     Declaration *decl = decls.first();
     QVERIFY(decl);
-    QCOMPARE(decl->identifier().toString(), QString("ns_per_us"));
-    QCOMPARE(decl->abstractType()->toString(), QString("comptime_int = 1000"));
+    QCOMPARE(decl->identifier().toString(), QLatin1String("ns_per_us"));
+    QCOMPARE(decl->abstractType()->toString(), QLatin1String("comptime_int = 1000"));
 }
 
 void DUChainTest::sanityCheckTypeInfo()
 {
     // TODO: Why does waitForUpdate not do anything??
-    ReferencedTopDUContext builtinctx = parseStdCode("builtin.zig");
-    ReferencedTopDUContext stdcontext = parseStdCode("std.zig");
-    QString code("const x = u8; const T = @typeInfo(x);");
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext builtinctx = parseStdCode(QLatin1String("builtin.zig"));
+    ReferencedTopDUContext stdcontext = parseStdCode(QLatin1String("std.zig"));
+    QString code(QStringLiteral("const x = u8; const T = @typeInfo(x);"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
     DUChainReadLocker lock;
-    auto decls = context->findDeclarations(Identifier("T"));
+    auto decls = context->findDeclarations(Identifier(QLatin1String("T")));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), QString("std.builtin.Type::Int"));
+    QCOMPARE(decls.first()->abstractType()->toString(), QLatin1String("std.builtin.Type::Int"));
 }
 
 void DUChainTest::sanityCheckBasicImport()
 {
-    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("basic_import/a.zig"));
-    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath("basic_import/b.zig"));
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath(QLatin1String("basic_import/a.zig")));
+    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath(QLatin1String("basic_import/b.zig")));
     DUChainReadLocker lock;
 
     qDebug() << "mod_a decls are:";
@@ -256,11 +257,11 @@ void DUChainTest::sanityCheckBasicImport()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    auto decls = mod_b->findDeclarations(Identifier("a"));
+    auto decls = mod_b->findDeclarations(Identifier(QLatin1String("a")));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("basic_import/a.zig"));
+    QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath(QLatin1String("basic_import/a.zig")));
     QVERIFY(decls.first()->abstractType()->modifiers() & Zig::ModuleModifier); // std
-    decls = mod_b->findDeclarations(Identifier("ImportedA"));
+    decls = mod_b->findDeclarations(Identifier(QLatin1String("ImportedA")));
     QCOMPARE(decls.size(), 1);
     Q_ASSERT(decls.first()->internalContext());
     // auto importedContexts = decls.first()->internalContext()->importedParentContexts();
@@ -274,16 +275,16 @@ void DUChainTest::sanityCheckBasicImport()
     // );
     //QCOMPARE(decls.first()->abstractType()->toString(), assetsDir.filePath("a.zig") + "::A");
 
-    decls = mod_b->findDeclarations(Identifier("c"));
+    decls = mod_b->findDeclarations(Identifier(QLatin1String("c")));
     QCOMPARE(decls.size(), 1);
-    QCOMPARE(decls.first()->abstractType()->toString(), "u8");
+    QCOMPARE(decls.first()->abstractType()->toString(), QLatin1String("u8"));
 }
 
 void DUChainTest::sanityCheckDuplicateImport()
 {
-    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("duplicate_import/config_a.zig"));
-    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath("duplicate_import/config_b.zig"));
-    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath("duplicate_import/main.zig"));
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath(QLatin1String("duplicate_import/config_a.zig")));
+    ReferencedTopDUContext mod_b = parseFile(assetsDir.filePath(QLatin1String("duplicate_import/config_b.zig")));
+    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath(QLatin1String("duplicate_import/main.zig")));
     DUChainReadLocker lock;
 
     qDebug() << "mod a decls are:";
@@ -302,34 +303,34 @@ void DUChainTest::sanityCheckDuplicateImport()
     }
 
 
-    auto config_decls_a = mod_a->findDeclarations(Identifier("Config"));
+    auto config_decls_a = mod_a->findDeclarations(Identifier(QLatin1String("Config")));
     QCOMPARE(config_decls_a.size(), 1);
-    QCOMPARE(config_decls_a.first()->abstractType()->toString(), "Config");
-    auto config_decls_b = mod_b->findDeclarations(Identifier("Config"));
+    QCOMPARE(config_decls_a.first()->abstractType()->toString(), QLatin1String("Config"));
+    auto config_decls_b = mod_b->findDeclarations(Identifier(QLatin1String("Config")));
     QCOMPARE(config_decls_b.size(), 1);
-    QCOMPARE(config_decls_b.first()->abstractType()->toString(), "Config");
+    QCOMPARE(config_decls_b.first()->abstractType()->toString(), QLatin1String("Config"));
 
-    auto config_a = mod_main->findDeclarations(Identifier("config_a"));
+    auto config_a = mod_main->findDeclarations(Identifier(QLatin1String("config_a")));
     QCOMPARE(config_a.size(), 1);
-    auto config_b = mod_main->findDeclarations(Identifier("config_b"));
+    auto config_b = mod_main->findDeclarations(Identifier(QLatin1String("config_b")));
     QCOMPARE(config_b.size(), 1);
 
     QVERIFY(config_a.first()->abstractType() != config_b.first()->abstractType());
 
-    auto x = mod_main->findDeclarations(Identifier("x"));
+    auto x = mod_main->findDeclarations(Identifier(QLatin1String("x")));
     QCOMPARE(x.size(), 1);
-    QCOMPARE(x.first()->abstractType()->toString(), "bool");
-    auto y = mod_main->findDeclarations(Identifier("y"));
+    QCOMPARE(x.first()->abstractType()->toString(), QLatin1String("bool"));
+    auto y = mod_main->findDeclarations(Identifier(QLatin1String("y")));
     QCOMPARE(y.size(), 1);
-    QCOMPARE(y.first()->abstractType()->toString(), "i8");
+    QCOMPARE(y.first()->abstractType()->toString(), QLatin1String("i8"));
 
 
 }
 
 void DUChainTest::sanityCheckThisImport()
 {
-    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath("this_import/A.zig"));
-    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath("this_import/main.zig"));
+    ReferencedTopDUContext mod_a = parseFile(assetsDir.filePath(QLatin1String("this_import/A.zig")));
+    ReferencedTopDUContext mod_main = parseFile(assetsDir.filePath(QLatin1String("this_import/main.zig")));
     DUChainReadLocker lock;
 
     qDebug() << "mod A decls are:";
@@ -342,12 +343,12 @@ void DUChainTest::sanityCheckThisImport()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    auto A = mod_a->findDeclarations(Identifier("A"));
+    auto A = mod_a->findDeclarations(Identifier(QLatin1String("A")));
     QCOMPARE(A.size(), 1);
-    QCOMPARE(A.first()->abstractType()->toString(), assetsDir.filePath("this_import/A.zig"));
-    auto x = mod_main->findDeclarations(Identifier("a"));
+    QCOMPARE(A.first()->abstractType()->toString(), assetsDir.filePath(QLatin1String("this_import/A.zig")));
+    auto x = mod_main->findDeclarations(Identifier(QLatin1String("a")));
     QCOMPARE(x.size(), 1);
-    QCOMPARE(x.first()->abstractType()->toString(), assetsDir.filePath("this_import/A.zig"));
+    QCOMPARE(x.first()->abstractType()->toString(), assetsDir.filePath(QLatin1String("this_import/A.zig")));
 }
 
 
@@ -362,7 +363,7 @@ void DUChainTest::testVarBindings()
     QFETCH(QString, bindings);
     QFETCH(QString, contextName);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -374,7 +375,7 @@ void DUChainTest::testVarBindings()
         qDebug() << "  name" << decl->identifier() << " type" << decl->abstractType()->toString();
     }
 
-    for (const QString &binding : bindings.split(",")) {
+    for (const QString &binding : bindings.split(QLatin1Char(','))) {
         qDebug() << "  checking for" << binding.trimmed();
         QCOMPARE(internalContext->findLocalDeclarations(Identifier(binding.trimmed())).size(),  1);
     }
@@ -413,13 +414,13 @@ void DUChainTest::testVarUsage()
     QFETCH(QString, container);
     QFETCH(QString, uses);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
     uint32_t i = 0;
-    for (const QString &param : uses.split(";")) {
-        QStringList parts = param.split("/");
+    for (const QString &param : uses.split(QLatin1Char(';'))) {
+        QStringList parts = param.split(QLatin1Char('/'));
         QString use = parts[0].trimmed();
         RangeInRevision expectedRange = rangeFromString(parts[1].trimmed());
         qDebug() << "Checking for use of" << use;
@@ -493,7 +494,7 @@ void DUChainTest::testVarType()
     QFETCH(QString, container);
 
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -761,7 +762,7 @@ void DUChainTest::testProblems()
     QFETCH(QString, contextName);
 
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, "test.zig");
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
 
 
     DUChainReadLocker lock;
@@ -800,110 +801,110 @@ void DUChainTest::testProblems_data()
     QTest::addColumn<QString>("code");
     QTest::addColumn<QStringList>("problems");
     QTest::addColumn<QString>("contextName");
-    QTest::newRow("use undefined") << "const x = y;" << QStringList{"Undefined variable y"} << "";
-    QTest::newRow("invalid deref") << "const x = 1; const y = x.*;" << QStringList{"Attempt to dereference non-pointer type"} << "";
-    QTest::newRow("invalid unwrap") << "const x = 1; const y = x.?;" << QStringList{"Attempt to unwrap non-optional type"} << "";
-    QTest::newRow("invalid builtin") << "const x = @intToFloat(f32, 1);" << QStringList{"Undefined builtin"} << "";
+    QTest::newRow("use undefined") << "const x = y;" << QStringList{QLatin1String("Undefined variable y")} << "";
+    QTest::newRow("invalid deref") << "const x = 1; const y = x.*;" << QStringList{QLatin1String("Attempt to dereference non-pointer type")} << "";
+    QTest::newRow("invalid unwrap") << "const x = 1; const y = x.?;" << QStringList{QLatin1String("Attempt to unwrap non-optional type")} << "";
+    QTest::newRow("invalid builtin") << "const x = @intToFloat(f32, 1);" << QStringList{QLatin1String("Undefined builtin")} << "";
     QTest::newRow("if bool") << "test{ if (1 > 2) {}\n}" << QStringList{} << "";
     QTest::newRow("if bool or") << "test{ if (false or 1 > 2) {}\n}" << QStringList{} << "";
     QTest::newRow("if bool and") << "test{ if (true and 1 > 2) {}\n}" << QStringList{} << "";
-    QTest::newRow("if not bool") << "test{ if (1) {}\n}" << QStringList{"if condition is not a bool"} << "";
-    QTest::newRow("if no capture") << "test{ var x: ?u8 = 0; if (x) {}\n}" << QStringList{"optional type with no capture"} << "";
-    QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{"Attempt to unwrap non-optional type"} << "";
-    QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{"Attempt to index non-array type"} << "";
-    QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{"Array index is not an integer type"} << "";
+    QTest::newRow("if not bool") << "test{ if (1) {}\n}" << QStringList{QLatin1String("if condition is not a bool")} << "";
+    QTest::newRow("if no capture") << "test{ var x: ?u8 = 0; if (x) {}\n}" << QStringList{QLatin1String("optional type with no capture")} << "";
+    QTest::newRow("if capture non-optional") << "test{ var x: u8 = 0; if (x) |y| {}\n}" << QStringList{QLatin1String("Attempt to unwrap non-optional type")} << "";
+    QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{QLatin1String("Attempt to index non-array type")} << "";
+    QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{QLatin1String("Array index is not an integer type")} << "";
     QTest::newRow("const str ptr index") << "const x = \"abcd\"; const y = x[0];" << QStringList{} << "";
-    QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{"Array index is not an integer type"} << "";
+    QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{QLatin1String("Array index is not an integer type")} << "";
     QTest::newRow("enum") << "const Status = enum{Ok, Error}; const x: Status = .Ok;" << QStringList{} << "";
-    QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{"Invalid enum field Invalid"} << "";
-    QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{"Attempted to access enum field on non-enum type"} << "";
+    QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
+    QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{QLatin1String("Attempted to access enum field on non-enum type")} << "";
     QTest::newRow("enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Error; \n}" << QStringList{} << "1,0";
-    QTest::newRow("enum assign invalid ") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum assign invalid ") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("enum switch case 2") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error => {}}}" << QStringList{} << "";
-    QTest::newRow("enum switch case 3") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error, .Bad => {}}}" << QStringList{"Invalid enum field Bad"} << "";
-    QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum switch case 3") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error, .Bad => {}}}" << QStringList{QLatin1String("Invalid enum field Bad")} << "";
+    QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("enum array init") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error};" << QStringList{} << "";
-    QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{"Invalid enum field Invalid"} << "";
+    QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("enum alias") << "const Status = enum{Ok, Error}; const MyStatus = Status; test{ var x = MyStatus.Ok; }" << QStringList{} << "";
     QTest::newRow("enum comp") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Ok) {}};" << QStringList{} << "";
-    QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}}" << QStringList{"Invalid enum field Bad"} << "";
+    QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}}" << QStringList{QLatin1String("Invalid enum field Bad")} << "";
     QTest::newRow("union enum switch") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}} }" << QStringList{} << "";
-    QTest::newRow("union enum switch invalid") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}, .bool=>{}} }" << QStringList{"Invalid enum field bool"} << "";
+    QTest::newRow("union enum switch invalid") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}, .bool=>{}} }" << QStringList{QLatin1String("Invalid enum field bool")} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";
-    QTest::newRow("use out of order in fn") << "pub fn foo() void {const x = y; const y = 1;}" << QStringList{"Undefined variable y"} << "";
-    QTest::newRow("use out of order in fn in struct") << "const Foo = struct {pub fn foo() void {const x = y; const y = 1;}};" << QStringList{"Undefined variable y"} << "";
+    QTest::newRow("use out of order in fn") << "pub fn foo() void {const x = y; const y = 1;}" << QStringList{QLatin1String("Undefined variable y")} << "";
+    QTest::newRow("use out of order in fn in struct") << "const Foo = struct {pub fn foo() void {const x = y; const y = 1;}};" << QStringList{QLatin1String("Undefined variable y")} << "";
 
-    // QTest::newRow("fn call undefined") << "test {var y = foo(); }" << QStringList{"Undefined function", "Undefined variable foo"} << "";
+    // QTest::newRow("fn call undefined") << "test {var y = foo(); }" << QStringList{QLatin1String("Undefined function", "Undefined variable foo")} << "";
     QTest::newRow("fn call builtin") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(0); }" << QStringList{} << "";
-    QTest::newRow("fn call missing arg") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(); }" << QStringList{"Expected 1 argument"} << "";
-    QTest::newRow("fn call missing args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(); }" << QStringList{"Expected 2 arguments"} << "";
-    QTest::newRow("fn call extra arg") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3); }" << QStringList{"Function has an extra argument"} << "";
-    QTest::newRow("fn call extra args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3, 4); }" << QStringList{"Function has 2 extra arguments"} << "";
+    QTest::newRow("fn call missing arg") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(); }" << QStringList{QLatin1String("Expected 1 argument")} << "";
+    QTest::newRow("fn call missing args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(); }" << QStringList{QLatin1String("Expected 2 arguments")} << "";
+    QTest::newRow("fn call extra arg") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3); }" << QStringList{QLatin1String("Function has an extra argument")} << "";
+    QTest::newRow("fn call extra args") << "pub fn foo(x: u8, y: u8) u8 {return x + y;} test {var y = foo(1, 2, 3, 4); }" << QStringList{QLatin1String("Function has 2 extra arguments")} << "";
     QTest::newRow("fn call enum arg inferred") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Ok); }" << QStringList{} << "";
     QTest::newRow("fn call enum arg") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(Status.Ok); }" << QStringList{} << "";
-    QTest::newRow("fn call enum arg inferred invalid") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Missing); }" << QStringList{"Invalid enum field Missing"} << "";
+    QTest::newRow("fn call enum arg inferred invalid") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var y = foo(.Missing); }" << QStringList{QLatin1String("Invalid enum field Missing")} << "";
     QTest::newRow("fn call arg if inferred") << "const Status = enum{Ok, Error}; pub fn foo(status: Status) void {_ = status;} test {var x: bool = undefined; var y = foo(if (x) .Ok else .Error); }" << QStringList{} << "";
-    QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{"Argument 1 type mismatch. Expected u8 got bool"} << "";
+    QTest::newRow("fn call mismatch") << "pub fn foo(x: u8) u8 {return x;} test {var y = foo(true); }" << QStringList{QLatin1String("Argument 1 type mismatch. Expected u8 got bool")} << "";
     QTest::newRow("fn call implicit cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u8 = 1; var y = foo(x); }" << QStringList{} << "";
-    QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn call needs cast") << "pub fn foo(x: u16) u16 {return x;} test {const x: u32 = 1; var y = foo(x); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn call slice") << "pub fn foo(x: []u8) void {} test {var x: [2]u8 = undefined; var y = foo(&x); }" << QStringList{} << "";
     QTest::newRow("extern fn call") << "extern fn add_char(a: u8, b: u8) u8; pub const add = add_char; test {var r = add(1, 2); }" << QStringList{} << "";
 
     // QTest::newRow("fn call slice 2") << "pub fn foo(x: []u8) void {} test {const x = [2]u8{1, 2}; var y = foo(&x); }" << QStringList{} << "";
     QTest::newRow("struct fn call") << "const Foo = struct {pub fn foo(self: Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call ptr") << "const Foo = struct {pub fn foo(self: *Foo) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
-    QTest::newRow("struct fn call arg") << "const Foo = struct {pub fn foo(self: Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
-    QTest::newRow("struct fn call ptr arg") << "const Foo = struct {pub fn foo(self: *Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
-    QTest::newRow("struct fn call not self") << "const Foo = struct {pub fn foo(other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{"Expected 1 argument"} << "";
+    QTest::newRow("struct fn call arg") << "const Foo = struct {pub fn foo(self: Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{QLatin1String("Expected 1 argument")} << "";
+    QTest::newRow("struct fn call ptr arg") << "const Foo = struct {pub fn foo(self: *Foo, other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{QLatin1String("Expected 1 argument")} << "";
+    QTest::newRow("struct fn call not self") << "const Foo = struct {pub fn foo(other: u8) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{QLatin1String("Expected 1 argument")} << "";
     QTest::newRow("struct fn call self this") << "const Foo = struct {const Self = @This(); pub fn foo(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call self *this") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call self *this 2") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void { self.bar(); } pub fn bar(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
 
     QTest::newRow("fn opt null") << "pub fn foo(bar: ?u8) void {} test {const y = foo(null); }" << QStringList{} << "";
-    QTest::newRow("fn non-opt null") << "pub fn foo(bar: u8) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn non-opt null") << "pub fn foo(bar: u8) void {} test {const y = foo(null); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn opt base") << "pub fn foo(bar: ?u8) void {} test {var x: ?u8 = 0; const y = foo(x); }" << QStringList{} << "";
     QTest::newRow("fn opt comptime") << "pub fn foo(bar: ?u8) void {} test {const y = foo(1); }" << QStringList{} << "";
-    QTest::newRow("fn opt base wrong") << "pub fn foo(bar: ?u8) void {} test {var x: ?i8 = 0; const y = foo(x); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn opt base wrong") << "pub fn foo(bar: ?u8) void {} test {var x: ?i8 = 0; const y = foo(x); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn type arg") << "pub fn foo(comptime T: type) void {} test {const y = foo(u8); }" << QStringList{} << "";
-    // QTest::newRow("fn type arg null") << "pub fn foo(comptime T: type) void {} test {const y = foo(null); }" << QStringList{"type mismatch"} << "";
+    // QTest::newRow("fn type arg null") << "pub fn foo(comptime T: type) void {} test {const y = foo(null); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn type arg 2") << "pub fn foo(comptime T: type, bar: []const T) void {} test {const y = foo(u8, \"abcd\"); }" << QStringList{} << "";
-    QTest::newRow("fn type arg 3") << "pub fn foo(comptime T: type, bar: []const T) void {} test {const y = foo(u16, \"abcd\"); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn type arg 3") << "pub fn foo(comptime T: type, bar: []const T) void {} test {const y = foo(u16, \"abcd\"); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn type arg 4") << "pub fn foo(comptime T: type, bar: []const T) []const T { return bar; } test {const x = foo(u8, \"abcd\"); const y = foo(u8, x); \n}" << QStringList{} << "1,0";
     QTest::newRow("fn arg []const u8") << "pub fn foo(bar: []const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn arg [:0]const u8") << "pub fn foo(bar: [:0]const u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{} << "";
-    QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{"type mismatch"} << "";
+    QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn arg slice to const") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(x[0..]); }" << QStringList{} << "";
     QTest::newRow("fn arg ptr to const slice") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(&x); }" << QStringList{} << "";
     QTest::newRow("fn error ok") << "pub fn write(msg: []const u8) !void {} test{ try write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 2") << "pub fn write(msg: []const u8) !void {} test{ const r = write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
-    QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{"Error is ignored"} << "";
-    QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{"Return value is ignored"} << "";
-    QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{"Incompatible types"} << "";
+    QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{QLatin1String("Error is ignored")} << "";
+    QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{QLatin1String("Return value is ignored")} << "";
+    QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
-    QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{"Incompatible types"} << "";
+    QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{QLatin1String("Incompatible types")} << "";
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
-    QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{"type mismatch"} << "";
-    QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{"Struct A has no field b"} << "";
+    QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{QLatin1String("type mismatch")} << "";
+    QTest::newRow("struct field name invalid") << "const A = struct {a: u8}; test {const x = A{.b = 0}; }" << QStringList{QLatin1String("Struct A has no field b")} << "";
     QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .Ok}; }" << QStringList{} << "";
-    QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{"Invalid enum field"} << "";
+    QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{QLatin1String("Invalid enum field")} << "";
     QTest::newRow("struct field default enum ") << "const S = enum {Ok, Err}; const A = struct {s: S = .Ok};" << QStringList{} << "";
-    QTest::newRow("struct field default enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S = .NotOk};" << QStringList{"Invalid enum field NotOk"} << "";
+    QTest::newRow("struct field default enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S = .NotOk};" << QStringList{QLatin1String("Invalid enum field NotOk")} << "";
     QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; test { var a = A{.a = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
     //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
 
     QTest::newRow("struct dot init") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.a = 0}); }" << QStringList{} << "";
-    QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{"Struct A has no field b"} << "";
+    QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{QLatin1String("Struct A has no field b")} << "";
     QTest::newRow("array init") << "const a = [_]u8{1,2};" << QStringList{} << "";
-    QTest::newRow("array init type invalid") << "const a = [_]u8{1,false};" << QStringList{"Array item type mismatch at index 1"} << "";
+    QTest::newRow("array init type invalid") << "const a = [_]u8{1,false};" << QStringList{QLatin1String("Array item type mismatch at index 1")} << "";
     QTest::newRow("array init struct dot init") << "const A = struct {a: u8}; const b = [_]A{.{.a=2}};" << QStringList{} << "";
-    QTest::newRow("array init struct dot init error") << "const A = struct {a: u8}; const b = [_]A{.{.a=true}};" << QStringList{"Struct field type mismatch"} << "";
+    QTest::newRow("array init struct dot init error") << "const A = struct {a: u8}; const b = [_]A{.{.a=true}};" << QStringList{QLatin1String("Struct field type mismatch")} << "";
 
     QTest::newRow("@intFromFloat()") << "test{var x: f32 = 0; var y: u32 = @intFromFloat(x);\n}" <<  QStringList{} << "";
     QTest::newRow("@floatFromInt()") << "test{var x: i32 = 0; var y: f32 = @floatFromInt(x);\n}" <<  QStringList{} << "";

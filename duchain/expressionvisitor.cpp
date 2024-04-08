@@ -240,7 +240,7 @@ VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &pa
     // Visit children to set return type if any
     visitChildren(node, parent);
     // TODO: Labeled block ?
-    encounter(BuiltinType::newFromName("void"));
+    encounter(BuiltinType::newFromName(QStringLiteral("void")));
     return Continue;
 }
 
@@ -248,7 +248,7 @@ VisitResult ExpressionVisitor::visitReturn(const ZigNode &node, const ZigNode &p
 {
     const auto lhs = node.lhsAsNode();
     if (lhs.isRoot()) {
-        setReturnType(BuiltinType::newFromName("void"));
+        setReturnType(BuiltinType::newFromName(QStringLiteral("void")));
     } else {
         ExpressionVisitor v(this);
         v.startVisiting(lhs, node);
@@ -396,7 +396,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const Zig
     SliceType::Ptr sliceType(new SliceType);
     sliceType->setSentinel(0);
     sliceType->setDimension(value.size()); // Main token inclues quotes
-    sliceType->setElementType(BuiltinType::newFromName("u8"));
+    sliceType->setElementType(BuiltinType::newFromName(QStringLiteral("u8")));
     sliceType->setModifiers(AbstractType::ConstModifier);
     sliceType->setComptimeKnownValue(value);
 
@@ -414,7 +414,7 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
     SliceType::Ptr sliceType(new SliceType);
     sliceType->setSentinel(0);
     // sliceType->setDimension();
-    sliceType->setElementType(BuiltinType::newFromName("u8"));
+    sliceType->setElementType(BuiltinType::newFromName(QStringLiteral("u8")));
     sliceType->setModifiers(AbstractType::ConstModifier);
     // sliceType->setValue(node.mainToken()); // Join all lines?
 
@@ -429,7 +429,7 @@ VisitResult ExpressionVisitor::visitNumberLiteral(const ZigNode &node, const Zig
     Q_UNUSED(parent);
     QString tok = node.mainToken();
     // qCDebug(KDEV_ZIG) << "visit number lit" << name;
-    BuiltinType::Ptr t(new BuiltinType(tok.contains(".") ? "comptime_float" : "comptime_int"));
+    BuiltinType::Ptr t(new BuiltinType(tok.contains(QStringLiteral(".")) ? QStringLiteral("comptime_float") : QStringLiteral("comptime_int")));
     t->setComptimeKnownValue(tok);
     encounter(t);
     return Continue;
@@ -442,7 +442,7 @@ VisitResult ExpressionVisitor::visitCharLiteral(const ZigNode &node, const ZigNo
     if (c.size() > 2) {
         // Remove the '' but keep escapes eg '\n'
         // qCDebug(KDEV_ZIG) << "visit char lit" << c << "size" << c.size();
-        BuiltinType::Ptr t(new BuiltinType("u8"));
+        BuiltinType::Ptr t(new BuiltinType(QStringLiteral("u8")));
         t->setComptimeKnownValue(c.mid(1, c.size()-2));
         encounter(t);
     } else {
@@ -511,7 +511,7 @@ VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNo
     if (auto s = T.dynamicCast<SliceType>()) {
         // Slices have builtin len / ptr types
         if (attr == QLatin1String("len")) {
-            encounter(BuiltinType::newFromName("usize"));
+            encounter(BuiltinType::newFromName(QStringLiteral("usize")));
         } else if (attr == QLatin1String("ptr")) {
             PointerType::Ptr ptr(new PointerType);
             ptr->setModifiers(s->modifiers());
@@ -682,7 +682,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         auto slice = new SliceType();
         slice->setSentinel(0);
         // Must clone since constness is modified here
-        auto elemType = BuiltinType::newFromName("u8")->clone();
+        auto elemType = BuiltinType::newFromName(QStringLiteral("u8"))->clone();
         elemType->setModifiers(AbstractType::ConstModifier);
         slice->setElementType(AbstractType::Ptr(elemType));
         encounter(AbstractType::Ptr(slice));
@@ -690,7 +690,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         name == QLatin1String("@intFromPtr")
         || name == QLatin1String("@returnAddress")
     ) {
-        encounter(BuiltinType::newFromName("usize"));
+        encounter(BuiltinType::newFromName(QStringLiteral("usize")));
     } else if (
         name == QLatin1String("@memcpy")
         || name == QLatin1String("@memset")
@@ -700,7 +700,7 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@setFloatMode")
         || name == QLatin1String("@setRuntimeSafety")
     ) {
-        encounter(BuiltinType::newFromName("void"));
+        encounter(BuiltinType::newFromName(QStringLiteral("void")));
     } else if (
         name == QLatin1String("@alignOf")
         || name == QLatin1String("@sizeOf")
@@ -708,18 +708,18 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@bitSizeOf")
         || name == QLatin1String("@offsetOf")
     ) {
-        encounter(BuiltinType::newFromName("comptime_int"));
+        encounter(BuiltinType::newFromName(QStringLiteral("comptime_int")));
     } else if (
         name == QLatin1String("@hasField")
         || name == QLatin1String("@hasDecl")
     ) {
-        encounter(BuiltinType::newFromName("bool"));
+        encounter(BuiltinType::newFromName(QStringLiteral("bool")));
     } else if (
         name == QLatin1String("@panic")
         || name == QLatin1String("@compileError")
         || name == QLatin1String("@compileLog")
     ) {
-        encounter(BuiltinType::newFromName("trap"));
+        encounter(BuiltinType::newFromName(QStringLiteral("trap")));
     } else {
         encounterUnknown();
     }
@@ -777,7 +777,7 @@ VisitResult ExpressionVisitor::callBuiltinIntFromBool(const ZigNode &node)
         if (value && value->isBool()) {
             if (value->isTrue() || value->isFalse()) {
                 BuiltinType::Ptr r(static_cast<BuiltinType*>(result->clone()));
-                r->setComptimeKnownValue(value->isTrue() ? "1" : "0");
+                r->setComptimeKnownValue(value->isTrue() ? QStringLiteral("1") : QStringLiteral("0"));
                 encounter(r);
             } else {
                 encounter(result);
@@ -806,12 +806,12 @@ VisitResult ExpressionVisitor::callBuiltinBoolFromInt(const ZigNode &node)
                     val = s.toULongLong(&ok, 0);
                 }
                 if (ok) {
-                    encounter(BuiltinType::newFromName( val ? "true" : "false"));
+                    encounter(BuiltinType::newFromName( val ? QStringLiteral("true") : QStringLiteral("false")));
                     return Continue;
                 }
             }
         }
-        encounter(BuiltinType::newFromName("bool"));
+        encounter(BuiltinType::newFromName(QStringLiteral("bool")));
         return Continue;
     }
     encounterUnknown();
@@ -902,7 +902,7 @@ VisitResult ExpressionVisitor::callBuiltinTypeOf(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
 {
     auto decl = Helper::declarationForImportedModuleName(
-        "std.builtin.Type", session()->document().str());
+        QStringLiteral("std.builtin.Type"), session()->document().str());
     if (decl) {
         auto Type = decl->abstractType().dynamicCast<UnionType>();
         if (isBuiltinCallTwo(node) && Type) {
@@ -911,52 +911,52 @@ VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
             QString typeName;
             if (auto value = v.lastType().dynamicCast<BuiltinType>()) {
                 if (value->isType())
-                    typeName = "Type";
+                    typeName = QStringLiteral("Type");
                 else if (value->isVoid())
-                    typeName = "Void";
+                    typeName = QStringLiteral("Void");
                 else if (value->isBool())
-                    typeName = "Bool";
+                    typeName = QStringLiteral("Bool");
                 else if (value->isComptimeInt())
-                    typeName = "ComptimeInt";
+                    typeName = QStringLiteral("ComptimeInt");
                 else if (value->isComptimeFloat())
-                    typeName = "ComptimeFloat";
+                    typeName = QStringLiteral("ComptimeFloat");
                 else if (value->isInteger())
-                    typeName = "Int";
+                    typeName = QStringLiteral("Int");
                 else if (value->isFloat())
-                    typeName = "Float";
+                    typeName = QStringLiteral("Float");
                 else if (value->isUndefined())
-                    typeName = "Undefined";
+                    typeName = QStringLiteral("Undefined");
                 else if (value->isNull())
-                    typeName = "Null";
+                    typeName = QStringLiteral("Null");
                 else if (value->isFrame())
-                    typeName = "Frame";
+                    typeName = QStringLiteral("Frame");
                 else if (value->isAnyframe())
-                    typeName = "AnyFrame";
+                    typeName = QStringLiteral("AnyFrame");
                 else if (value->isNoreturn())
-                    typeName = "NoReturn";
+                    typeName = QStringLiteral("NoReturn");
             } else if (v.lastType().dynamicCast<FunctionType>()) {
-                typeName = "Fn";
+                typeName = QStringLiteral("Fn");
             } else if (v.lastType().dynamicCast<UnionType>()) {
-                typeName = "Union"; // Must come before struct
+                typeName = QStringLiteral("Union"); // Must come before struct
             } else if (v.lastType().dynamicCast<StructureType>()) {
-                typeName = "Struct";
+                typeName = QStringLiteral("Struct");
             } else if (v.lastType().dynamicCast<ErrorType>()) {
-                typeName = "ErrorUnion"; // TODO: Is this right ?
+                typeName = QStringLiteral("ErrorUnion"); // TODO: Is this right ?
             } else if (v.lastType().dynamicCast<PointerType>()) {
-                typeName = "Pointer";
+                typeName = QStringLiteral("Pointer");
             } else if (v.lastType().dynamicCast<OptionalType>()) {
-                typeName = "Optional";
+                typeName = QStringLiteral("Optional");
             } else if (auto enumType = v.lastType().dynamicCast<EnumType>()) {
                 // TOOD: Error set ?
                 if (enumType->enumType().dynamicCast<EnumType>())
-                    typeName = "EnumLiteral";
+                    typeName = QStringLiteral("EnumLiteral");
                 else
-                    typeName = "Enum";
+                    typeName = QStringLiteral("Enum");
             } else if (auto slice = v.lastType().dynamicCast<SliceType>()) {
                 if (slice->dimension() > 0)
-                    typeName = "Array";
+                    typeName = QStringLiteral("Array");
                 else
-                    typeName = "Slice";
+                    typeName = QStringLiteral("Slice");
             }
 
             if (auto T = Helper::accessAttribute(Type, typeName, topContext())) {
@@ -1196,14 +1196,14 @@ VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNod
 VisitResult ExpressionVisitor::visitErrorValue(const ZigNode &node, const ZigNode &parent)
 {
     // TODO: get actual value
-    encounter(BuiltinType::newFromName("anyerror"));
+    encounter(BuiltinType::newFromName(QStringLiteral("anyerror")));
     return Continue;
 }
 
 VisitResult ExpressionVisitor::visitCmpExpr(const ZigNode &node, const ZigNode &parent)
 {
     // TODO: eval exprs..
-    encounter(BuiltinType::newFromName("bool"));
+    encounter(BuiltinType::newFromName(QStringLiteral("bool")));
     return Continue;
 }
 
@@ -1246,22 +1246,22 @@ VisitResult ExpressionVisitor::visitBoolExpr(const ZigNode &node, const ZigNode 
             if (a->isComptimeKnown() && b->isComptimeKnown()) {
                 if (tag == NodeTag_bool_or) {
                     if (a->isTrue() || b->isTrue()) {
-                        encounter(BuiltinType::newFromName("true"));
+                        encounter(BuiltinType::newFromName(QStringLiteral("true")));
                     } else {
-                        encounter(BuiltinType::newFromName("false"));
+                        encounter(BuiltinType::newFromName(QStringLiteral("false")));
                     }
                 } else {
                     if (a->isTrue() && b->isTrue()) {
-                        encounter(BuiltinType::newFromName("true"));
+                        encounter(BuiltinType::newFromName(QStringLiteral("true")));
                     } else {
-                        encounter(BuiltinType::newFromName("false"));
+                        encounter(BuiltinType::newFromName(QStringLiteral("false")));
                     }
                 }
                 return Continue;
             }
 
             // Both types are only runtime known
-            encounter(BuiltinType::newFromName("bool"));
+            encounter(BuiltinType::newFromName(QStringLiteral("bool")));
             return Continue;
         }
     }
@@ -1279,9 +1279,9 @@ VisitResult ExpressionVisitor::visitBoolNot(const ZigNode &node, const ZigNode &
     if (const auto a = v.lastType().dynamicCast<BuiltinType>()) {
         if (a->isBool()) {
             if (a->isTrue()) {
-                encounter(BuiltinType::newFromName("false"));
+                encounter(BuiltinType::newFromName(QStringLiteral("false")));
             } else if (a->isFalse()) {
-                encounter(BuiltinType::newFromName("true"));
+                encounter(BuiltinType::newFromName(QStringLiteral("true")));
             } else {
                 encounter(a); // Not comptime known
             }
@@ -1357,10 +1357,10 @@ VisitResult ExpressionVisitor::visitNegation(const ZigNode &node, const ZigNode 
                 // Known to be at least size of 1
                 BuiltinType::Ptr result(new BuiltinType(a->dataType()));
                 QString value = a->comptimeKnownValue().str();
-                if (value.at(0) == '-') {
+                if (value.at(0) == QLatin1Char('-')) {
                     result->setComptimeKnownValue(value.mid(1));
                 } else {
-                    result->setComptimeKnownValue('-' + value);
+                    result->setComptimeKnownValue(QStringLiteral("-%1").arg(value));
                 }
                 encounter(result);
             } else {
@@ -1682,7 +1682,7 @@ VisitResult ExpressionVisitor::visitForRange(const ZigNode &node, const ZigNode 
     Q_UNUSED(node);
     Q_UNUSED(parent);
     SliceType::Ptr newSlice(new SliceType);
-    newSlice->setElementType(BuiltinType::newFromName("usize"));
+    newSlice->setElementType(BuiltinType::newFromName(QStringLiteral("usize")));
     encounter(newSlice);
     return Continue;
 }

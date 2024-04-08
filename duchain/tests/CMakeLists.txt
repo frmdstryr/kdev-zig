@@ -6,7 +6,7 @@ ecm_add_test(duchaintest.cpp
     LINK_LIBRARIES
         # kdevziglanguagesupport
         kdevzigduchain
-        Qt5::Test
+        Qt${QT_MAJOR_VERSION}::Test
         KDev::Language
         KDev::Tests
 )

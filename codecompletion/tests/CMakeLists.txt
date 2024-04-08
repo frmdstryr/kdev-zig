@@ -9,6 +9,7 @@ ecm_add_test(${completiontest_SRCS}
         kdevziglanguagesupport
         kdevzigduchain
         kdevzigcompletion
-        Qt5::Test
+        Qt${QT_MAJOR_VERSION}::Test
+        KF${KF_MAJOR_VERSION}::Service
         KDev::Tests
 )

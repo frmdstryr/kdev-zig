@@ -190,9 +190,9 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     else if (Kind == TestDecl) {
         if (name.isEmpty()) {
             // include space so it cannot be referenced as a variable
-            identifier = Identifier("test 0");
+            identifier = Identifier(QStringLiteral("test 0"));
         } else {
-            identifier = Identifier("test " + name);
+            identifier = Identifier(QStringLiteral("test %1").arg(name));
         }
     }
 
@@ -269,7 +269,7 @@ StructureType::Ptr DeclarationBuilder::createType(const ZigNode &node, const Zig
             case NodeTag_tagged_union_enum_tag:
             case NodeTag_tagged_union_enum_tag_trailing: {
                 // Hack ?
-                unionType->setBaseType(AbstractType::Ptr(new BuiltinType("enum")));
+                unionType->setBaseType(AbstractType::Ptr(new BuiltinType(QStringLiteral("enum"))));
                 break;
             }
             default:
@@ -400,7 +400,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         return v.lastType();
     }
     else if (Kind == TestDecl) {
-        return AbstractType::Ptr(new BuiltinType("test"));
+        return AbstractType::Ptr(new BuiltinType(QStringLiteral("test")));
     }
     return AbstractType::Ptr(new IntegralType(IntegralType::TypeMixed));
 }
@@ -512,7 +512,7 @@ void DeclarationBuilder::updateFunctionArgs(const ZigNode &node, const ZigNode &
                     Zig::DelayedType::Ptr t(new Zig::DelayedType);
                     if (paramName.isEmpty()) {
                         // fn proto can skip name so just use the arg index
-                        t->setIdentifier(QString("%1").arg(i));
+                        t->setIdentifier(QStringLiteral("%1").arg(i));
                     } else {
                         t->setIdentifier(paramName);
                     }
@@ -528,7 +528,7 @@ void DeclarationBuilder::updateFunctionArgs(const ZigNode &node, const ZigNode &
                 }
             }
             else if (paramData.info.is_anytype) {
-                param->setAbstractType(BuiltinType::newFromName("anytype"));
+                param->setAbstractType(BuiltinType::newFromName(QStringLiteral("anytype")));
             }
 
             fn->addArgument(param->abstractType(), i);

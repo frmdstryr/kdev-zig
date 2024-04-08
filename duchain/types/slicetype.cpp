@@ -109,9 +109,9 @@ QString SliceType::toString() const
 {
     // TODO: Clean this up...
     const auto T = elementType();
-    QString s = (sentinel() >= 0) ? QStringLiteral(":%1").arg(sentinel()) : "";
+    QString s = (sentinel() >= 0) ? QStringLiteral(":%1").arg(sentinel()) : QStringLiteral("");
     QString type = T ? T->toString() : QStringLiteral("<notype>");
-    QString v = isComptimeKnown() ? QString(" = \"%1\"").arg(comptimeKnownValue().str()) : "";
+    QString v = isComptimeKnown() ? QStringLiteral(" = \"%1\"").arg(comptimeKnownValue().str()) : QStringLiteral("");
     if (d_func()->m_dimension == 0) {
         return AbstractType::toString() + QStringLiteral("[%1]%2%3").arg(s).arg(type).arg(v);
     }

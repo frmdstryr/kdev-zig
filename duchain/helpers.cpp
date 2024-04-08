@@ -524,9 +524,9 @@ AbstractType::Ptr Helper::evaluateUnsignedOp(
             auto sizea = a->bitsize();
             auto sizeb = b->bitsize();
             auto r = static_cast<BuiltinType*>((sizea >= sizeb) ? a->clone() : b->clone());
-            const int base = (va.startsWith("0x") || vb.startsWith("0x")) ? 16 : 10;
-            QString prefix = (base == 16 || result > 255 ) ? "0x" : "";
-            r->setComptimeKnownValue(QString("%1%2").arg(prefix).arg(result, 0, base));
+            const int base = (va.startsWith(QStringLiteral("0x")) || vb.startsWith(QStringLiteral("0x"))) ? 16 : 10;
+            QString prefix = (base == 16 || result > 255 ) ? QStringLiteral("0x") : QStringLiteral("");
+            r->setComptimeKnownValue(QStringLiteral("%1%2").arg(prefix).arg(result, 0, base));
             return AbstractType::Ptr(r);
         }
     }
@@ -540,7 +540,7 @@ AbstractType::Ptr Helper::evaluateUnsignedOp(
 KDevelop::Declaration* Helper::declarationForImportedModuleName(
         const QString& module, const QString& currentFile)
 {
-    QStringList parts = module.split(".");
+    QStringList parts = module.split(QStringLiteral("."));
     if (parts.isEmpty()) {
         return nullptr;
     }
@@ -611,7 +611,7 @@ KDevelop::Declaration* Helper::declarationForImportedModuleName(
 QString Helper::zigExecutablePath(IProject* project)
 {
     if ( project ) {
-        auto zigExe = project->projectConfiguration()->group("kdevzigsupport").readEntry("zigExecutable");
+        auto zigExe = project->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigExecutable"));
         if ( !zigExe.isEmpty() ) {
             QFile f(zigExe);
             if ( f.exists() ) {
@@ -619,12 +619,12 @@ QString Helper::zigExecutablePath(IProject* project)
             }
         }
     }
-    auto result = QStandardPaths::findExecutable("zig");
+    auto result = QStandardPaths::findExecutable(QStringLiteral("zig"));
     if ( ! result.isEmpty() ) {
         return result;
     }
     qCWarning(KDEV_ZIG) << "zig exe not found. Using default";
-    return "/usr/bin/zig";
+    return QStringLiteral("/usr/bin/zig");
 }
 
 void Helper::loadPackages(KDevelop::IProject* project)
@@ -636,17 +636,17 @@ void Helper::loadPackages(KDevelop::IProject* project)
     QMutexLocker lock(&Helper::projectPathLock);
 
     // Keep old stdlib to avoid re-running zig
-    QString oldStdLib = projectPackages.contains("std") ?
-        *projectPackages.constFind("std"): "";
+    QString oldStdLib = projectPackages.contains(QStringLiteral("std")) ?
+        *projectPackages.constFind(QStringLiteral("std")): QStringLiteral("");
 
     projectPackages.clear();
 
     // Load packages
 
-    QString pkgs = project->projectConfiguration()->group("kdevzigsupport").readEntry("zigPackages");
+    QString pkgs = project->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigPackages"));
     qCDebug(KDEV_ZIG) << "zig packages configured" << pkgs;
-    for (const QString &pkg : pkgs.split("\n")) {
-        QStringList parts = pkg.split(":");
+    for (const QString &pkg : pkgs.split(QStringLiteral("\n"))) {
+        QStringList parts = pkg.split(QStringLiteral(":"));
         if (parts.size() == 2) {
             QString pkgName = parts[0].trimmed();
             QString pkgPath = parts[1].trimmed();
@@ -662,8 +662,8 @@ void Helper::loadPackages(KDevelop::IProject* project)
     }
 
     // If none is defined use the last saved
-    if (!oldStdLib.isEmpty() && !projectPackages.contains("std")) {
-        projectPackages.insert("std", oldStdLib);
+    if (!oldStdLib.isEmpty() && !projectPackages.contains(QStringLiteral("std"))) {
+        projectPackages.insert(QStringLiteral("std"), oldStdLib);
     }
 
     projectPackagesLoaded = true;
@@ -671,7 +671,7 @@ void Helper::loadPackages(KDevelop::IProject* project)
 
 QString Helper::stdLibPath(IProject* project)
 {
-    static QRegularExpression stdDirPattern("\\s*\"std_dir\":\\s*\"(.+)\"");
+    static QRegularExpression stdDirPattern(QStringLiteral("\\s*\"std_dir\":\\s*\"(.+)\""));
     QMutexLocker lock(&Helper::projectPathLock);
     if (!projectPackagesLoaded) {
         lock.unlock();
@@ -679,13 +679,13 @@ QString Helper::stdLibPath(IProject* project)
         lock.relock();
     }
     // Use one from project config or previously loaded from zig
-    if (projectPackages.contains("std")) {
-        QDir stdzig = *projectPackages.constFind("std");
+    if (projectPackages.contains(QStringLiteral("std"))) {
+        QDir stdzig = *projectPackages.constFind(QStringLiteral("std"));
         stdzig.cdUp();
         return stdzig.path();
     }
     QProcess zig;
-    QStringList args = {"env"};
+    QStringList args = {QStringLiteral("env")};
     QString zigExe = zigExecutablePath(project);
     qCDebug(KDEV_ZIG) << "zig exe" << zigExe;
     if (QFile(zigExe).exists()) {
@@ -693,7 +693,7 @@ QString Helper::stdLibPath(IProject* project)
         zig.waitForFinished(1000);
         QString output = QString::fromUtf8(zig.readAllStandardOutput());
         qCDebug(KDEV_ZIG) << "zig env output:" << output;
-        QStringList lines = output.split("\n");
+        QStringList lines = output.split(QStringLiteral("\n"));
         for (const QString &line: lines) {
             auto r = stdDirPattern.match(line);
             if (r.hasMatch()) {
@@ -701,15 +701,15 @@ QString Helper::stdLibPath(IProject* project)
                 QString path = QDir::isAbsolutePath(match) ? match :
                     QDir::home().filePath(match);
                 qCDebug(KDEV_ZIG) << "std_lib" << path;
-                projectPackages.insert("std", QDir::cleanPath(path + "/std.zig"));
-                QDir stdzig = *projectPackages.constFind("std");
+                projectPackages.insert(QStringLiteral("std"), QDir::cleanPath(QStringLiteral("%1/std.zig").arg(path)));
+                QDir stdzig = *projectPackages.constFind(QStringLiteral("std"));
                 stdzig.cdUp();
                 return stdzig.path();
             }
         }
     }
     qCWarning(KDEV_ZIG) << "zig std lib path not found";
-    return "/usr/local/lib/zig/lib/zig/std";
+    return QStringLiteral("/usr/local/lib/zig/lib/zig/std");
 }
 
 QString Helper::packagePath(const QString &name, const QString& currentFile)
@@ -728,16 +728,16 @@ QString Helper::packagePath(const QString &name, const QString& currentFile)
     }
     if (name == QLatin1String("std")) {
         lock.unlock();
-        return QDir::cleanPath(stdLibPath(project) + "/std.zig");
+        return QDir::cleanPath(QStringLiteral("%1/std.zig").arg(stdLibPath(project)));
     }
     qCDebug(KDEV_ZIG) << "No zig package path found for " << name;
-    return "";
+    return QStringLiteral("");
 }
 
 QUrl Helper::importPath(const QString& importName, const QString& currentFile)
 {
     QUrl importPath;
-    if (importName.endsWith(".zig")) {
+    if (importName.endsWith(QStringLiteral(".zig"))) {
         QDir folder = currentFile;
         folder.cdUp();
         importPath = QUrl::fromLocalFile(
@@ -750,14 +750,14 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
         return importPath;
     }
     qCDebug(KDEV_ZIG) << "@import(" << importName << ") does not exist" << importPath.toLocalFile();
-    return QUrl("");
+    return QUrl(QStringLiteral(""));
 }
 
 QString Helper::qualifierPath(const QString& currentFile)
 {
-    QString f = currentFile.endsWith(".zig") ? currentFile.mid(0, currentFile.size()-3) : currentFile;
+    QString f = currentFile.endsWith(QStringLiteral(".zig")) ? currentFile.mid(0, currentFile.size()-3) : currentFile;
     if (QDir::isRelativePath(f)) {
-        return ""; // f.replace(QDir::separator(), '.');
+        return QStringLiteral(""); // f.replace(QDir::separator(), '.');
     }
     auto project = ICore::self()->projectController()->findProjectForUrl(
             QUrl::fromLocalFile(currentFile));
@@ -777,23 +777,23 @@ QString Helper::qualifierPath(const QString& currentFile)
         QFileInfo pkg(pkgPath);
         QDir pkgRoot(pkg.absolutePath());
         QString relPath = pkgRoot.relativeFilePath(f);
-        if (relPath.isEmpty() || relPath == '.') {
+        if (relPath.isEmpty() || relPath == QLatin1Char('.')) {
             return pkgName;
         }
-        if (!relPath.startsWith("..")) {
-            QString subPkg = relPath.replace(QDir::separator(), '.');
-            if (subPkg.endsWith('.')) {
-                return pkgName + '.' + subPkg.mid(0, subPkg.size()-1);
+        if (!relPath.startsWith(QStringLiteral(".."))) {
+            QString subPkg = relPath.replace(QDir::separator(), QLatin1Char('.'));
+            if (subPkg.endsWith(QLatin1Char('.'))) {
+                return pkgName + QLatin1Char('.') + subPkg.mid(0, subPkg.size()-1);
             }
-            return pkgName + '.' + subPkg;
+            return QStringLiteral("%1.%2").arg(pkgName, subPkg);
         }
     }
     if (project) {
         QDir projectRoot(project->path().toLocalFile());
         QString relPath = projectRoot.relativeFilePath(f);
-        return relPath.replace(QDir::separator(), '.');
+        return relPath.replace(QDir::separator(), QLatin1Char('.'));
     }
-    return ""; // f.mid(1).replace(QDir::separator(), '.');
+    return QStringLiteral(""); // f.mid(1).replace(QDir::separator(), '.');
 }
 
 } // namespace zig

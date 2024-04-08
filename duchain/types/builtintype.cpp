@@ -18,8 +18,8 @@
 namespace Zig {
 
 
-static QRegularExpression signedIntPattern("i\\d+");
-static QRegularExpression unsignedIntPattern("u\\d+");
+static QRegularExpression signedIntPattern(QStringLiteral("i\\d+"));
+static QRegularExpression unsignedIntPattern(QStringLiteral("u\\d+"));
 // static QRegularExpression floatPattern("f(16|32|64|80|128)");
 
 #define STATIC_INDEXED_STR(v) static IndexedString indexed_##v(#v)
@@ -140,7 +140,7 @@ QString BuiltinType::toString() const
     if (!isComptimeKnown() || isVoid() || isNull()) {
         return AbstractType::toString() + d_func()->m_data.str();
     }
-    return AbstractType::toString() + QString("%1 = %2").arg(
+    return AbstractType::toString() + QStringLiteral("%1 = %2").arg(
         d_func()->m_data.str(),
         comptimeKnownValue().str()
     );
@@ -365,7 +365,7 @@ int BuiltinType::bitsize() const
 
 bool BuiltinType::isBuiltinFunc(const QString& name)
 {
-   return is_zig_builtin_fn_name(name.toUtf8());
+   return is_zig_builtin_fn_name(name.toUtf8().constData());
 }
 
 bool BuiltinType::isBuiltinType(const QString& name)

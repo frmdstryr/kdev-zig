@@ -32,7 +32,7 @@ using namespace KDevelop;
 QTEST_MAIN(Zig::CompletionTest)
 
 static int testId = 0;
-static QString basepath = "/tmp/kdevzigcompletiontest.dir/";
+static QString basepath = QLatin1String("/tmp/kdevzigcompletiontest.dir/");
 
 namespace Zig {
 
@@ -44,7 +44,7 @@ QStandardItemModel& fakeModel() {
 }
 
 QString filenameForTestId(const int id) {
-    return QString("%1test_%2.zig").arg(basepath).arg(id);
+    return QStringLiteral("%1test_%2.zig").arg(basepath).arg(id);
 }
 
 QString nextFilename() {
@@ -105,29 +105,29 @@ const CompletionParameters CompletionTest::prepareCompletion(const QString& init
     CompletionParameters completion_data;
 
     QString filename = nextFilename();
-    Q_ASSERT(initCode.indexOf("%INVOKE") != -1);
+    Q_ASSERT(initCode.indexOf(QLatin1String("%INVOKE")) != -1);
 
     // Parse file before completion line
     QStringList oldLines;
-    for (const auto &line: initCode.split('\n')) {
-        if (line.contains("%INVOKE"))
+    for (const auto &line: initCode.split(QLatin1Char('\n'))) {
+        if (line.contains(QLatin1String("%INVOKE")))
             continue;
         oldLines.append(line);
     }
     ReferencedTopDUContext topContext = makeAndParseFile(
         filename,
-        oldLines.join('\n')
+        oldLines.join(QLatin1Char('\n'))
     );
     Q_ASSERT(topContext);
 
     QString copy = initCode;
 
-    QString allCode = copy.replace("%INVOKE", invokeCode);
+    QString allCode = copy.replace(QLatin1String("%INVOKE"), invokeCode);
 
-    QStringList lines = allCode.split('\n');
+    QStringList lines = allCode.split(QLatin1Char('\n'));
     completion_data.cursorAt = CursorInRevision::invalid();
     for ( int i = 0; i < lines.length(); i++ ) {
-        int j = lines.at(i).indexOf("%CURSOR");
+        int j = lines.at(i).indexOf(QLatin1String("%CURSOR"));
         if ( j != -1 ) {
             completion_data.cursorAt = CursorInRevision(i, j);
             break;
@@ -136,8 +136,8 @@ const CompletionParameters CompletionTest::prepareCompletion(const QString& init
     Q_ASSERT(completion_data.cursorAt.isValid());
 
     // codeCompletionContext only gets passed the text until the place where completion is invoked
-    completion_data.snip = allCode.mid(0, allCode.indexOf("%CURSOR"));
-    completion_data.remaining = allCode.mid(allCode.indexOf("%CURSOR") + 7);
+    completion_data.snip = allCode.mid(0, allCode.indexOf(QLatin1String("%CURSOR")));
+    completion_data.remaining = allCode.mid(allCode.indexOf(QLatin1String("%CURSOR")) + 7);
 
     DUChainReadLocker lock;
     completion_data.contextAtCursor = DUContextPointer(topContext->findContextAt(completion_data.cursorAt, true));
@@ -156,7 +156,7 @@ const QList<CompletionTreeItem*> CompletionTest::runCompletion(const CompletionP
     );
     bool abort = false;
     QList<CompletionTreeItem*> items;
-    foreach ( CompletionTreeItemPointer ptr, context->completionItems(abort, true) ) {
+    for ( CompletionTreeItemPointer ptr: context->completionItems(abort, true) ) {
         items << ptr.data();
         // those are leaked, but it's only a few kb while the tests are running. who cares.
         m_ptrs << ptr;
@@ -166,7 +166,7 @@ const QList<CompletionTreeItem*> CompletionTest::runCompletion(const CompletionP
 
 bool CompletionTest::containsItemForDeclarationNamed(const QList<CompletionTreeItem*> items, QString itemName)
 {
-    foreach ( const CompletionTreeItem* ptr, items ) {
+    for ( const CompletionTreeItem* ptr: items ) {
         if ( ptr->declaration() ) {
             if ( ptr->declaration()->identifier().toString() == itemName ) {
                 return true;
@@ -179,7 +179,7 @@ bool CompletionTest::containsItemForDeclarationNamed(const QList<CompletionTreeI
 bool CompletionTest::containsItemStartingWith(const QList<CompletionTreeItem*> items, const QString& itemName)
 {
     QModelIndex idx = fakeModel().index(0, KDevelop::CodeCompletionModel::Name);
-    foreach ( const CompletionTreeItem* ptr, items ) {
+    for ( const CompletionTreeItem* ptr: items ) {
         if ( ptr->data(idx, Qt::DisplayRole, nullptr).toString().startsWith(itemName) ) {
             return true;
         }
