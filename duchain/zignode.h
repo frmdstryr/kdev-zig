@@ -43,7 +43,6 @@ private:
 template <typename T> void noop_destructor(T *) {}
 
 using ZigAst = ZigAllocatedObject<ZAst, destroy_ast>;
-using ZigString = ZigAllocatedObject<const char, destroy_string>;
 using ZigError = ZigAllocatedObject<ZError, destroy_error>;
 using ZigCompletion = ZigAllocatedObject<ZCompletion, destroy_completion>;
 
@@ -121,7 +120,6 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     inline bool isRoot() const { return index == 0; }
 };
 
-template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<const char, destroy_string>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZAst, destroy_ast>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZError, destroy_error>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZCompletion, destroy_completion>;

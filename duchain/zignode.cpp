@@ -142,8 +142,8 @@ QString ZigNode::tokenSlice(TokenIndex i) const
     if (i == INVALID_TOKEN) {
         return QStringLiteral("");
     }
-    ZigString name = ZigString(ast_token_slice(ast, i));
-    return QString::fromUtf8(*name);
+    const auto slice = ast_token_slice(ast, i);
+    return QString::fromUtf8(slice.data, slice.len);
 }
 
 KDevelop::RangeInRevision ZigNode::tokenRange(uint32_t i) const
@@ -203,14 +203,14 @@ QString ZigNode::spellingName() const
     if (tok == INVALID_TOKEN) {
         return QStringLiteral("");
     }
-    ZigString name = ZigString(ast_token_slice(ast, tok));
-    const char *str = name.data();
-    const auto n = strlen(str);
+    const auto name = ast_token_slice(ast, tok);
+    const char *str = name.data;
+    const auto n = name.len;
     if (n > 2 && str[0] == '"' && str[n-1] == '"') {
         str++; // Skip start "
         return QString::fromUtf8(str, n-2); // Trim end "
     }
-    return QString::fromUtf8(str);
+    return QString::fromUtf8(str, n);
 }
 
 QString ZigNode::mainToken() const
@@ -230,9 +230,9 @@ KDevelop::RangeInRevision ZigNode::spellingRange() const
 
 QString ZigNode::comment() const
 {
-    ZigString name = ZigString(ast_node_comment(ast, index));
-    if (name.data()) {
-        return QString::fromUtf8(name.data());
+    const auto name = ast_node_comment(ast, index);
+    if (name.isValid()) {
+        return QString::fromUtf8(name.data, name.len);
     }
     return QStringLiteral("");
 

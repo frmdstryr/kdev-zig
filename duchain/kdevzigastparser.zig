@@ -22,6 +22,11 @@ const SourceRange = extern struct {
     end: SourceLocation = .{}
 };
 
+const SourceSlice = extern struct {
+    data: ?[*]const u8 = null,
+    len: u32 = 0,
+};
+
 const Severity = enum(c_int) { NoSeverity = 0, Error = 1, Warning = 2, Hint = 4 };
 
 const VisitResult = enum(u8) {
@@ -487,10 +492,9 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     if (index >= ast.nodes.len) {
         return .Unknown;
     }
-    const main_tokens = ast.nodes.items(.main_token);
+    const main_token = ast.nodes.items(.main_token)[index];
     const tag: Tag = ast.nodes.items(.tag)[index];
     return switch (tag) {
-        .root => .Module,
         .fn_decl => .FunctionDecl,
         .fn_proto,
         .fn_proto_multi,
@@ -506,13 +510,11 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
         .container_decl_two,
         .container_decl_two_trailing,
         .container_decl_arg,
-        .container_decl_arg_trailing =>
-            if (isTokenSliceEql(ast, main_tokens[index], "enum"))
-                .EnumDecl
-            else if (isTokenSliceEql(ast, main_tokens[index], "union"))
-                .UnionDecl
-            else
-                .ContainerDecl,
+        .container_decl_arg_trailing => switch (ast.tokens.items(.tag)[main_token]) {
+            .keyword_enum => .EnumDecl,
+            .keyword_union => .UnionDecl,
+            else => .ContainerDecl
+        },
         .block,
         .block_semicolon,
         .block_two,
@@ -556,6 +558,7 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
         .@"catch" => .Catch,
         .@"usingnamespace" => .Usingnamespace,
         // TODO
+        .root => .Module,
         else => .Unknown,
     };
 }
@@ -571,18 +574,14 @@ export fn ast_node_tag(ptr: ?*Ast, index: NodeIndex) Ast.Node.Tag {
     return .root; // Invalid unless index == 0
 }
 
-// Caller must free with destroy_string
-export fn ast_token_slice(ptr: ?*Ast, token: TokenIndex) ?[*]const u8 {
+export fn ast_token_slice(ptr: ?*Ast, token: TokenIndex) SourceSlice {
     if (ptr) |ast| {
         if (token < ast.tokens.len) {
             const name = ast.tokenSlice(token);
-            const copy = gpa.allocator().dupeZ(u8, name) catch {
-                return null;
-            };
-            return copy.ptr;
+            return SourceSlice{.data=name.ptr, .len=@intCast(name.len)};
         }
     }
-    return null;
+    return SourceSlice{};
 }
 
 fn findNodeComment(ast: *const Ast, node: NodeIndex) ?[]const u8 {
@@ -700,19 +699,15 @@ test "node-comment" {
         , .container_field_init, "/// This field is a u8");
 }
 
-// Caller must free with destroy_string
-export fn ast_node_comment(ptr: ?*Ast, node: NodeIndex) ?[*]const u8 {
+export fn ast_node_comment(ptr: ?*Ast, node: NodeIndex) SourceSlice {
     if (ptr) |ast| {
         if (node < ast.nodes.len) {
             if (findNodeComment(ast, node)) |comment| {
-                const copy = gpa.allocator().dupeZ(u8, comment) catch {
-                    return null;
-                };
-                return copy.ptr;
+                return SourceSlice{.data=comment.ptr, .len=@intCast(comment.len)};
             }
         }
     }
-    return null;
+    return SourceSlice{};
 }
 
 export fn ast_token_range(ptr: ?*Ast, token: TokenIndex) SourceRange {
@@ -1136,16 +1131,6 @@ test "spelling-range" {
     try testSpellingRange("const Foo = struct {a: bool};\nvar foo = Foo{};", .struct_init_one, .{ .start = .{ .line = 1, .column = 10 }, .end = .{ .line = 1, .column = 13 } });
     try testSpellingRange("var x = y.foo();", .call_one, .{ .start = .{ .line = 0, .column = 10 }, .end = .{ .line = 0, .column = 13 } });
     try testSpellingRange("var x = @min(1, 2);", .builtin_call_two, .{ .start = .{ .line = 0, .column = 8 }, .end = .{ .line = 0, .column = 12 } });
-}
-
-
-export fn destroy_string(str: [*c]const u8) void {
-    // std.log.warn("zig: destroy_str {}", .{@intFromPtr(str)});
-    const len = strlen(str);
-    if (len > 0) {
-        const allocator = gpa.allocator();
-        allocator.free(str[0 .. len + 1]);
-    }
 }
 
 export fn ast_format(

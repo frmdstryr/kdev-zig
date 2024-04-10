@@ -564,12 +564,21 @@ struct SourceRange
     }
 };
 
+struct SourceSlice
+{
+    const char* data;
+    uint32_t len;
+    inline bool isValid() const
+    {
+        return data != nullptr && len > 0;
+    }
+};
+
 struct NodeData
 {
     uint32_t lhs;
     uint32_t rhs;
 };
-
 
 struct ZError
 {
@@ -722,16 +731,14 @@ NodeIndex ast_switch_case_item_at(const ZAst *tree, NodeIndex node, uint32_t i);
 uint32_t ast_for_input_count(const ZAst *tree, NodeIndex node);
 NodeIndex ast_for_input_at(const ZAst *tree, NodeIndex node, uint32_t i);
 
-
 // NOTE: These return INVALID_TOKEN on error 0 is a valid token
 TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType capture);
 
-// NOTE: The caller must free these with destroy_string
-const char *ast_token_slice(const ZAst *tree, TokenIndex token);
-const char *ast_node_comment(const ZAst *tree, NodeIndex node);
-void destroy_string(const char *str);
+// NOTE: Does not make a copy of data. Data is not null terminated
+SourceSlice ast_token_slice(const ZAst *tree, TokenIndex token);
+SourceSlice ast_node_comment(const ZAst *tree, NodeIndex node);
 
 // NOTE: Lines are 0 indexed so the first line is 0 not 1
 SourceRange ast_token_range(const ZAst *tree, TokenIndex token);
