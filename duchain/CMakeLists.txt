@@ -40,7 +40,7 @@ endif()
 # Zig parser
 add_custom_target(
     kdevzigastparser
-    COMMAND ${ZIG_EXECUTABLE} build-lib "${CMAKE_CURRENT_SOURCE_DIR}/kdevzigastparser.zig" -dynamic -DOptimize=${ZIG_OPTIMIZE}
+    COMMAND ${ZIG_EXECUTABLE} build-lib "${CMAKE_CURRENT_SOURCE_DIR}/kdevzigastparser.zig" -dynamic -DOptimize=${ZIG_OPTIMIZE} -fno-strip
     BYPRODUCTS libkdevzigastparser.so
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libkdevzigastparser.so DESTINATION ${KDE_INSTALL_LIBDIR})
