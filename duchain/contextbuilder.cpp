@@ -123,28 +123,6 @@ void ContextBuilder::visitChildren(const ZigNode &node, const ZigNode &parent)
     ast_visit(node.ast, node.index, contextBuilderVisitorCallback, this);
 }
 
-template <NodeKind Kind>
-VisitResult ContextBuilder::buildContext(const ZigNode &node, const ZigNode &parent)
-{
-    if (shouldSkipNode(node, parent)) {
-        return Recurse; // Skip this case
-    }
-    if (NodeTraits::hasChildren(Kind)) {
-        constexpr bool hasContext = NodeTraits::hasContext(Kind);
-        if (hasContext) {
-            bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
-            QString name = overwrite ? parent.spellingName() : node.spellingName();
-            DUChainWriteLocker lock;
-            openContext(&node, NodeTraits::contextType(Kind), &name);
-        }
-        visitChildren(node, parent);
-        if (hasContext) {
-            closeContext();
-        }
-        return Continue;
-    }
-    return Recurse;
-}
 
 void ContextBuilder::startVisiting(const ZigNode *node)
 {

@@ -409,6 +409,7 @@ VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const Zig
 
 VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(node);
     Q_UNUSED(parent);
 
     SliceType::Ptr sliceType(new SliceType);
@@ -1196,6 +1197,8 @@ VisitResult ExpressionVisitor::visitErrorUnion(const ZigNode &node, const ZigNod
 VisitResult ExpressionVisitor::visitErrorValue(const ZigNode &node, const ZigNode &parent)
 {
     // TODO: get actual value
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
     encounter(BuiltinType::newFromName(QStringLiteral("anyerror")));
     return Continue;
 }
@@ -1203,6 +1206,8 @@ VisitResult ExpressionVisitor::visitErrorValue(const ZigNode &node, const ZigNod
 VisitResult ExpressionVisitor::visitCmpExpr(const ZigNode &node, const ZigNode &parent)
 {
     // TODO: eval exprs..
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
     encounter(BuiltinType::newFromName(QStringLiteral("bool")));
     return Continue;
 }
@@ -1503,6 +1508,7 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
 
 VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v(this);

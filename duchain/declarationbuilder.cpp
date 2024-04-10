@@ -157,7 +157,7 @@ VisitResult DeclarationBuilder::buildDeclaration(const ZigNode &node, const ZigN
 
     QString name = overwrite ? parent.spellingName() : node.spellingName();
     auto range = editorFindSpellingRange(overwrite ? parent : node, name);
-    auto *decl = createDeclaration<Kind>(node, parent, name, isDef, range);
+    createDeclaration<Kind>(node, parent, name, isDef, range);
     VisitResult ret = buildContext<Kind>(node, parent);
     if (hasContext) {
         eventuallyAssignInternalContext();
@@ -485,6 +485,7 @@ void DeclarationBuilder::setDeclData(Declaration *decl)
 
 void DeclarationBuilder::updateFunctionArgs(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
     auto fn = decl->type<FunctionType>();
@@ -548,6 +549,7 @@ void DeclarationBuilder::updateFunctionArgs(const ZigNode &node, const ZigNode &
 
 void DeclarationBuilder::updateFunctionReturnType(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     Q_ASSERT(hasCurrentDeclaration());
     auto *decl = currentDeclaration();
     auto fn = decl->type<FunctionType>();
@@ -749,7 +751,7 @@ void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent
     if (parent.tag() != NodeTag_fn_decl) {
         auto range = node.spellingRange();
         QString name = node.fnName();
-        Declaration* decl = createDeclaration<FunctionDecl>(node, parent, name, false, range);
+        createDeclaration<FunctionDecl>(node, parent, name, false, range);
         {
             openContext(&node, NodeTraits::contextType(FunctionDecl), &name);
             updateFunctionArgs(node, parent);
@@ -762,6 +764,8 @@ void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent
 
 void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(node);
+    Q_UNUSED(parent);
     // ZigNode child = node.nextChild();
     // ExpressionVisitor v(session, currentContext());
     // v.startVisiting(child, node);

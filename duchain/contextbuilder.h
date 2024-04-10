@@ -22,6 +22,7 @@
 #include <language/duchain/builders/abstractcontextbuilder.h>
 
 #include "parsesession.h"
+#include "nodetraits.h"
 #include "zignode.h"
 
 #include "kdevzigduchain_export.h"
@@ -45,8 +46,28 @@ public:
 protected:
     KDevelop::RangeInRevision editorFindSpellingRange(const ZigNode &node, const QString &identifier);
 
-    template <NodeKind>
-    VisitResult buildContext(const ZigNode &node, const ZigNode &parent);
+    template <NodeKind Kind>
+    VisitResult buildContext(const ZigNode &node, const ZigNode &parent)
+    {
+        if (shouldSkipNode(node, parent)) {
+            return Recurse; // Skip this case
+        }
+        if (NodeTraits::hasChildren(Kind)) {
+            constexpr bool hasContext = NodeTraits::hasContext(Kind);
+            if (hasContext) {
+                bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
+                QString name = overwrite ? parent.spellingName() : node.spellingName();
+                KDevelop::DUChainWriteLocker lock;
+                openContext(&node, NodeTraits::contextType(Kind), &name);
+            }
+            visitChildren(node, parent);
+            if (hasContext) {
+                closeContext();
+            }
+            return Continue;
+        }
+        return Recurse;
+    }
 
     template<NodeKind Kind>
     KDevelop::DUContext *createContext(ZigNode *node, const KDevelop::QualifiedIdentifier& scopeId);

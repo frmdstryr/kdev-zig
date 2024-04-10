@@ -31,10 +31,16 @@ ecm_qt_declare_logging_category(kdevzigduchain_SRC
 
 add_library(kdevzigduchain SHARED ${kdevzigduchain_SRC})
 
+set(ZIG_OPTIMIZE "ReleaseSafe")
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(ZIG_OPTIMIZE "ReleaseFast")
+endif()
+
+
 # Zig parser
 add_custom_target(
     kdevzigastparser
-    COMMAND ${ZIG_EXECUTABLE} build-lib "${CMAKE_CURRENT_SOURCE_DIR}/kdevzigastparser.zig" -dynamic -DOptimize=ReleaseSafe
+    COMMAND ${ZIG_EXECUTABLE} build-lib "${CMAKE_CURRENT_SOURCE_DIR}/kdevzigastparser.zig" -dynamic -DOptimize=${ZIG_OPTIMIZE}
     BYPRODUCTS libkdevzigastparser.so
 )
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libkdevzigastparser.so DESTINATION ${KDE_INSTALL_LIBDIR})
