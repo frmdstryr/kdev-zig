@@ -2,6 +2,7 @@
 // LGPL
 const std = @import("std");
 const Ast = std.zig.Ast;
+const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 const TokenIndex = Ast.TokenIndex;
@@ -11,6 +12,66 @@ const Tag = Ast.Node.Tag;
 const INVALID_TOKEN = std.math.maxInt(TokenIndex);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+
+// kdev-zig makes heavy use of fastTokenLocation which is really slow
+// so use a custom version
+const ZAst = struct {
+    const Self = @This();
+    ast: Ast,
+    line_offsets: []u32,
+
+    pub fn parse(allocator: Allocator, source: [:0]const u8) !ZAst {
+        var line_offsets = std.ArrayListUnmanaged(u32){};
+        defer line_offsets.deinit(allocator);
+
+        const estimated_line_count = source.len / 80;
+        try line_offsets.ensureTotalCapacity(allocator, estimated_line_count);
+        {
+
+            var offset: u32 = 0;
+            while (std.mem.indexOfScalarPos(u8, source, offset, '\n')) |i| {
+                try line_offsets.append(allocator, @intCast(i));
+                offset = @as(u32, @intCast(i)) + 1;
+            }
+            // If the file does not end with a newline, add a final entry
+            if (offset < source.len) {
+                try line_offsets.append(allocator, @intCast(source.len));
+            }
+        }
+        return ZAst{
+            .ast = try Ast.parse(allocator, source, .zig),
+            .line_offsets = try line_offsets.toOwnedSlice(allocator),
+        };
+    }
+
+    pub fn fastTokenLocation(self: ZAst, token_index: TokenIndex) Ast.Location {
+        var loc = Ast.Location{
+            .line = 0,
+            .column = 0,
+            .line_start = 0,
+            .line_end = self.ast.source.len,
+        };
+        const token_start = self.ast.tokens.items(.start)[token_index];
+        for (self.line_offsets) |i| {
+            if (i >= token_start) {
+                loc.column = token_start - loc.line_start;
+                loc.line_end = i;
+                break; // Went past
+            }
+            loc.line += 1;
+            loc.line_start = i + 1;
+        }
+        return loc;
+    }
+
+
+    pub fn deinit(self: *ZAst, allocator: Allocator) void {
+        self.ast.deinit(allocator);
+        allocator.free(self.line_offsets);
+        self.* = undefined;
+    }
+
+};
 
 const SourceLocation = extern struct {
     line: u32 = 0,
@@ -89,12 +150,12 @@ const ZError = extern struct {
     }
 };
 
-fn printAstError(ast: *Ast, filename: []const u8, source: []const u8) !void {
+fn printAstError(zast: *ZAst, filename: []const u8, source: []const u8) !void {
     const stderr = std.io.getStdErr().writer();
-    for (ast.errors) |parse_error| {
-        const loc = ast.tokenLocation(0, parse_error.token);
+    for (zast.ast.errors) |parse_error| {
+        const loc = zast.fastTokenLocation(parse_error.token);
         try stderr.print("{s}:{d}:{d}: error: ", .{ filename, loc.line + 1, loc.column + 1 });
-        try ast.renderError(parse_error, stderr);
+        try zast.ast.renderError(parse_error, stderr);
         try stderr.print("\n{s}\n", .{source[loc.line_start..loc.line_end]});
         {
             var i: usize = 0;
@@ -114,7 +175,7 @@ const TABLE_HEADER =
 ;
 const TABLE_ROW_FORMAT = "|{: >5}| {s: <25} | {: >4},{: >4} | {s: <15} |\n";
 
-pub fn dumpAstFlat(ast: *const Ast, stream: anytype) !void {
+pub fn dumpAstFlat(ast: Ast, stream: anytype) !void {
     var i: usize = 0;
     const tags = ast.nodes.items(.tag);
     const node_data = ast.nodes.items(.data);
@@ -129,7 +190,7 @@ pub fn dumpAstFlat(ast: *const Ast, stream: anytype) !void {
     try stream.writeAll("\n");
 }
 
-pub fn dumpAstNodes(ast: *const Ast, nodes: []NodeIndex, stream: anytype) !void {
+pub fn dumpAstNodes(ast: Ast, nodes: []NodeIndex, stream: anytype) !void {
     const tags = ast.nodes.items(.tag);
     const node_data = ast.nodes.items(.data);
     const main_tokens = ast.nodes.items(.main_token);
@@ -180,12 +241,12 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
 
     const allocator = gpa.allocator();
     var completion = ZCompletion{};
-    var ast = Ast.parse(allocator, last_line, .zig) catch {
+    var zast = ZAst.parse(allocator, last_line) catch {
         return null;
     };
-    defer ast.deinit(allocator);
+    defer zast.deinit(allocator);
     const stdout = std.io.getStdOut().writer();
-    dumpAstFlat(&ast, stdout) catch {};
+    dumpAstFlat(zast.ast, stdout) catch {};
     //const decls = ast.rootDecls();
 
     if (std.mem.endsWith(u8, last_line, ".")) {
@@ -199,16 +260,16 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
     }
 
 
-    if (ast.nodes.len > 0) {
-        const i: u32 = @intCast(ast.nodes.len-1);
-        const tags = ast.nodes.items(.tag);
-        const node_data = ast.nodes.items(.data);
-        const main_tokens = ast.nodes.items(.main_token);
+    if (zast.ast.nodes.len > 0) {
+        const i: u32 = @intCast(zast.ast.nodes.len-1);
+        const tags = zast.ast.nodes.items(.tag);
+        const node_data = zast.ast.nodes.items(.data);
+        const main_tokens = zast.ast.nodes.items(.main_token);
         const tag: Tag = tags[i];
         switch (tag) {
             .identifier => {
                 const tok = main_tokens[i];
-                completion.name = allocator.dupeZ(u8, ast.tokenSlice(tok)) catch {
+                completion.name = allocator.dupeZ(u8, zast.ast.tokenSlice(tok)) catch {
                     return null;
                 };
             },
@@ -219,13 +280,13 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
                 }
                 if (tags[d.lhs] == .identifier) {
                     const start_tok = main_tokens[d.lhs];
-                    const start_loc = ast.tokenLocation(0, start_tok);
+                    const start_loc = zast.fastTokenLocation(start_tok);
                     const start = start_loc.line_start + start_loc.column;
-                    const end_loc = ast.tokenLocation(0, d.rhs);
-                    const attr = ast.tokenSlice(d.rhs);
+                    const end_loc = zast.fastTokenLocation(d.rhs);
+                    const attr = zast.ast.tokenSlice(d.rhs);
                     const end = end_loc.line_start + end_loc.column + attr.len;
                     if (end > start) {
-                        const name = ast.source[start..end];
+                        const name = zast.ast.source[start..end];
                         completion.name = allocator.dupeZ(u8, name) catch {
                             return null;
                         };
@@ -236,13 +297,13 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
             .container_field_init => {
                 const tok = main_tokens[i];
                 const d = node_data[i];
-                var name = ast.tokenSlice(tok);
+                var name = zast.ast.tokenSlice(tok);
                 if (d.lhs != 0) {
                     if (tags[d.lhs] == .field_access) {
-                        const start = ast.tokenLocation(0, tok);
-                        const end = ast.tokenLocation(0, d.rhs);
+                        const start = zast.fastTokenLocation(tok);
+                        const end = zast.fastTokenLocation(d.rhs);
                         if (end.line_end - 1 > start.line_start) {
-                            name = ast.source[start.line_start..end.line_end - 1];
+                            name = zast.ast.source[start.line_start..end.line_end - 1];
                         }
                     }
                 }
@@ -261,7 +322,7 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
     return result;
 }
 
-export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
+export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*ZAst {
     const name_len = strlen(name_ptr);
     const source_len = strlen(source_ptr);
 
@@ -276,17 +337,18 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
     std.log.info("zig: parsing filename '{s}'...", .{name});
 
     const allocator = gpa.allocator();
-    const ast: *Ast = allocator.create(Ast) catch |err| {
+    const zast: *ZAst = allocator.create(ZAst) catch |err| {
         std.log.warn("zig: parsing {s} error: {}", .{ name, err });
         return null;
     };
-    ast.* = Ast.parse(allocator, source, .zig) catch |err| {
+    zast.*= ZAst.parse(allocator, source) catch |err| {
         std.log.warn("zig: parsing {s} error: {}", .{ name, err });
+        allocator.destroy(zast);
         return null;
     };
 
-    if (ast.errors.len > 0) {
-        printAstError(ast, name, source) catch |err| {
+    if (zast.ast.errors.len > 0) {
+        printAstError(zast, name, source) catch |err| {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
     }
@@ -298,21 +360,21 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*Ast {
 //             std.log.debug("zig: failed to dump ast {}", .{err});
 //         };
 //     }
-    return ast;
+    return zast;
 }
 
-export fn ast_error_count(ptr: ?*Ast) u32 {
+export fn ast_error_count(ptr: ?*ZAst) u32 {
     // std.log.warn("zig: ast_error_count", .{});
-    if (ptr) |ast| {
-        return @intCast(ast.errors.len);
+    if (ptr) |zast| {
+        return @intCast(zast.ast.errors.len);
     }
     return 0;
 }
 
-export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
+export fn ast_error_at(ptr: ?*ZAst, index: u32) ?*ZError {
     // std.log.warn("zig: ast_error_at {}", .{index});
-    if (ptr) |ast| {
-        if (index >= ast.errors.len) {
+    if (ptr) |zast| {
+        if (index >= zast.ast.errors.len) {
             return null;
         }
         const allocator = gpa.allocator();
@@ -324,9 +386,9 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
         var buf: [4096]u8 = undefined;
         var fbs = std.io.fixedBufferStream(&buf);
 
-        const err = ast.errors[index];
-        const loc = ast.tokenLocation(0, err.token);
-        ast.renderError(err, fbs.writer()) catch {
+        const err = zast.ast.errors[index];
+        const loc = zast.fastTokenLocation(err.token);
+        zast.ast.renderError(err, fbs.writer()) catch {
             std.log.warn("zig: ast_error_at alloc error message too large", .{});
             allocator.destroy(result);
             return null;
@@ -351,63 +413,63 @@ export fn ast_error_at(ptr: ?*Ast, index: u32) ?*ZError {
     return null;
 }
 
-export fn destroy_ast(ptr: ?*Ast) void {
+export fn destroy_ast(ptr: ?*ZAst) void {
     // std.log.debug("zig: destroy_ast {}", .{@intFromPtr(ptr)});
-    if (ptr) |tree| {
-        tree.deinit(gpa.allocator());
+    if (ptr) |zast| {
+        zast.deinit(gpa.allocator());
     }
 }
 
 export fn destroy_error(ptr: ?*ZError) void {
     // std.log.debug("zig: destroy_error {}", .{@intFromPtr(ptr)});
-    if (ptr) |err| {
-        err.deinit(gpa.allocator());
+    if (ptr) |zerr| {
+        zerr.deinit(gpa.allocator());
     }
 }
 
 export fn destroy_completion(ptr: ?*ZCompletion) void {
     // std.log.debug("zig: destroy_completion {}", .{@intFromPtr(ptr)});
-    if (ptr) |completion| {
-        completion.deinit(gpa.allocator());
+    if (ptr) |zcompletion| {
+        zcompletion.deinit(gpa.allocator());
     }
 }
 
-export fn ast_node_capture_token(ptr: ?*Ast, index: NodeIndex, capture: CaptureType) TokenIndex {
-    if (ptr) |ast| {
-        if (index >= ast.nodes.len) {
+export fn ast_node_capture_token(ptr: ?*ZAst, index: NodeIndex, capture: CaptureType) TokenIndex {
+    if (ptr) |zast| {
+        if (index >= zast.ast.nodes.len) {
             return INVALID_TOKEN;
         }
-        if (ast.fullIf(index)) |r| {
+        if (zast.ast.fullIf(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token orelse INVALID_TOKEN,
                 .Error => r.error_token orelse INVALID_TOKEN,
             };
         }
-        if (ast.fullWhile(index)) |r| {
+        if (zast.ast.fullWhile(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token orelse INVALID_TOKEN,
                 .Error => r.error_token orelse INVALID_TOKEN,
             };
         }
 
-        if (ast.fullFor(index)) |r| {
+        if (zast.ast.fullFor(index)) |r| {
             return switch (capture) {
                 .Payload => r.payload_token,
                 .Error => INVALID_TOKEN,
             };
         }
 
-        const tag = ast.nodes.items(.tag)[index];
+        const tag = zast.ast.nodes.items(.tag)[index];
         if (tag == .@"errdefer") {
             return switch (capture) {
-                .Payload => ast.nodes.items(.data)[index].lhs,
+                .Payload => zast.ast.nodes.items(.data)[index].lhs,
                 .Error => INVALID_TOKEN,
             };
         }
         if (tag == .@"catch") {
             // If token after catch is a | then uses token after that
-            const main_token = ast.nodes.items(.main_token)[index];
-            if (ast.tokens.items(.tag)[main_token+1] == .pipe) {
+            const main_token = zast.ast.nodes.items(.main_token)[index];
+            if (zast.ast.tokens.items(.tag)[main_token+1] == .pipe) {
                 return main_token + 2;
             }
         }
@@ -450,21 +512,21 @@ test "capture-name" {
     try testCaptureName("test { errdefer |err| {} }", .@"errdefer", .Payload, "err");
 }
 
-export fn ast_node_range(ptr: ?*Ast, index: NodeIndex) SourceRange {
+export fn ast_node_range(ptr: ?*ZAst, index: NodeIndex) SourceRange {
     if (ptr == null) {
         std.log.warn("zig: ast_node_range ast null", .{});
         return SourceRange{};
     }
-    const ast = ptr.?;
-    if (index >= ast.nodes.len) {
+    const zast = ptr.?;
+    if (index >= zast.ast.nodes.len) {
         std.log.warn("zig: ast_node_range index out of range {}", .{index});
         return SourceRange{};
     }
     // TODO: What is the correct start_offset?
-    const first_token = ast.firstToken(index);
-    const start_loc = ast.tokenLocation(0, first_token);
-    const last_token = ast.lastToken(index);
-    const end_loc = ast.tokenLocation(0, last_token);
+    const first_token = zast.ast.firstToken(index);
+    const start_loc = zast.fastTokenLocation(first_token);
+    const last_token = zast.ast.lastToken(index);
+    const end_loc = zast.fastTokenLocation(last_token);
 
     return SourceRange{
         .start = SourceLocation{
@@ -479,21 +541,21 @@ export fn ast_node_range(ptr: ?*Ast, index: NodeIndex) SourceRange {
 }
 
 // Assumes token is in the valid range
-fn isTokenSliceEql(ast: *Ast, token: TokenIndex, value: []const u8) bool {
+fn isTokenSliceEql(ast: Ast, token: TokenIndex, value: []const u8) bool {
     return std.mem.eql(u8, ast.tokenSlice(token), value);
 }
 
 // Node kind is only needed for contexts
-export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
+export fn ast_node_kind(ptr: ?*ZAst, index: NodeIndex) NodeKind {
     if (ptr == null) {
         return .Unknown;
     }
-    const ast = ptr.?;
-    if (index >= ast.nodes.len) {
+    const zast = ptr.?;
+    if (index >= zast.ast.nodes.len) {
         return .Unknown;
     }
-    const main_token = ast.nodes.items(.main_token)[index];
-    const tag: Tag = ast.nodes.items(.tag)[index];
+    const main_token = zast.ast.nodes.items(.main_token)[index];
+    const tag: Tag = zast.ast.nodes.items(.tag)[index];
     return switch (tag) {
         .fn_decl => .FunctionDecl,
         .fn_proto,
@@ -510,7 +572,7 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
         .container_decl_two,
         .container_decl_two_trailing,
         .container_decl_arg,
-        .container_decl_arg_trailing => switch (ast.tokens.items(.tag)[main_token]) {
+        .container_decl_arg_trailing => switch (zast.ast.tokens.items(.tag)[main_token]) {
             .keyword_enum => .EnumDecl,
             .keyword_union => .UnionDecl,
             else => .ContainerDecl
@@ -563,10 +625,10 @@ export fn ast_node_kind(ptr: ?*Ast, index: NodeIndex) NodeKind {
     };
 }
 
-export fn ast_node_tag(ptr: ?*Ast, index: NodeIndex) Ast.Node.Tag {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[index];
+export fn ast_node_tag(ptr: ?*ZAst, index: NodeIndex) Ast.Node.Tag {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            const tag = zast.ast.nodes.items(.tag)[index];
             // std.log.debug("zig: ast_node_tag {} is {s}", .{ index, @tagName(tag) });
             return tag;
         }
@@ -574,38 +636,38 @@ export fn ast_node_tag(ptr: ?*Ast, index: NodeIndex) Ast.Node.Tag {
     return .root; // Invalid unless index == 0
 }
 
-export fn ast_token_slice(ptr: ?*Ast, token: TokenIndex) SourceSlice {
-    if (ptr) |ast| {
-        if (token < ast.tokens.len) {
-            const name = ast.tokenSlice(token);
+export fn ast_token_slice(ptr: ?*ZAst, token: TokenIndex) SourceSlice {
+    if (ptr) |zast| {
+        if (token < zast.ast.tokens.len) {
+            const name = zast.ast.tokenSlice(token);
             return SourceSlice{.data=name.ptr, .len=@intCast(name.len)};
         }
     }
     return SourceSlice{};
 }
 
-fn findNodeComment(ast: *const Ast, node: NodeIndex) ?[]const u8 {
-    const first_token = ast.firstToken(node);
-    const loc = ast.tokenLocation(0, first_token);
+fn findNodeComment(zast: *const ZAst, node: NodeIndex) ?[]const u8 {
+    const first_token = zast.ast.firstToken(node);
+    const loc = zast.fastTokenLocation(first_token);
     // std.log.warn("node start: {}", .{loc});
     const comment_end = loc.line_start -| 1;
     var comment_start: usize = comment_end;
 
     while (comment_start > 3) {
         // Find previous next line
-        const remaining = ast.source[0..comment_start];
+        const remaining = zast.ast.source[0..comment_start];
         // std.log.warn("remaining: '{s}'", .{remaining});
         const previous_line_start = std.mem.lastIndexOfScalar(u8, remaining, '\n') orelse 0;
         // std.log.warn("previous_line_start: '{}'", .{previous_line_start});
 
-        const comment = std.mem.trimLeft(u8, ast.source[previous_line_start..comment_end], " \t\n");
+        const comment = std.mem.trimLeft(u8, zast.ast.source[previous_line_start..comment_end], " \t\n");
         if (std.mem.startsWith(u8, comment, "//")) {
             comment_start = previous_line_start;
         } else {
             break;
         }
     }
-    const comment = std.mem.trim(u8, ast.source[comment_start..comment_end], " \t\r\n");
+    const comment = std.mem.trim(u8, zast.ast.source[comment_start..comment_end], " \t\r\n");
     if (comment.len < 3 or comment.len > 5000) {
         return null;
     }
@@ -699,10 +761,10 @@ test "node-comment" {
         , .container_field_init, "/// This field is a u8");
 }
 
-export fn ast_node_comment(ptr: ?*Ast, node: NodeIndex) SourceSlice {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (findNodeComment(ast, node)) |comment| {
+export fn ast_node_comment(ptr: ?*ZAst, node: NodeIndex) SourceSlice {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (findNodeComment(zast, node)) |comment| {
                 return SourceSlice{.data=comment.ptr, .len=@intCast(comment.len)};
             }
         }
@@ -710,11 +772,11 @@ export fn ast_node_comment(ptr: ?*Ast, node: NodeIndex) SourceSlice {
     return SourceSlice{};
 }
 
-export fn ast_token_range(ptr: ?*Ast, token: TokenIndex) SourceRange {
-    if (ptr) |ast| {
-        if (token < ast.tokens.len) {
-            const loc = ast.tokenLocation(0, token);
-            const name = ast.tokenSlice(token);
+export fn ast_token_range(ptr: ?*ZAst, token: TokenIndex) SourceRange {
+    if (ptr) |zast| {
+        if (token < zast.ast.tokens.len) {
+            const loc = zast.fastTokenLocation(token);
+            const name = zast.ast.tokenSlice(token);
             return SourceRange{
                 .start = SourceLocation{
                     .line = @intCast(loc.line),
@@ -730,12 +792,12 @@ export fn ast_token_range(ptr: ?*Ast, token: TokenIndex) SourceRange {
     return SourceRange{};
 }
 
-export fn ast_var_is_const(ptr: ?*Ast, index: NodeIndex) bool {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[index];
+export fn ast_var_is_const(ptr: ?*ZAst, index: NodeIndex) bool {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            const tag = zast.ast.nodes.items(.tag)[index];
             return switch (tag) {
-                .simple_var_decl, .aligned_var_decl, .global_var_decl, .local_var_decl => isTokenSliceEql(ast, ast.nodes.items(.main_token)[index], "const"),
+                .simple_var_decl, .aligned_var_decl, .global_var_decl, .local_var_decl => isTokenSliceEql(zast.ast, zast.ast.nodes.items(.main_token)[index], "const"),
                 else => false,
             };
         }
@@ -744,13 +806,13 @@ export fn ast_var_is_const(ptr: ?*Ast, index: NodeIndex) bool {
 }
 
 // Return var / field type or 0
-export fn ast_var_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            if (ast.fullVarDecl(index)) |var_data| {
+export fn ast_var_type(ptr: ?*ZAst, index: NodeIndex) NodeIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            if (zast.ast.fullVarDecl(index)) |var_data| {
                 return var_data.ast.type_node;
             }
-            if (ast.fullContainerField(index)) |field_data| {
+            if (zast.ast.fullContainerField(index)) |field_data| {
                 return field_data.ast.type_expr;
             }
         }
@@ -758,13 +820,13 @@ export fn ast_var_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     return 0;
 }
 
-export fn ast_var_value(ptr: ?*Ast, index: NodeIndex) NodeIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            if (ast.fullVarDecl(index)) |var_data| {
+export fn ast_var_value(ptr: ?*ZAst, index: NodeIndex) NodeIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            if (zast.ast.fullVarDecl(index)) |var_data| {
                 return var_data.ast.init_node;
             }
-            if (ast.fullContainerField(index)) |field_data| {
+            if (zast.ast.fullContainerField(index)) |field_data| {
                 return field_data.ast.value_expr;
             }
         }
@@ -773,14 +835,14 @@ export fn ast_var_value(ptr: ?*Ast, index: NodeIndex) NodeIndex {
 }
 
 
-export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: NodeIndex) bool {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_fn_returns_inferred_error(ptr: ?*ZAst, index: NodeIndex) bool {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buf: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buf, index)) |proto| {
+            if (zast.ast.fullFnProto(&buf, index)) |proto| {
                 // Zig doesn't use error union if error type is omitted
-                const token_tags = ast.tokens.items(.tag);
-                const maybe_bang = ast.firstToken(proto.ast.return_type) - 1;
+                const token_tags = zast.ast.tokens.items(.tag);
+                const maybe_bang = zast.ast.firstToken(proto.ast.return_type) - 1;
                 return token_tags[maybe_bang] == .bang;
             }
         }
@@ -788,11 +850,11 @@ export fn ast_fn_returns_inferred_error(ptr: ?*Ast, index: NodeIndex) bool {
     return false;
 }
 
-export fn ast_fn_name(ptr: ?*Ast, index: NodeIndex) TokenIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_fn_name(ptr: ?*ZAst, index: NodeIndex) TokenIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buf: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buf, index)) |proto| {
+            if (zast.ast.fullFnProto(&buf, index)) |proto| {
                 if (proto.name_token) |tok| {
                     return tok;
                 }
@@ -802,11 +864,11 @@ export fn ast_fn_name(ptr: ?*Ast, index: NodeIndex) TokenIndex {
     return INVALID_TOKEN;
 }
 
-export fn ast_fn_return_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_fn_return_type(ptr: ?*ZAst, index: NodeIndex) NodeIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buf: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buf, index)) |proto| {
+            if (zast.ast.fullFnProto(&buf, index)) |proto| {
                 return proto.ast.return_type;
             }
         }
@@ -814,11 +876,11 @@ export fn ast_fn_return_type(ptr: ?*Ast, index: NodeIndex) NodeIndex {
     return 0;
 }
 
-export fn ast_call_arg_count(ptr: ?*Ast, index: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_call_arg_count(ptr: ?*ZAst, index: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullCall(&buffer, index)) |call| {
+            if (zast.ast.fullCall(&buffer, index)) |call| {
                 return @intCast(call.ast.params.len);
             }
         }
@@ -826,11 +888,11 @@ export fn ast_call_arg_count(ptr: ?*Ast, index: NodeIndex) u32 {
     return 0;
 }
 
-export fn ast_call_arg_at(ptr: ?*Ast, index: NodeIndex, i: u32) NodeIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_call_arg_at(ptr: ?*ZAst, index: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullCall(&buffer, index)) |call| {
+            if (zast.ast.fullCall(&buffer, index)) |call| {
                 if (i < call.ast.params.len) {
                     return call.ast.params[i];
                 }
@@ -841,13 +903,13 @@ export fn ast_call_arg_at(ptr: ?*Ast, index: NodeIndex, i: u32) NodeIndex {
 }
 
 
-export fn ast_fn_param_count(ptr: ?*Ast, index: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_fn_param_count(ptr: ?*ZAst, index: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buffer, index)) |proto| {
+            if (zast.ast.fullFnProto(&buffer, index)) |proto| {
                 var i: u32 = 0;
-                var iter = proto.iterate(ast);
+                var iter = proto.iterate(&zast.ast);
                 while (iter.next()) |_| {
                     i += 1;
                 }
@@ -872,12 +934,12 @@ const ParamData = extern struct {
     info: ParamDataInfo = .{},
 };
 
-export fn ast_fn_param_at(ptr: ?*Ast, index: NodeIndex, i: u32) ParamData {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_fn_param_at(ptr: ?*ZAst, index: NodeIndex, i: u32) ParamData {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [1]Ast.Node.Index = undefined;
-            if (ast.fullFnProto(&buffer, index)) |proto| {
-                var iter = proto.iterate(ast);
+            if (zast.ast.fullFnProto(&buffer, index)) |proto| {
+                var iter = proto.iterate(&zast.ast);
                 var j: u32 = 0;
                 while (iter.next()) |param| {
                     if (j == i) {
@@ -885,10 +947,10 @@ export fn ast_fn_param_at(ptr: ?*Ast, index: NodeIndex, i: u32) ParamData {
                             .name_token = param.name_token orelse INVALID_TOKEN,
                             .type_expr = param.type_expr,
                             .info = ParamDataInfo{
-                                .is_comptime = if (param.comptime_noalias) |tok| isTokenSliceEql(ast, tok, "comptime") else false,
-                                .is_noalias = if (param.comptime_noalias) |tok| isTokenSliceEql(ast, tok, "noalias") else false,
-                                .is_anytype = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(ast, tok, "anytype") else false,
-                                .is_vararg = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(ast, tok, "...") else false,
+                                .is_comptime = if (param.comptime_noalias) |tok| isTokenSliceEql(zast.ast, tok, "comptime") else false,
+                                .is_noalias = if (param.comptime_noalias) |tok| isTokenSliceEql(zast.ast, tok, "noalias") else false,
+                                .is_anytype = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(zast.ast, tok, "anytype") else false,
+                                .is_vararg = if (param.anytype_ellipsis3) |tok| isTokenSliceEql(zast.ast, tok, "...") else false,
                             },
                         };
                     }
@@ -900,11 +962,11 @@ export fn ast_fn_param_at(ptr: ?*Ast, index: NodeIndex, i: u32) ParamData {
     return ParamData{};
 }
 
-export fn ast_struct_init_field_count(ptr: ?*Ast, index: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_struct_init_field_count(ptr: ?*ZAst, index: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [2]Ast.Node.Index = undefined;
-            if (ast.fullStructInit(&buffer, index)) |struct_data| {
+            if (zast.ast.fullStructInit(&buffer, index)) |struct_data| {
                 return @intCast(struct_data.ast.fields.len);
             }
         }
@@ -918,16 +980,16 @@ const FieldInitData = extern struct {
     value_expr: NodeIndex = 0,
 };
 
-export fn ast_struct_init_field_at(ptr: ?*Ast, index: NodeIndex, i: u32) FieldInitData {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
+export fn ast_struct_init_field_at(ptr: ?*ZAst, index: NodeIndex, i: u32) FieldInitData {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
             var buffer: [2]Ast.Node.Index = undefined;
-            if (ast.fullStructInit(&buffer, index)) |struct_data| {
+            if (zast.ast.fullStructInit(&buffer, index)) |struct_data| {
                 if (i < struct_data.ast.fields.len) {
                     const f = struct_data.ast.fields[i];
                     return FieldInitData{
                         // TODO: Is this valid for every case???
-                        .name_token=ast.firstToken(f) -| 2,
+                        .name_token=zast.ast.firstToken(f) -| 2,
                         .value_expr=f
                     };
                 }
@@ -938,10 +1000,10 @@ export fn ast_struct_init_field_at(ptr: ?*Ast, index: NodeIndex, i: u32) FieldIn
 }
 
 // Note: 0 is a valid token
-export fn ast_node_main_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            return ast.nodes.items(.main_token)[index];
+export fn ast_node_main_token(ptr: ?*ZAst, index: NodeIndex) TokenIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            return zast.ast.nodes.items(.main_token)[index];
         }
     }
     return INVALID_TOKEN;
@@ -949,10 +1011,10 @@ export fn ast_node_main_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
 
 
 // Lookup the token index that has the name/identifier for the given node
-export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
-    if (ptr) |ast| {
-        if (index < ast.nodes.len) {
-            const tag: Tag = ast.nodes.items(.tag)[index];
+export fn ast_node_name_token(ptr: ?*ZAst, index: NodeIndex) TokenIndex {
+    if (ptr) |zast| {
+        if (index < zast.ast.nodes.len) {
+            const tag: Tag = zast.ast.nodes.items(.tag)[index];
             // std.log.warn("zig: findNodeIdentifier {} {s}", .{index, @tagName(tag)});
             return switch (tag) {
                 // Data lhs is the identifier
@@ -968,10 +1030,10 @@ export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
                 .struct_init_one_comma,
                 .struct_init,
                 .struct_init_comma,
-                .fn_decl => ast_node_name_token(ast, ast.nodes.items(.data)[index].lhs),
+                .fn_decl => ast_node_name_token(zast, zast.ast.nodes.items(.data)[index].lhs),
 
                 // Data rhs is the identifier
-                .field_access => ast.nodes.items(.data)[index].rhs,
+                .field_access => zast.ast.nodes.items(.data)[index].rhs,
 
                 // Token after main_token is the name for all these
                 .fn_proto_simple,
@@ -981,7 +1043,7 @@ export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
                 .global_var_decl,
                 .local_var_decl,
                 .simple_var_decl,
-                .aligned_var_decl => ast.nodes.items(.main_token)[index] + 1,
+                .aligned_var_decl => zast.ast.nodes.items(.main_token)[index] + 1,
 
                 // Main token is identifier
                 .identifier,
@@ -993,9 +1055,9 @@ export fn ast_node_name_token(ptr: ?*Ast, index: NodeIndex) TokenIndex {
                 .builtin_call_two_comma,
                 .container_field,
                 .container_field_init,
-                .container_field_align => ast.nodes.items(.main_token)[index],
+                .container_field_align => zast.ast.nodes.items(.main_token)[index],
                 .test_decl => blk: {
-                    const v = ast.nodes.items(.data)[index].lhs;
+                    const v = zast.ast.nodes.items(.data)[index].lhs;
                     break :blk if (v == 0) INVALID_TOKEN else v;
                 },
                 else => INVALID_TOKEN,
@@ -1057,7 +1119,7 @@ fn testNodeIdent(source: [:0]const u8, tag: Tag, expected: ?[]const u8) !void {
     const tok = ast_node_name_token(&ast, index);
     if (expected) |str| {
         try std.testing.expectEqualSlices(u8, ast.tokenSlice(tok), str);
-        try stdout.print("location={}\n", .{ast.tokenLocation(0, tok)});
+        try stdout.print("location={}\n", .{ast.fastTokenLocation(tok)});
     } else {
         try std.testing.expect(tok == 0);
     }
@@ -1163,20 +1225,20 @@ const NodeData = extern struct {
 };
 
 // Visit one child
-export fn ast_node_data(ptr: ?*Ast, node: NodeIndex) NodeData {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            const data: Ast.Node.Data = ast.nodes.items(.data)[node];
+export fn ast_node_data(ptr: ?*ZAst, node: NodeIndex) NodeData {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            const data: Ast.Node.Data = zast.ast.nodes.items(.data)[node];
             return NodeData{.lhs = data.lhs, .rhs = data.rhs};
         }
     }
     return NodeData{};
 }
 
-export fn ast_extra_data(ptr: ?*Ast, index: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (index < ast.extra_data.len) {
-            return ast.extra_data[index];
+export fn ast_extra_data(ptr: ?*ZAst, index: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (index < zast.ast.extra_data.len) {
+            return zast.ast.extra_data[index];
         }
     }
     return 0;
@@ -1187,13 +1249,13 @@ const ArrayTypeSentinel = extern struct {
     elem_type: NodeIndex = 0,
 };
 
-export fn ast_array_type_sentinel(ptr: ?*Ast, node: NodeIndex) ArrayTypeSentinel {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            const tag: Tag = ast.nodes.items(.tag)[node];
+export fn ast_array_type_sentinel(ptr: ?*ZAst, node: NodeIndex) ArrayTypeSentinel {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            const tag: Tag = zast.ast.nodes.items(.tag)[node];
             if (tag == .array_type_sentinel) {
-                const d: Ast.Node.Data = ast.nodes.items(.data)[node];
-                const array_data = ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
+                const d: Ast.Node.Data = zast.ast.nodes.items(.data)[node];
+                const array_data = zast.ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
                 return ArrayTypeSentinel{
                     .sentinel = array_data.sentinel,
                     .elem_type = array_data.elem_type
@@ -1212,10 +1274,10 @@ const IfData = extern struct {
     else_expr: NodeIndex = 0,
 };
 
-export fn ast_if_data(ptr: ?*Ast, node: NodeIndex) IfData {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullIf(node)) |data| {
+export fn ast_if_data(ptr: ?*ZAst, node: NodeIndex) IfData {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullIf(node)) |data| {
                 return IfData{
                     .payload_token = data.payload_token orelse INVALID_TOKEN,
                     .error_token = data.error_token orelse INVALID_TOKEN,
@@ -1248,10 +1310,10 @@ const VarData = extern struct {
     info: VarDataInfo = .{},
 };
 
-export fn ast_var_data(ptr: ?*Ast, node: NodeIndex) VarData {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullVarDecl(node)) |data| {
+export fn ast_var_data(ptr: ?*ZAst, node: NodeIndex) VarData {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullVarDecl(node)) |data| {
                 return VarData{
                     .lib_name = data.lib_name orelse INVALID_TOKEN,
                     .type_node = data.ast.type_node,
@@ -1261,7 +1323,7 @@ export fn ast_var_data(ptr: ?*Ast, node: NodeIndex) VarData {
                     .init_node = data.ast.init_node,
                     .info = VarDataInfo{
                         .is_pub = data.visib_token != null,
-                        .is_const = isTokenSliceEql(ast, data.ast.mut_token, "const"),
+                        .is_const = isTokenSliceEql(zast.ast, data.ast.mut_token, "const"),
                         .is_extern = data.extern_export_token != null,
                         .is_comptime = data.comptime_token != null,
                         .is_threadlocal = data.threadlocal_token != null,
@@ -1291,10 +1353,10 @@ const PtrTypeData = extern struct {
     info: PtrTypeInfo = .{},
 };
 
-export fn ast_ptr_type_data(ptr: ?*Ast, node: NodeIndex) PtrTypeData {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullPtrType(node)) |ptr_data| {
+export fn ast_ptr_type_data(ptr: ?*ZAst, node: NodeIndex) PtrTypeData {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullPtrType(node)) |ptr_data| {
                 return PtrTypeData{
                     .main_token = ptr_data.ast.main_token,
                     .align_node = ptr_data.ast.align_node,
@@ -1315,11 +1377,11 @@ export fn ast_ptr_type_data(ptr: ?*Ast, node: NodeIndex) PtrTypeData {
 }
 
 
-export fn ast_array_init_item_size(ptr: ?*Ast, node: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
+export fn ast_array_init_item_size(ptr: ?*ZAst, node: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
             var nodes: [2]Ast.Node.Index = undefined;
-            if (ast.fullArrayInit(&nodes, node)) |array_data| {
+            if (zast.ast.fullArrayInit(&nodes, node)) |array_data| {
                 return @intCast(array_data.ast.elements.len);
             }
         }
@@ -1327,11 +1389,11 @@ export fn ast_array_init_item_size(ptr: ?*Ast, node: NodeIndex) u32 {
     return 0;
 }
 
-export fn ast_array_init_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
+export fn ast_array_init_item_at(ptr: ?*ZAst, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
             var nodes: [2]Ast.Node.Index = undefined;
-            if (ast.fullArrayInit(&nodes, node)) |array_data| {
+            if (zast.ast.fullArrayInit(&nodes, node)) |array_data| {
                 if (i < array_data.ast.elements.len) {
                     return array_data.ast.elements[i];
                 }
@@ -1346,11 +1408,11 @@ const SubRange = extern struct {
     end: NodeIndex = 0
 };
 
-export fn ast_sub_range(ptr: ?*Ast, node: NodeIndex) SubRange {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            const tag = ast.nodes.items(.tag)[node];
-            const d = ast.nodes.items(.data)[node];
+export fn ast_sub_range(ptr: ?*ZAst, node: NodeIndex) SubRange {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            const tag = zast.ast.nodes.items(.tag)[node];
+            const d = zast.ast.nodes.items(.data)[node];
             switch (tag) {
                 .call,
                 .call_comma,
@@ -1366,14 +1428,14 @@ export fn ast_sub_range(ptr: ?*Ast, node: NodeIndex) SubRange {
                 .array_init_comma,
                 .struct_init,
                 .struct_init_comma => {
-                    const field_range = ast.extraData(d.rhs, Ast.Node.SubRange);
+                    const field_range = zast.ast.extraData(d.rhs, Ast.Node.SubRange);
                     return SubRange{
                         .start=field_range.start,
                         .end=field_range.end,
                     };
                 },
                 .switch_case, .switch_case_inline, .fn_proto_multi => {
-                    const field_range = ast.extraData(d.lhs, Ast.Node.SubRange);
+                    const field_range = zast.ast.extraData(d.lhs, Ast.Node.SubRange);
                     return SubRange{
                         .start=field_range.start,
                         .end=field_range.end,
@@ -1388,10 +1450,10 @@ export fn ast_sub_range(ptr: ?*Ast, node: NodeIndex) SubRange {
     return SubRange{};
 }
 
-export fn ast_switch_case_size(ptr: ?*Ast, node: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullSwitchCase(node)) |switch_case| {
+export fn ast_switch_case_size(ptr: ?*ZAst, node: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullSwitchCase(node)) |switch_case| {
                 return @intCast(switch_case.ast.values.len);
             }
         }
@@ -1399,10 +1461,10 @@ export fn ast_switch_case_size(ptr: ?*Ast, node: NodeIndex) u32 {
     return 0;
 }
 
-export fn ast_switch_case_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullSwitchCase(node)) |switch_case| {
+export fn ast_switch_case_item_at(ptr: ?*ZAst, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullSwitchCase(node)) |switch_case| {
                 if (i < switch_case.ast.values.len) {
                     return switch_case.ast.values[i];
                 }
@@ -1412,10 +1474,10 @@ export fn ast_switch_case_item_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex
     return 0;
 }
 
-export fn ast_for_input_count(ptr: ?*Ast, node: NodeIndex) u32 {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullFor(node)) |for_data| {
+export fn ast_for_input_count(ptr: ?*ZAst, node: NodeIndex) u32 {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullFor(node)) |for_data| {
                 return @intCast(for_data.ast.inputs.len);
             }
         }
@@ -1423,10 +1485,10 @@ export fn ast_for_input_count(ptr: ?*Ast, node: NodeIndex) u32 {
     return 0;
 }
 
-export fn ast_for_input_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
-    if (ptr) |ast| {
-        if (node < ast.nodes.len) {
-            if (ast.fullFor(node)) |for_data| {
+export fn ast_for_input_at(ptr: ?*ZAst, node: NodeIndex, i: u32) NodeIndex {
+    if (ptr) |zast| {
+        if (node < zast.ast.nodes.len) {
+            if (zast.ast.fullFor(node)) |for_data| {
                 if (i < for_data.ast.inputs.len) {
                     return for_data.ast.inputs[i];
                 }
@@ -1436,24 +1498,24 @@ export fn ast_for_input_at(ptr: ?*Ast, node: NodeIndex, i: u32) NodeIndex {
     return 0;
 }
 
-fn visitOne(ast: *const Ast, node: NodeIndex, parent: NodeIndex, data: *NodeIndex) VisitResult {
-    _ = ast;
+fn visitOne(zast: *const ZAst, node: NodeIndex, parent: NodeIndex, data: *NodeIndex) VisitResult {
+    _ = zast;
     _ = parent;
     data.* = node;
     return .Break;
 }
 
 // Visit one child
-export fn ast_visit_one_child(ptr: ?*Ast, node: NodeIndex) NodeIndex {
+export fn ast_visit_one_child(ptr: ?*ZAst, node: NodeIndex) NodeIndex {
     var result: NodeIndex = 0;
-    if (ptr) |ast| {
-        visit(ast, node, *NodeIndex, visitOne, &result);
+    if (ptr) |zast| {
+        visit(zast, node, *NodeIndex, visitOne, &result);
     }
     return result;
 }
 
-fn visitAll(ast: *const Ast, child: NodeIndex, parent: NodeIndex, nodes: *std.ArrayList(NodeIndex)) VisitResult {
-    _ = ast;
+fn visitAll(zast: *const ZAst, child: NodeIndex, parent: NodeIndex, nodes: *std.ArrayList(NodeIndex)) VisitResult {
+    _ = zast;
     _ = parent;
     const remaining = nodes.unusedCapacitySlice();
     if (remaining.len > 0) {
@@ -1467,21 +1529,21 @@ fn visitAll(ast: *const Ast, child: NodeIndex, parent: NodeIndex, nodes: *std.Ar
 
 fn testVisitChild(source: [:0]const u8, tag: Tag, expected: Tag) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
-    defer ast.deinit(allocator);
+    var zast = try ZAst.parse(allocator, source);
+    defer zast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (zast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
-        try printAstError(&ast, "", source);
+        try printAstError(&zast, "", source);
     }
-    try std.testing.expect(ast.errors.len == 0);
-    try dumpAstFlat(&ast, stdout);
+    try std.testing.expect(zast,zast.ast.errors.len == 0);
+    try dumpAstFlat(&zast.ast, stdout);
 
-    const index = indexOfNodeWithTag(ast, 0, tag).?;
-    const child = ast_visit_one_child(&ast, index);
-    const result = ast.nodes.items(.tag)[child];
+    const index = indexOfNodeWithTag(zast, 0, tag).?;
+    const child = ast_visit_one_child(&zast, index);
+    const result = zast.ast.nodes.items(.tag)[child];
     try std.testing.expectEqual(expected, result);
 }
 
@@ -1492,7 +1554,7 @@ test "child-node" {
     try testVisitChild("test { a.main(); }", .field_access, .identifier);
 }
 
-pub fn assertNodeIndexValid(ast: *const Ast, child: NodeIndex, parent: NodeIndex) void {
+pub fn assertNodeIndexValid(ast: Ast, child: NodeIndex, parent: NodeIndex) void {
     if (child == 0 or child > ast.nodes.len) {
         const stderr = std.io.getStdErr().writer();
         dumpAstFlat(ast, stderr) catch {};
@@ -1501,50 +1563,50 @@ pub fn assertNodeIndexValid(ast: *const Ast, child: NodeIndex, parent: NodeIndex
     }
 }
 
-const CallbackFn = *const fn (ptr: ?*const Ast, node: NodeIndex, parent: NodeIndex, data: ?*anyopaque) callconv(.C) VisitResult;
+const CallbackFn = *const fn (ptr: ?*const ZAst, node: NodeIndex, parent: NodeIndex, data: ?*anyopaque) callconv(.C) VisitResult;
 
 const ExternVisitor = struct {
     const Self = @This();
     delegate: CallbackFn,
     data: ?*anyopaque,
 
-    pub fn callback(ast: *const Ast, node: NodeIndex, parent: NodeIndex, self: *const ExternVisitor) VisitResult {
+    pub fn callback(ast: *const ZAst, node: NodeIndex, parent: NodeIndex, self: *const ExternVisitor) VisitResult {
         return self.delegate(ast, node, parent, self.data);
     }
 };
 
 // Return whether to continue or not
-export fn ast_visit(ptr: ?*Ast, parent: NodeIndex, callback: CallbackFn, data: ?*anyopaque) void {
+export fn ast_visit(ptr: ?*ZAst, parent: NodeIndex, callback: CallbackFn, data: ?*anyopaque) void {
     if (ptr == null) {
         std.log.warn("zig: ast_visit ast is null", .{});
         return;
     }
-    const ast = ptr.?;
-    if (parent > ast.nodes.len) {
+    const zast = ptr.?;
+    if (parent > zast.ast.nodes.len) {
         std.log.warn("zig: ast_visit node index {} is out of range", .{parent});
         return;
     }
-    const tag = ast.nodes.items(.tag)[parent];
+    const tag = zast.ast.nodes.items(.tag)[parent];
     if (@import("builtin").is_test) {
         var stdout = std.io.getStdOut().writer();
-        stdout.print("zig: ast_visit {s} at {} '{s}'\n", .{ @tagName(tag), parent, ast.tokenSlice(ast.nodes.items(.main_token)[parent]) }) catch {};
+        stdout.print("zig: ast_visit {s} at {} '{s}'\n", .{ @tagName(tag), parent, zast.ast.tokenSlice(zast.ast.nodes.items(.main_token)[parent]) }) catch {};
     }
     const visitor = ExternVisitor{
         .delegate = callback,
         .data = data,
     };
-    visit(ast, parent, *const ExternVisitor, &ExternVisitor.callback, &visitor);
+    visit(zast, parent, *const ExternVisitor, &ExternVisitor.callback, &visitor);
 }
 
 pub fn visit(
-    ast: *const Ast,
+    zast: *const ZAst,
     parent: NodeIndex,
     comptime T: type,
-    callback: *const fn (ast: *const Ast, node: NodeIndex, parent: NodeIndex, data: T) VisitResult,
+    callback: *const fn (zast: *const ZAst, node: NodeIndex, parent: NodeIndex, data: T) VisitResult,
     data: T
 ) void {
-    const tag: Tag = ast.nodes.items(.tag)[parent];
-    const d: Ast.Node.Data = ast.nodes.items(.data)[parent];
+    const tag: Tag = zast.ast.nodes.items(.tag)[parent];
+    const d: Ast.Node.Data = zast.ast.nodes.items(.data)[parent];
     switch (tag) {
         // Leaf nodes have no children
         .@"continue",
@@ -1620,20 +1682,20 @@ pub fn visit(
         => {
             {
                 const child = d.lhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
             {
                 const child = d.rhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
@@ -1660,11 +1722,11 @@ pub fn visit(
         .unwrap_optional,
         .grouped_expression => if (d.lhs != 0) {
             const child = d.lhs;
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
+            assertNodeIndexValid(zast.ast, child, parent);
+            switch (callback(zast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => visit(ast, child, T, callback, data),
+                .Recurse => visit(zast, child, T, callback, data),
             }
         },
 
@@ -1675,11 +1737,11 @@ pub fn visit(
         .anyframe_type,
         .test_decl => if (d.rhs != 0) {
             const child = d.rhs;
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
+            assertNodeIndexValid(zast.ast, child, parent);
+            switch (callback(zast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => visit(ast, child, T, callback, data),
+                .Recurse => visit(zast, child, T, callback, data),
             }
         },
 
@@ -1717,20 +1779,20 @@ pub fn visit(
         => {
             if (d.lhs != 0) {
                 const child = d.lhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
             if (d.rhs != 0) {
                 const child = d.rhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
@@ -1747,12 +1809,12 @@ pub fn visit(
         .array_init_dot_comma,
         .block,
         .block_semicolon => {
-            for (ast.extra_data[d.lhs..d.rhs]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            for (zast.ast.extra_data[d.lhs..d.rhs]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
@@ -1776,74 +1838,74 @@ pub fn visit(
         .struct_init_comma => {
             {
                 const child = d.lhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
-            const field_range = ast.extraData(d.rhs, Ast.Node.SubRange);
-            for (ast.extra_data[field_range.start..field_range.end]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            const field_range = zast.ast.extraData(d.rhs, Ast.Node.SubRange);
+            for (zast.ast.extra_data[field_range.start..field_range.end]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
         // Visit lhs sub range, then rhs
         .switch_case, .switch_case_inline, .fn_proto_multi => {
-            const field_range = ast.extraData(d.lhs, Ast.Node.SubRange);
-            for (ast.extra_data[field_range.start..field_range.end]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            const field_range = zast.ast.extraData(d.lhs, Ast.Node.SubRange);
+            for (zast.ast.extra_data[field_range.start..field_range.end]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
             const child = d.rhs;
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
+            assertNodeIndexValid(zast.ast, child, parent);
+            switch (callback(zast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => visit(ast, child, T, callback, data),
+                .Recurse => visit(zast, child, T, callback, data),
             }
         },
         .while_cont => {
-            const while_data = ast.extraData(d.rhs, Ast.Node.WhileCont);
+            const while_data = zast.ast.extraData(d.rhs, Ast.Node.WhileCont);
             inline for (.{ d.lhs, while_data.cont_expr, while_data.then_expr }) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
         .@"while" => {
-            const while_data = ast.extraData(d.rhs, Ast.Node.While);
+            const while_data = zast.ast.extraData(d.rhs, Ast.Node.While);
             inline for (.{ d.lhs, while_data.cont_expr, while_data.then_expr, while_data.else_expr }) |child| {
                 if (child != 0) { // cont expr part may be omitted
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .@"if" => {
-            const if_data = ast.extraData(d.rhs, Ast.Node.If);
+            const if_data = zast.ast.extraData(d.rhs, Ast.Node.If);
             inline for (.{ d.lhs, if_data.then_expr, if_data.else_expr }) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
@@ -1851,133 +1913,133 @@ pub fn visit(
         .@"for" => {
             // See std.zig.Ast.forFull
             const extra = @as(Ast.Node.For, @bitCast(d.rhs));
-            for (ast.extra_data[d.lhs..][0..extra.inputs]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            for (zast.ast.extra_data[d.lhs..][0..extra.inputs]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
 
             // For body
             {
-                const child = ast.extra_data[d.lhs + extra.inputs];
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                const child = zast.ast.extra_data[d.lhs + extra.inputs];
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
 
             // Else body
             if (extra.has_else) {
-                const child = ast.extra_data[d.lhs + extra.inputs + 1];
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                const child = zast.ast.extra_data[d.lhs + extra.inputs + 1];
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
         .fn_proto, .fn_proto_one => |t| {
             var buf: [1]Ast.Node.Index = undefined;
             const fn_proto = if (t == .fn_proto_one)
-                ast.fnProtoOne(&buf, parent).ast
+                zast.ast.fnProtoOne(&buf, parent).ast
             else
-                ast.fnProto(parent).ast;
+                zast.ast.fnProto(parent).ast;
             for (fn_proto.params) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
             inline for (.{ d.rhs, fn_proto.align_expr, fn_proto.addrspace_expr, fn_proto.section_expr, fn_proto.callconv_expr }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .global_var_decl => {
-            const var_data = ast.extraData(d.lhs, Ast.Node.GlobalVarDecl);
+            const var_data = zast.ast.extraData(d.lhs, Ast.Node.GlobalVarDecl);
             inline for (.{ var_data.type_node, var_data.align_node, var_data.addrspace_node, var_data.section_node, d.rhs }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .local_var_decl => {
-            const var_data = ast.extraData(d.lhs, Ast.Node.LocalVarDecl);
+            const var_data = zast.ast.extraData(d.lhs, Ast.Node.LocalVarDecl);
             inline for (.{ var_data.type_node, var_data.align_node, d.rhs }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
 
         .array_type_sentinel => {
-            const array_data = ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
+            const array_data = zast.ast.extraData(d.rhs, Ast.Node.ArrayTypeSentinel);
             inline for (.{ d.lhs, array_data.sentinel, array_data.elem_type }) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
         .container_field => {
-            const field_data = ast.extraData(d.rhs, Ast.Node.ContainerField);
+            const field_data = zast.ast.extraData(d.rhs, Ast.Node.ContainerField);
             inline for (.{ d.lhs, field_data.align_expr, field_data.value_expr }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .slice => {
-            const slice_data = ast.extraData(d.rhs, Ast.Node.Slice);
+            const slice_data = zast.ast.extraData(d.rhs, Ast.Node.Slice);
             inline for (.{ d.lhs, slice_data.start, slice_data.end }) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
         .slice_sentinel => {
-            const slice_data = ast.extraData(d.rhs, Ast.Node.SliceSentinel);
+            const slice_data = zast.ast.extraData(d.rhs, Ast.Node.SliceSentinel);
             inline for (.{ d.lhs, slice_data.start, slice_data.end, slice_data.sentinel }) |child| {
                 if (child != 0) { // slice end may be 0
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
@@ -1985,75 +2047,75 @@ pub fn visit(
         .@"asm" => {
             {
                 const child = d.lhs;
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => {},
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
-            const asm_data = ast.extraData(d.rhs, Ast.Node.Asm);
-            for (ast.extra_data[asm_data.items_start..asm_data.items_end]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            const asm_data = zast.ast.extraData(d.rhs, Ast.Node.Asm);
+            for (zast.ast.extra_data[asm_data.items_start..asm_data.items_end]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
         },
-        .root => for (ast.rootDecls()) |child| {
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
+        .root => for (zast.ast.rootDecls()) |child| {
+            assertNodeIndexValid(zast.ast, child, parent);
+            switch (callback(zast, child, parent, data)) {
                 .Break => return,
                 .Continue => continue,
-                .Recurse => visit(ast, child, T, callback, data),
+                .Recurse => visit(zast, child, T, callback, data),
             }
         },
         .ptr_type => {
-            const ptr_data = ast.extraData(d.lhs, Ast.Node.PtrType);
+            const ptr_data = zast.ast.extraData(d.lhs, Ast.Node.PtrType);
             inline for (.{ d.rhs, ptr_data.sentinel, ptr_data.align_node, ptr_data.addrspace_node }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .ptr_type_bit_range => {
-            const ptr_data = ast.extraData(d.lhs, Ast.Node.PtrTypeBitRange);
+            const ptr_data = zast.ast.extraData(d.lhs, Ast.Node.PtrTypeBitRange);
             inline for (.{ d.rhs, ptr_data.sentinel, ptr_data.align_node, ptr_data.addrspace_node, ptr_data.bit_range_start, ptr_data.bit_range_end }) |child| {
                 if (child != 0) {
-                    assertNodeIndexValid(ast, child, parent);
-                    switch (callback(ast, child, parent, data)) {
+                    assertNodeIndexValid(zast.ast, child, parent);
+                    switch (callback(zast, child, parent, data)) {
                         .Break => return,
                         .Continue => {},
-                        .Recurse => visit(ast, child, T, callback, data),
+                        .Recurse => visit(zast, child, T, callback, data),
                     }
                 }
             }
         },
         .assign_destructure => {
-            const elem_count = ast.extra_data[d.lhs];
+            const elem_count = zast.ast.extra_data[d.lhs];
             // var decls (const a, const b, etc..)
-            for (ast.extra_data[d.lhs+1..][0..elem_count]) |child| {
-                assertNodeIndexValid(ast, child, parent);
-                switch (callback(ast, child, parent, data)) {
+            for (zast.ast.extra_data[d.lhs+1..][0..elem_count]) |child| {
+                assertNodeIndexValid(zast.ast, child, parent);
+                switch (callback(zast, child, parent, data)) {
                     .Break => return,
                     .Continue => continue,
-                    .Recurse => visit(ast, child, T, callback, data),
+                    .Recurse => visit(zast, child, T, callback, data),
                 }
             }
             // The value to destructure
             const child = d.rhs;
-            assertNodeIndexValid(ast, child, parent);
-            switch (callback(ast, child, parent, data)) {
+            assertNodeIndexValid(zast.ast, child, parent);
+            switch (callback(zast, child, parent, data)) {
                 .Break => return,
                 .Continue => {},
-                .Recurse => visit(ast, child, T, callback, data),
+                .Recurse => visit(zast, child, T, callback, data),
             }
         },
     }
@@ -2062,28 +2124,28 @@ pub fn visit(
 
 fn testVisit(source: [:0]const u8, tag: Tag) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
-    defer ast.deinit(allocator);
+    var zast = try ZAst.parse(allocator, source);
+    defer zast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     // try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (zast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
-        try printAstError(&ast, "", source);
+        try printAstError(&zast, "", source);
         return error.ParseError;
     }
     // try dumpAstFlat(&ast, stdout);
 
-    var nodes = try std.ArrayList(NodeIndex).initCapacity(allocator, ast.nodes.len + 1);
+    var nodes = try std.ArrayList(NodeIndex).initCapacity(allocator, zast.ast.nodes.len + 1);
     nodes.appendAssumeCapacity(0); // Callback does not call on initial node
     defer nodes.deinit();
     // try stdout.writeAll("Visited order\n");
 
-    visit(&ast, 0, *std.ArrayList(NodeIndex), visitAll, &nodes);
+    visit(&zast, 0, *std.ArrayList(NodeIndex), visitAll, &nodes);
     const visited = nodes.items[0..nodes.items.len];
 
     // try dumpAstNodes(&ast, visited, stdout);
-    try std.testing.expectEqual(ast.nodes.len, visited.len);
+    try std.testing.expectEqual(zast.ast.nodes.len, visited.len);
 
     // Sort visited nodes and make sure each was hit
     std.mem.sort(NodeIndex, visited, {}, std.sort.asc(NodeIndex));
@@ -2093,14 +2155,14 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
 
 //     var timer = try std.time.Timer.start();
 //     for (0..ast.tokens.len) |i| {
-//         _ = ast.tokenLocation(0, @intCast(i));
+//         _ = ast.fastTokenLocation(@intCast(i));
 //     }
 //     const t0: f64 = @floatFromInt(timer.read());
 //     std.log.warn("Old: {d:6.2}ms", .{std.math.round(t0/std.time.ms_per_s)});
 //
 //     timer.reset();
 //     for (0..ast.tokens.len) |i| {
-//         _ = ast.tokenLocation(0, @intCast(i));
+//         _ = ast.fastTokenLocation(@intCast(i));
 //     }
 //     const t1: f64 = @floatFromInt(timer.read());
 //     std.log.warn("New: {d:6.2}ms", .{std.math.round(t1/std.time.ms_per_s)});
@@ -2109,13 +2171,13 @@ fn testVisit(source: [:0]const u8, tag: Tag) !void {
 //         dt/std.time.ms_per_s, 100*(t1-t0)/t0, if (t1 < t0) "faster" else "slower"});
 //
 //     for (0..ast.tokens.len) |i| {
-//         const a = ast.tokenLocation(0, @intCast(i));
-//         const b = ast.tokenLocationScan(0, @intCast(i));
+//         const a = ast.fastTokenLocation(@intCast(i));
+//         const b = ast.fastTokenLocationScan(0, @intCast(i));
 //         try std.testing.expectEqual(a, b);
 //     }
 
     // If given, make sure the tag is actually used in the source parsed
-    if (indexOfNodeWithTag(ast, 0, tag) == null) {
+    if (indexOfNodeWithTag(zast.ast, 0, tag) == null) {
         std.log.err("Expected tag {} not found in ast\n", .{tag});
         assert(false);
     }
