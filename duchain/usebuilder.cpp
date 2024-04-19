@@ -291,7 +291,7 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         case NodeTag_block_two:
         case NodeTag_block_two_semicolon: {
             auto builtin = returnType.dynamicCast<BuiltinType>();
-            if (builtin && builtin->isVoid()) {
+            if (builtin && (builtin->isVoid() || builtin->isNoreturn()) ) {
                 // ok
             } else if (Helper::isMixedType(returnType)) {
                 // maybe an error, idk

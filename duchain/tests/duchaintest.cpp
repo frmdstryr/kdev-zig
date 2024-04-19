@@ -666,7 +666,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("cast @intFromBool() 2") << "const x: i8 = @intFromBool(false);" << "x" << "i8 = 0" << "";
     QTest::newRow("@fieldParentPtr()") <<
         "const Point = struct {x: i32=0, y: i32=0};\n"
-        "test{var point = Point{}; const p = @fieldParentPtr(Point, \"x\", &point.x);\n}"
+        "test{var point = Point{}; const p: *Point = @fieldParentPtr(\"x\", &point.x);\n}"
         << "p" << "*Point" << "2,0";
 
     // TODO: Order of decls matters but should not...
@@ -883,6 +883,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
     QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{QLatin1String("Error is ignored")} << "";
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{QLatin1String("Return value is ignored")} << "";
+    QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {}; } test{ exit(1); }" << QStringList{} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
