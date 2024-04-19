@@ -752,7 +752,15 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
             return Continue;
         }
 
-        if (!Helper::canTypeBeAssigned(errorType->baseType(), v2.lastType())) {
+
+        auto targetType = errorType->baseType();
+        // TODO: Determining whether the target is const should be done better,
+        // this only works for a single case of const foo = a catch b;
+        if (parent.kind() == VarDecl && parent.mainToken() == QStringLiteral("const")) {
+            targetType->setModifiers(targetType->modifiers() | AbstractType::ConstModifier);
+        }
+
+        if (!Helper::canTypeBeAssigned(targetType, v2.lastType())) {
             if (v2.returnType()) {
                 // Eg catch with return block
                 // TODO: Should check fn return is correct type?

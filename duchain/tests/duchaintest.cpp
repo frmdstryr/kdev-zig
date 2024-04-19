@@ -885,9 +885,12 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{QLatin1String("Return value is ignored")} << "";
     QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {}; } test{ exit(1); }" << QStringList{} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
+    QTest::newRow("fn catch 2") << "pub fn bufPrintZ(buf: []u8) ![:0]u8 { buf[buf.len-1] = 0; return buf; } test{ var buf: [100]u8 = undefined; const result = bufPrintZ(&buf) catch \"123\"; }" << QStringList{} << "";
+
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
     QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{QLatin1String("Incompatible types")} << "";
+
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{QLatin1String("type mismatch")} << "";

@@ -165,7 +165,8 @@ bool SliceType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
         return false;
 
     // if target is const a non const can be used
-    if (elementType()->modifiers() & AbstractType::ConstModifier) {
+    const bool isConst = (modifiers() & AbstractType::ConstModifier) || elementType()->modifiers();
+    if (isConst & AbstractType::ConstModifier) {
         if (const auto v = rhs.dynamicCast<SliceType>()) {
             return Helper::typesEqualIgnoringModifiers(elementType(), v->elementType());
         }
