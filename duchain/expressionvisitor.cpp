@@ -1018,13 +1018,22 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinFieldParentPtr(const ZigNode &node)
 {
-    ZigNode typeNode = node.nextChild();
     // TODO: This assumes correct arguments
-    ExpressionVisitor v(this);
-    v.startVisiting(typeNode, node);
-    PointerType::Ptr ptr(new PointerType);
-    ptr->setBaseType(v.lastType());
-    encounter(ptr);
+    // TODO: Handle different versions
+    Q_UNUSED(node);
+    // if (zigVersion < 0.12.0) {
+    //     ZigNode typeNode = node.nextChild();
+    //     ExpressionVisitor v(this);
+    //     v.startVisiting(typeNode, node);
+    //     PointerType::Ptr ptr(new PointerType);
+    //     ptr->setBaseType(v.lastType());
+    // else {
+    if (auto ptr = inferredType().dynamicCast<PointerType>()) {
+        // TODO: Validate second arg field
+        encounter(ptr);
+    } else {
+        encounterUnknown();
+    }
     return Continue;
 }
 
