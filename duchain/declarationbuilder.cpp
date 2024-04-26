@@ -835,7 +835,11 @@ void DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode 
         const auto isModule = s->modifiers() & ModuleModifier;
         const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext();
         if (auto ctx = s->internalContext(moduleContext)) {
-            currentContext()->addImportedParentContext(ctx);
+            if (node.isRoot()) {
+                topContext()->addImportedParentContext(ctx);
+            } else {
+                currentContext()->addImportedParentContext(ctx);
+            }
             return;
         }
     }
