@@ -14,6 +14,7 @@
 #include "types/comptimetype.h"
 #include "types/enumtype.h"
 #include "types/uniontype.h"
+#include "types/vectortype.h"
 
 #include "functionvisitor.h"
 #include "delayedtypevisitor.h"
@@ -647,6 +648,8 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         return callBuiltinEnumFromInt(node);
     } else if (name == QLatin1String("@intFromEnum")) {
         return callBuiltinIntFromEnum(node);
+    } else if (name == QLatin1String("@Vector")) {
+        return callBuiltinVector(node);
     // todo @Type
     } else if (
         // These return the type of the first argument
@@ -1111,6 +1114,34 @@ VisitResult ExpressionVisitor::callBuiltinAs(const ZigNode&node)
         return Continue;
     }
     encounterUnknown();
+    return Continue;
+}
+
+
+VisitResult ExpressionVisitor::callBuiltinVector(const ZigNode &node)
+{
+    if (isBuiltinCallTwo(node)) {
+        NodeData data = node.data();
+        ZigNode lhs = {node.ast, data.lhs};
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor typeVisitor(this);
+        typeVisitor.startVisiting(rhs, node);
+        VectorType::Ptr vectorType(new VectorType);
+        // TODO: Check type vs instance?
+        vectorType->setElementType(typeVisitor.lastType());
+
+        if (lhs.tag() == NodeTag_number_literal) {
+            bool ok;
+            int size = lhs.mainToken().toInt(&ok, 0);
+            if (ok) {
+                vectorType->setDimension(size);
+            }
+        }
+        // TODO: Else case ?
+        encounter(vectorType);
+    } else {
+        encounterUnknown();
+    }
     return Continue;
 }
 
@@ -1688,6 +1719,8 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
 
         // TODO: if index is comptime known set
         encounter(elementType);
+    } else if (auto vector = T.dynamicCast<VectorType>()) {
+         encounter(vector->elementType());
     } else {
         encounterUnknown();
     }

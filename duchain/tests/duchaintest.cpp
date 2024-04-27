@@ -661,6 +661,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("@field()") << "const Foo = struct {a: u8}; test{var x = Foo{}; var y = @field(x, \"a\");\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@field() expr") << "const Foo = struct {a: u8}; test{const f = \"a\"; var x = Foo{}; var y = @field(x, f);\n}" << "y" << "u8" << "1,0";
     QTest::newRow("@tagName()") << "const Foo = enum{A, B}; test{var x = @tagName(Foo.A);\n}" << "x" << "[:0]const u8" << "1,0";
+    QTest::newRow("vector") << "const x = @Vector(4, f32);" << "x" << "@Vector(4, f32)" << "";
+    QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << "x" << "f32" << "";
     QTest::newRow("cast @boolFromInt()") << "const y: u8 = 7; const x = @boolFromInt(y);" << "x" << "bool = true" << "";
     QTest::newRow("cast @boolFromInt() 2") << "const y: i8 = 1; const x = @boolFromInt(-y);" << "x" << "bool = true" << "";
     QTest::newRow("cast @intFromBool()") << "const x: u8 = @intFromBool(true);" << "x" << "u8 = 1" << "";
@@ -916,6 +918,10 @@ void DUChainTest::testProblems_data()
     QTest::newRow("@floatFromInt()") << "test{var x: i32 = 0; var y: f32 = @floatFromInt(x);\n}" <<  QStringList{} << "";
     QTest::newRow("@intCast()") << "test{var x: i32 = 0; var y: u32 = @intCast(x);\n}" <<  QStringList{} << "";
     //QTest::newRow("@intFromFloat()") << "test{var x: f32 = 0; var y: u32 = @intFromFloat(x);\n}" << "y" << QStringList{} << "";
+    QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << QStringList{} << "";
+    QTest::newRow("vector from array") << "const a: [4]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{} << "";
+    QTest::newRow("vector from array 2") << "const a: [3]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{QLatin1String("Assignment type mismatch")} << "";
+
 }
 
 } // end namespace zig

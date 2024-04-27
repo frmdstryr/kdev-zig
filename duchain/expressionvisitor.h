@@ -84,6 +84,7 @@ public:
     VisitResult callBuiltinFieldParentPtr(const ZigNode &node);
     VisitResult callBuiltinField(const ZigNode &node);
     VisitResult callBuiltinAs(const ZigNode &node);
+    VisitResult callBuiltinVector(const ZigNode &node);
     VisitResult callBuiltinIntFromFloat(const ZigNode &node);
     VisitResult callBuiltinFloatFromInt(const ZigNode &node);
     VisitResult callBuiltinIntCast(const ZigNode &node);

@@ -7,7 +7,7 @@
 */
 
 #include "slicetype.h"
-
+#include "vectortype.h"
 
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystem.h"
@@ -160,6 +160,13 @@ bool SliceType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
 {
     if (equalsIgnoringValue(rhs.data()))
         return true;
+
+    if (const auto vector = rhs.dynamicCast<VectorType>()) {
+        return (
+            elementType()->equals(vector->elementType().data())
+            && dimension() == vector->dimension()
+        );
+    }
 
     if (d_func()->m_dimension != 0)
         return false;

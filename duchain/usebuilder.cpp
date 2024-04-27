@@ -34,6 +34,8 @@
 #include "types/enumtype.h"
 #include "types/uniontype.h"
 #include "types/errortype.h"
+#include "types/vectortype.h"
+
 #include "expressionvisitor.h"
 #include "zigdebug.h"
 #include "helpers.h"
@@ -125,6 +127,7 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_container_field_align:
         case NodeTag_container_field_init:
             return visitContainerField(node, parent);
+        // TODO: check var_init and field_init values match type
         default:
             break;
     }
@@ -669,7 +672,7 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
     if (auto ptr = T.dynamicCast<PointerType>()) {
         T = ptr->baseType();
     }
-    if (auto slice = T.dynamicCast<SliceType>()) {
+    if (T.dynamicCast<SliceType>() || T.dynamicCast<VectorType>()) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(session, currentContext());
         v2.startVisiting(rhs, node);
