@@ -144,12 +144,21 @@ public:
         return m_returnType;
     }
 
+    void setExcludedDeclaration(const KDevelop::Declaration* d) {
+        m_excludedDeclaration = d;
+    }
+
+    const KDevelop::Declaration* excludedDeclaration() const {
+        return m_excludedDeclaration;
+    }
+
 protected:
     ParseSession* m_session;
     KDevelop::AbstractType::Ptr m_inferredType;
     KDevelop::AbstractType::Ptr m_returnType;
     KDevelop::FunctionType::Ptr m_currentFunction;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
+    const KDevelop::Declaration* m_excludedDeclaration = nullptr;
 
 };
 

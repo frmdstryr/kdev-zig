@@ -553,6 +553,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("struct") << "const Foo = struct {a: u8};" << "Foo" << "Foo" << "";
     QTest::newRow("struct field") << "const Foo = struct {\n a: u8\n};" << "a" << "u8" << "Foo";
     QTest::newRow("struct field enum") << "const S = enum {Ok, Err}; const A = struct {\n s: S\n};" << "s" << "S" << "A";
+    QTest::newRow("struct field shadowed") << "const a = struct{ b: bool}; const Foo = struct {\n a: ?a.b\n};" << "a" << "?bool" << "Foo";
     QTest::newRow("fn void") << "pub fn main() void {}" << "main" << "function void ()"<< "";
     QTest::newRow("fn !void") << "pub fn main() !void {}" << "main" << "function !void ()"<< "";
     QTest::newRow("fn u8") << "pub fn main() u8 {}" << "main" << "function u8 ()"<< "";

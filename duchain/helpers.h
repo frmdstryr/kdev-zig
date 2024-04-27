@@ -64,10 +64,15 @@ public:
         int betterThanPriority,
         QObject* notifyWhenReady = nullptr);
 
+    /**
+     * Get the declaration for a name in the given context.
+     * If excludedDeclaration is provided, do not use that one if found.
+     **/
     static KDevelop::Declaration* declarationForName(
         const QString& name,
         const KDevelop::CursorInRevision& location,
-        KDevelop::DUChainPointer<const KDevelop::DUContext> context
+        KDevelop::DUChainPointer<const KDevelop::DUContext> context,
+        const KDevelop::Declaration* excludedDeclaration = nullptr
     );
 
     /**

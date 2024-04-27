@@ -321,7 +321,8 @@ static inline bool canFindBeyondUse(const DUContext* ctx)
 Declaration* Helper::declarationForName(
     const QString& name,
     const CursorInRevision& location,
-    DUChainPointer<const DUContext> context)
+    DUChainPointer<const DUContext> context,
+    const KDevelop::Declaration* excludedDeclaration)
 {
     DUChainReadLocker lock;
     const DUContext* currentContext = context.data();
@@ -333,42 +334,40 @@ Declaration* Helper::declarationForName(
         findUntil,
         nullptr,
         AbstractType::Ptr(), DUContext::DontResolveAliases);
-    if ( !localDeclarations.isEmpty() ) {
-        return localDeclarations.last();
+    for (Declaration* declaration: localDeclarations) {
+        if (declaration != excludedDeclaration)
+            return declaration;
     }
 
     QList<Declaration*> declarations;
-    bool findInNext = true;
     do {
-        if (findInNext) {
-            findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
-            declarations = currentContext->findDeclarations(identifier, findUntil);
+        findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
+        declarations = currentContext->findDeclarations(identifier, findUntil);
 
-            for (Declaration* declaration: declarations) {
-                //qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
-                if (declaration->context()->type() != DUContext::Class
-                    || (
-                        contextTypeIsFnOrClass(currentContext)
-                        //&& declaration->context() == currentContext->parentContext()
-                    )
-                ) {
-                     // Declarations from struct decls must be referenced through `self.<foo>`, except
-                     //  in their local scope (handled above) or when used as default arguments for methods of the same class.
-                     // Otherwise, we're done!
+        for (Declaration* declaration: declarations) {
+            //qCDebug(KDEV_ZIG) << "decl " << declaration->toString();
+            if (declaration->context()->type() != DUContext::Class
+                || (
+                    contextTypeIsFnOrClass(currentContext)
+                    //&& declaration->context() == currentContext->parentContext()
+                )
+            ) {
+                    // Declarations from struct decls must be referenced through `self.<foo>`, except
+                    //  in their local scope (handled above) or when used as default arguments for methods of the same class.
+                    // Otherwise, we're done!
+                if (declaration != excludedDeclaration)
                     return declaration;
-                }
             }
-            if (!declarations.isEmpty()) {
-                // If we found declarations but rejected all of them (i.e. didn't return), we need to keep searching.
-                findInNext = true;
-                declarations.clear();
-            }
+        }
+        if (!declarations.isEmpty()) {
+            // If we found declarations but rejected all of them (i.e. didn't return), we need to keep searching.
+            declarations.clear();
         }
 
         if (!findBeyondUse && canFindBeyondUse(currentContext)) {
             // Names in the body may be defined after the function definition, before the function is called.
             // Note: only the parameter list has type DUContext::Function, so we have to do this instead.
-            findBeyondUse = findInNext = true;
+            findBeyondUse = true;
         }
     } while ((currentContext = currentContext->parentContext()));
 

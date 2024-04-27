@@ -340,6 +340,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
         // Struct field
         ZigNode typeNode = node.varType();
         ExpressionVisitor v(session, currentContext());
+        v.setExcludedDeclaration(currentDeclaration());
         v.startVisiting(typeNode, node);
         return v.lastType();
     } else if (Kind == VarDecl) {

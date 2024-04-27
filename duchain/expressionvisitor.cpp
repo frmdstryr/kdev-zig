@@ -47,6 +47,7 @@ ExpressionVisitor::ExpressionVisitor(ParseSession* session, const KDevelop::DUCo
 ExpressionVisitor::ExpressionVisitor(ExpressionVisitor* parent, const KDevelop::DUContext* overrideContext)
     : DynamicLanguageExpressionVisitor(parent)
     , m_session(parent->session())
+    , m_excludedDeclaration(parent->excludedDeclaration())
 {
     if ( overrideContext ) {
         m_context = overrideContext;
@@ -479,7 +480,8 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
         Declaration* decl = Helper::declarationForName(
             name,
             CursorInRevision::invalid(),
-            DUChainPointer<const DUContext>(context())
+            DUChainPointer<const DUContext>(context()),
+            m_excludedDeclaration
         );
         if (decl) {
             // DUChainReadLocker lock; // For debug statement only
