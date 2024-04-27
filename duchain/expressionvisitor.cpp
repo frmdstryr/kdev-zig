@@ -650,6 +650,11 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         return callBuiltinIntFromEnum(node);
     } else if (name == QLatin1String("@Vector")) {
         return callBuiltinVector(node);
+    } else if (name == QLatin1String("@reduce")) {
+        return callBuiltinReduce(node);
+    } else if (name == QLatin1String("@splat")) {
+        return callBuiltinSplat(node);
+    // todo @Type
     // todo @Type
     } else if (
         // These return the type of the first argument
@@ -1145,6 +1150,40 @@ VisitResult ExpressionVisitor::callBuiltinVector(const ZigNode &node)
     return Continue;
 }
 
+VisitResult ExpressionVisitor::callBuiltinReduce(const ZigNode &node)
+{
+    if (isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.rhsAsNode(), node);
+        if (auto vector = v.lastType().dynamicCast<VectorType>()) {
+            encounter(vector->elementType());
+            return Continue;
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinSplat(const ZigNode &node)
+{
+    if (isBuiltinCallTwo(node)) {
+        ExpressionVisitor v(this);
+        v.startVisiting(node.lhsAsNode(), node);
+        VectorType::Ptr vectorType(new VectorType);
+        // TODO: Validate type is int, bool, float, or ptr
+        vectorType->setElementType(v.lastType());
+        if (auto r = inferredType().dynamicCast<VectorType>()) {
+            vectorType->setDimension(r->dimension());
+        }
+        else if (auto r = inferredType().dynamicCast<SliceType>()) {
+            vectorType->setDimension(r->dimension());
+        }
+        encounter(vectorType);
+        return Continue;
+    }
+    encounterUnknown();
+    return Continue;
+}
 
 VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &parent)
 {
