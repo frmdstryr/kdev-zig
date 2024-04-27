@@ -20,6 +20,7 @@
 #include <language/duchain/ducontext.h>
 #include <language/duchain/declaration.h>
 #include <language/duchain/functiondeclaration.h>
+#include <language/duchain/classmemberdeclaration.h>
 #include <language/duchain/problem.h>
 #include <language/duchain/types/structuretype.h>
 #include <language/duchain/types/functiontype.h>
@@ -120,8 +121,30 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_catch:
             visitCatch(node, parent);
             break;
+        case NodeTag_container_field:
+        case NodeTag_container_field_align:
+        case NodeTag_container_field_init:
+            return visitContainerField(node, parent);
+        default:
+            break;
     }
     return ContextBuilder::visitNode(node, parent);
+}
+
+VisitResult UseBuilder::visitContainerField(const ZigNode &node, const ZigNode &parent)
+{
+    const QString fieldName = node.spellingName();
+    auto range = node.spellingRange();
+    const auto previousField = currentFieldDeclaration;
+    currentFieldDeclaration = Helper::declarationForName(
+        fieldName,
+        range.start,
+        DUChainPointer<const DUContext>(currentContext()),
+        previousField
+    );
+    visitChildren(node, parent);
+    currentFieldDeclaration = previousField;
+    return VisitResult::Continue;
 }
 
 VisitResult UseBuilder::visitBuiltinCall(const ZigNode &node, const ZigNode &parent)
@@ -598,6 +621,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     }
     ZigNode owner = node.lhsAsNode(); // access lhs
     ExpressionVisitor v(session, currentContext());
+    v.setExcludedDeclaration(currentFieldDeclaration);
     v.startVisiting(owner, node);
     auto T = v.lastType();
     if (auto ptr = T.dynamicCast<PointerType>()) {
@@ -838,7 +862,8 @@ VisitResult UseBuilder::visitIdent(const ZigNode &node, const ZigNode &parent)
     Declaration* decl = Helper::declarationForName(
         name,
         useRange.start,
-        DUChainPointer<const DUContext>(currentContext())
+        DUChainPointer<const DUContext>(currentContext()),
+        currentFieldDeclaration
     );
     if (decl) {
         if (decl->range() != useRange) {

@@ -48,6 +48,7 @@ public:
 
     virtual VisitResult visitNode(const ZigNode &node, const ZigNode &parent) override;
 
+    VisitResult visitContainerField(const ZigNode &node, const ZigNode &parent);
     VisitResult visitCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
@@ -110,6 +111,7 @@ public:
     KDevelop::IndexedString document;
     KDevelop::QualifiedIdentifier fullPath;
     KDevelop::QualifiedIdentifier currentPath;
+    KDevelop::Declaration* currentFieldDeclaration = nullptr;
 };
 
 } // end namespace zig

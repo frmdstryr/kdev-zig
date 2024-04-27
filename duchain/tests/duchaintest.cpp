@@ -903,6 +903,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; test { var a = A{.a = .Ok}; }" << QStringList{} << "";
     QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
     //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
+    QTest::newRow("struct field shadowed") << "const a = struct{ b: bool}; const Foo = struct {\n a: ?a.b\n};" << QStringList{} << "";
 
     QTest::newRow("struct dot init") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.a = 0}); }" << QStringList{} << "";
     QTest::newRow("struct dot init invalid") << "const A = struct {a: u8}; pub fn foo(a: A) void {} test {const x = foo(.{.b = 0}); }" << QStringList{QLatin1String("Struct A has no field b")} << "";
