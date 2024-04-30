@@ -610,7 +610,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("try") << "pub fn main() !f32 {return 1;}\ntest{\nvar x = try main(); \n}" << "x" << "f32"<< "3,0";
     QTest::newRow("orelse") << "var x: ?i8 = null; var y = x orelse 1;" << "y" << "i8" << "";
     QTest::newRow("orelse bad") << "var x: i8 = 0; var y = x orelse 1;" << "y" << "mixed" << "";
-    // Note: Using an undefind var in the if expr forces merging
+    // Note: Using an undefined var in the if expr forces merging
     QTest::newRow("if expr 1") << "var x = if (true) 1 else 2;" << "x" << "comptime_int = 1" << "";
     QTest::newRow("if expr 2") << "var x = if (false) 1 else 2;" << "x" << "comptime_int = 2" << "";
     QTest::newRow("if expr 3") << "var x: ?u8 = 0; var y = if (x) |z| z else 2;" << "y" << "u8" << "";
@@ -646,6 +646,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("array init one") << "var x = [_]u8{1};" << "x" << "[1]u8" << "";
     QTest::newRow("array slice open") << "const a = [2]f32{1.0, 2.0}; var ptr = &a; const x = ptr[0..];" << "x" << "[]f32" << "";
     QTest::newRow("array init one comma") << "var x = [_]u8{1,};" << "x" << "[1]u8" << "";
+    QTest::newRow("c ptr array access") << "const ptr: [*]const f32 = undefined; const x = ptr[0];" << "x" << "const f32" << "";
+
     QTest::newRow("array ptr struct fn") << "const A = struct { pub fn foo() bool{} }; var x: [2]*A = undefined; var y = x[0].foo();" << "y" << "bool" << "";
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";
     QTest::newRow("ptr type aligned") << "var x: []u8 = undefined;" << "x" << "[]u8" << "";
@@ -837,6 +839,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("invalid array access") << "const x: u8 = 0; const y = x[1];" << QStringList{QLatin1String("Attempt to index non-array type")} << "";
     QTest::newRow("invalid array index") << "const x = [2]u8{1, 2}; const y = x[\"a\"];" << QStringList{QLatin1String("Array index is not an integer type")} << "";
     QTest::newRow("const str ptr index") << "const x = \"abcd\"; const y = x[0];" << QStringList{} << "";
+    QTest::newRow("c ptr array access") << "const ptr: [*]const f32 = undefined; const x = ptr[0];" << QStringList{} << "";
     QTest::newRow("invalid array index var") << "const x = [2]u8{1, 2}; const i = 1.1; const y = x[i];" << QStringList{QLatin1String("Array index is not an integer type")} << "";
     QTest::newRow("enum") << "const Status = enum{Ok, Error}; const x: Status = .Ok;" << QStringList{} << "";
     QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";

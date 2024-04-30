@@ -669,10 +669,12 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
     v1.startVisiting(lhs, node);
     auto T = v1.lastType();
 
+    bool is_c_ptr = false;
     if (auto ptr = T.dynamicCast<PointerType>()) {
         T = ptr->baseType();
+        is_c_ptr = (ptr->modifiers() & ArrayModifier) != 0;
     }
-    if (T.dynamicCast<SliceType>() || T.dynamicCast<VectorType>()) {
+    if (T.dynamicCast<SliceType>() || T.dynamicCast<VectorType>() || is_c_ptr) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(session, currentContext());
         v2.startVisiting(rhs, node);

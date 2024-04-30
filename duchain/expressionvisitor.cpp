@@ -1785,6 +1785,11 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
     auto T = v.lastType();
     if (auto ptr = T.dynamicCast<PointerType>()) {
         T = ptr->baseType();
+        // c ptr (eg [*]const u8)
+        if (ptr->modifiers() & ArrayModifier) {
+            encounter(T);
+            return Continue;
+        }
     }
     if (auto slice = T.dynamicCast<SliceType>()) {
         auto elementType = slice->elementType();
