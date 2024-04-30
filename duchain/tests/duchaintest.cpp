@@ -644,6 +644,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("array init") << "var x = [_]u8{1, 2};" << "x" << "[2]u8" << "";
     QTest::newRow("array init comma") << "var x = [_]u8{1, 2, 3,};" << "x" << "[3]u8" << "";
     QTest::newRow("array init one") << "var x = [_]u8{1};" << "x" << "[1]u8" << "";
+    QTest::newRow("array slice open") << "const a = [2]f32{1.0, 2.0}; var ptr = &a; const x = ptr[0..];" << "x" << "[]f32" << "";
     QTest::newRow("array init one comma") << "var x = [_]u8{1,};" << "x" << "[1]u8" << "";
     QTest::newRow("array ptr struct fn") << "const A = struct { pub fn foo() bool{} }; var x: [2]*A = undefined; var y = x[0].foo();" << "y" << "bool" << "";
     QTest::newRow("sentinel array") << "var x: [100:0]u8 = undefined;" << "x" << "[100:0]u8" << "";

@@ -1844,7 +1844,12 @@ VisitResult ExpressionVisitor::visitSlice(const ZigNode &node, const ZigNode &pa
     Q_UNUSED(parent);
     ExpressionVisitor v(this);
     v.startVisiting(node.lhsAsNode(), node);
-    if (auto slice = v.lastType().dynamicCast<SliceType>()) {
+    // Ptr is walked automatically
+    auto T = v.lastType();
+    if (auto ptr = T.dynamicCast<PointerType>()) {
+        T = ptr->baseType();
+    }
+    if (auto slice = T.dynamicCast<SliceType>()) {
         SliceType::Ptr newSlice(new SliceType);
         newSlice->setElementType(slice->elementType());
         // TODO: Size try to detect size?
