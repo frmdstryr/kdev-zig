@@ -26,6 +26,7 @@
 #include <language/duchain/topducontext.h>
 
 #include <tests/testcore.h>
+#include <tests/testfile.h>
 #include <tests/autotestshell.h>
 #include <tests/testhelpers.h>
 #include <tests/testlanguagecontroller.h>
@@ -81,8 +82,13 @@ ReferencedTopDUContext parseCode(const QString &code, const QString &name)
 {
     using namespace Zig;
     qDebug() << "\nparse" << name << "\n";
+    // TestFile f(code, QStringLiteral(".zig"), name);
+    // f.parseAndWait(TopDUContext::AllDeclarationsContextsAndUses);
+    // DUChainReadLocker lock;
+    // auto top = f.topContext();
+    // return top;
     IndexedString document(name);
-    ParseSessionData *sessionData = new ParseSessionData(document, code.toUtf8());
+    ParseSessionData *sessionData = new ParseSessionData(document, code.toUtf8(), nullptr);
     ParseSession session(ParseSessionData::Ptr(nullptr));
     session.setData(ParseSessionData::Ptr(sessionData));
     session.parse();
@@ -97,7 +103,6 @@ ReferencedTopDUContext parseCode(const QString &code, const QString &name)
     UseBuilder useBuilder(document);
     useBuilder.setParseSession(&session);
     useBuilder.buildUses(&root);
-
     return context;
 }
 
@@ -154,11 +159,13 @@ DUContext *getInternalContext(ReferencedTopDUContext topContext, QString name, b
 
 void DUChainTest::initTestCase()
 {
-    AutoTestShell::init();
-    TestCore* core = new TestCore();
-    core->initialize(KDevelop::Core::NoUi);
-    DUChain::self()->disablePersistentStorage();
-    KDevelop::CodeRepresentation::setDiskChangesForbidden(true);
+    AutoTestShell::init({QStringLiteral("kdevclangsupport"), QStringLiteral("kdevzigsupport")});
+    TestCore::initialize(Core::NoUi);
+    //TestCore* core = new TestCore();
+    //core->initialize(KDevelop::Core::NoUi);
+
+    //DUChain::self()->disablePersistentStorage();
+    //KDevelop::CodeRepresentation::setDiskChangesForbidden(true);
 
     // This seems to be required for the waitForUpdate to work in tests... ?
     // auto* langController = new TestLanguageController(core);
@@ -494,6 +501,13 @@ void DUChainTest::testVarType()
     QFETCH(QString, container);
 
     qDebug() << "Code:" << code;
+
+    if (code.contains(QStringLiteral("cInclude"))) {
+        DUChain::self()->updateContextForUrl(IndexedString("/usr/include/locale.h"), KDevelop::TopDUContext::ForceUpdate);
+        ICore::self()->languageController()->backgroundParser()->parseDocuments();
+        DUChain::self()->waitForUpdate(IndexedString("/usr/include/locale.h"), KDevelop::TopDUContext::ForceUpdate);
+    }
+
     ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
     QVERIFY(context.data());
 
@@ -664,6 +678,9 @@ void DUChainTest::testVarType_data()
     QTest::newRow("vector") << "const x = @Vector(4, f32);" << "x" << "@Vector(4, f32)" << "";
     QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << "x" << "f32" << "";
     QTest::newRow("vector reduce") << "const v: @Vector(4, f32) = undefined; const x = @reduce(.Max, v);" << "x" << "f32" << "";
+    QTest::newRow("@cImport") << "const c = @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = c.setlocale;" << "f" << "function char* (int, const char*)" << "";
+
+
 
     QTest::newRow("cast @boolFromInt()") << "const y: u8 = 7; const x = @boolFromInt(y);" << "x" << "bool = true" << "";
     QTest::newRow("cast @boolFromInt() 2") << "const y: i8 = 1; const x = @boolFromInt(-y);" << "x" << "bool = true" << "";
@@ -923,7 +940,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << QStringList{} << "";
     QTest::newRow("vector from array") << "const a: [4]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{} << "";
     QTest::newRow("vector from array 2") << "const a: [3]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{QLatin1String("Assignment type mismatch")} << "";
-    QTest::newRow("vector splat") << "var x: @Vector(4, f32); x = @splat(1);" << QStringList{} << "";
+    QTest::newRow("vector splat") << "test { var x: @Vector(4, f32) = undefined; x = @splat(1); }" << QStringList{} << "";
 
 }
 

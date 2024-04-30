@@ -5,11 +5,14 @@
 */
 #include <interfaces/icore.h>
 #include <interfaces/iproject.h>
+#include <interfaces/ilanguagecontroller.h>
+#include <interfaces/iprojectcontroller.h>
 #include <language/duchain/duchainlock.h>
 #include <language/duchain/types/identifiedtype.h>
 #include <language/backgroundparser/backgroundparser.h>
-#include <interfaces/ilanguagecontroller.h>
-#include <interfaces/iprojectcontroller.h>
+#include <project/interfaces/ibuildsystemmanager.h>
+
+#include <kdevelop/custom-definesandincludes/idefinesandincludesmanager.h>
 #include <util/path.h>
 
 #include <QProcess>
@@ -793,6 +796,38 @@ QString Helper::qualifierPath(const QString& currentFile)
         return relPath.replace(QDir::separator(), QLatin1Char('.'));
     }
     return QStringLiteral(""); // f.mid(1).replace(QDir::separator(), '.');
+}
+
+QUrl Helper::includePath(const QString &name, const QString& currentFile)
+{
+    // Look for relative include
+    if ( QDir::isAbsolutePath(name) )
+        return QUrl(name);
+    auto localPath = QDir(currentFile).filePath(name);
+    if ( QFile::exists(localPath) )
+        return QUrl(localPath);
+
+    // TODO: Get standard paths?
+    auto project = ICore::self()->projectController()->findProjectForUrl(
+            QUrl::fromLocalFile(currentFile));
+    auto buildManager = project->buildSystemManager();
+    auto items = project->itemsForPath(IndexedString(currentFile));
+    if (!items.isEmpty()) {
+        for (const auto& includeDir: buildManager->includeDirectories(items.first())) {
+            auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
+            if ( QFile::exists(relativePath) )
+                return QUrl(relativePath);
+        }
+    }
+
+    for (const auto& includeDir: IDefinesAndIncludesManager::manager()->includes(name))
+    {
+        auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
+        if ( QFile::exists(relativePath) )
+            return QUrl(relativePath);
+    }
+    // Give up, just return missing file
+    return QUrl(name);
 }
 
 } // namespace zig

@@ -767,6 +767,26 @@ void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(node);
     Q_UNUSED(parent);
+
+    if (node.tag() == NodeTag_builtin_call_two || node.tag() == NodeTag_builtin_call_two_comma) {
+        QString fnName = node.mainToken();
+        if (fnName == QStringLiteral("@cImport")) {
+            QString name = parent.spellingName();
+            auto range = parent.spellingRange();
+            auto decl = createDeclaration<ContainerDecl>(node, parent, name, true, range);
+            session->setDeclOnNode(node, DeclarationPointer(decl));
+            {
+                openContext(&node, NodeTraits::contextType(ContainerDecl), &name);
+                decl->setInternalContext(currentContext());
+                ExpressionVisitor v(session, currentContext());
+                decl->abstractType()->setModifiers(ModuleModifier | CIncludeModifier);
+                v.setInferredType(decl->abstractType());
+                v.startVisiting(node.lhsAsNode(), node);
+                closeContext();
+            }
+            closeDeclaration();
+        }
+    }
     // ZigNode child = node.nextChild();
     // ExpressionVisitor v(session, currentContext());
     // v.startVisiting(child, node);

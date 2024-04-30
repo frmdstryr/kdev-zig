@@ -626,6 +626,10 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         return callBuiltinThis(node);
     } else if (name == QLatin1String("@import")) {
         return callBuiltinImport(node);
+    } else if (name == QLatin1String("@cImport")) {
+        return callBuiltinCImport(node);
+    } else if (name == QLatin1String("@cInclude")) {
+        return callBuiltinCInclude(node);
     } else if (name == QLatin1String("@typeInfo")) {
         return callBuiltinTypeInfo(node);
     } else if (name == QLatin1String("@TypeOf")) {
@@ -1011,14 +1015,17 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
         // TODO: Reschedule ?
         qCDebug(KDEV_ZIG) << "Module has no declarations" << importPath.toString();
     } else {
-        IndexedString doc(importPath);
-        Helper::scheduleDependency(doc, session()->jobPriority());
-        // Also reschedule reparsing of this
-        // qCDebug(KDEV_ZIG) << "Module scheduled for parsing" << importPath.toString();
-        // Helper::scheduleDependency(session()->document(), session()->jobPriority());
+        IndexedString dependency(importPath);
+        Helper::scheduleDependency(dependency, session()->jobPriority());
+        // TODO: This does not work...
+        // auto dep = new ScheduleDependency(
+        //     const_cast<KDevelop::ParseJob*>(session()->job()),
+        //     session()->document(),
+        //     dependency,
+        //     session()->jobPriority());
         DelayedType::Ptr delayedImport(new DelayedType);
         delayedImport->setModifiers(ModuleModifier);
-        delayedImport->setIdentifier(doc);
+        delayedImport->setIdentifier(dependency);
         encounter(delayedImport);
         return Continue;
     }
@@ -1174,12 +1181,68 @@ VisitResult ExpressionVisitor::callBuiltinSplat(const ZigNode &node)
         vectorType->setElementType(v.lastType());
         if (auto r = inferredType().dynamicCast<VectorType>()) {
             vectorType->setDimension(r->dimension());
+            if ( Helper::canTypeBeAssigned(r->elementType(), v.lastType()) ) {
+               vectorType->setElementType(r->elementType());
+            }
         }
         else if (auto r = inferredType().dynamicCast<SliceType>()) {
             vectorType->setDimension(r->dimension());
+            if ( Helper::canTypeBeAssigned(r->elementType(), v.lastType()) ) {
+               vectorType->setElementType(r->elementType());
+            }
         }
         encounter(vectorType);
         return Continue;
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+
+VisitResult ExpressionVisitor::callBuiltinCImport(const ZigNode &node)
+{
+    if (isBuiltinCallTwo(node)) {
+        qCDebug(KDEV_ZIG) << "cImport";
+
+        StructureType::Ptr cImportStruct(new StructureType);
+        cImportStruct->setModifiers(ModuleModifier | CIncludeModifier);
+        ExpressionVisitor v(this);
+        v.setInferredType(cImportStruct);
+        // This should visit the @cInclude statements
+        // that modify the context
+        v.startVisiting(node.lhsAsNode(), node);
+        encounter(cImportStruct);
+        return Continue;
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::callBuiltinCInclude(const ZigNode &node)
+{
+    auto cImportStruct = inferredType().dynamicCast<StructureType>();
+    if (isBuiltinCallTwo(node) && cImportStruct) {
+        Q_ASSERT(cImportStruct->modifiers() & (ModuleModifier | CIncludeModifier));
+        ZigNode strNode = node.lhsAsNode();
+        if (strNode.tag() != NodeTag_string_literal) {
+            encounterUnknown();
+            return Continue;
+        }
+        QUrl includePath = Helper::includePath(strNode.spellingName(), session()->document().str());
+        // TODO: find real include path?
+        IndexedString dependency(includePath);
+        DUChainReadLocker lock;
+        auto *includedModule = DUChain::self()->chainForDocument(dependency);
+        if (includedModule) {
+            if (auto ctx = cImportStruct->internalContext(topContext())) {
+                ctx->addImportedParentContext(includedModule);
+            } else {
+                qCDebug(KDEV_ZIG) << "cInclude(" << includePath.path() << ") cImport context is null";
+            }
+        } else {
+            qCDebug(KDEV_ZIG) << "cInclude(" << includePath.path() << ") null, scheduling";
+            Helper::scheduleDependency(dependency, session()->jobPriority());
+        }
     }
     encounterUnknown();
     return Continue;

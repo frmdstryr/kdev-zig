@@ -5,6 +5,7 @@
 */
 #pragma once
 
+#include <QObject>
 #include <QString>
 #include <QMap>
 #include <QVector>
@@ -51,6 +52,8 @@ public:
     // Returns the qualifier for the given path. If the file is in one of the
     // package paths it will be relative to that. Eg std/fs.zig will return std.fs
     static QString qualifierPath(const QString& currentFile);
+    // Lookup a cInclude path
+    static QUrl includePath(const QString &name, const QString& currentFile);
 
     // Import a declaration based on the qualified name
     // eg "std.builtin.Type"
@@ -185,8 +188,30 @@ public:
         const BuiltinType::Ptr &a,
         const BuiltinType::Ptr &b,
         const NodeTag &tag);
+};
 
-
+/**
+ * A class which schedules the given url for reparsing when updateReady
+ * is called. Intended to be used with Helper::scheduleDependency
+ * TODO: This does not work.
+ */
+class KDEVZIGDUCHAIN_EXPORT ScheduleDependency
+    : public QObject
+{
+    Q_OBJECT
+public:
+    ScheduleDependency(QObject* parent, const IndexedString& documentUrl, const IndexedString& dependencyUrl, int betterThanPriority = 0)
+    : QObject(parent), m_documentUrl(documentUrl)
+    {
+        Helper::scheduleDependency(dependencyUrl, betterThanPriority, this);
+    }
+private Q_SLOTS:
+    void updateReady(const IndexedString& url, const ReferencedTopDUContext& topContext) {
+        Helper::scheduleDependency(m_documentUrl, 0);
+        this->deleteLater();
+    }
+private:
+    const IndexedString &m_documentUrl;
 };
 
 }

@@ -111,6 +111,7 @@ bool ContextBuilder::shouldSkipNode(const ZigNode &node, const ZigNode &parent)
             || childKind == ErrorDecl
             || childKind == EnumDecl
             || childKind == UnionDecl
+            || (childKind == Call && child.spellingName() == QStringLiteral("@cImport"))
             //|| (childKind == Call && child.spellingName() == "@import")
         );
     }

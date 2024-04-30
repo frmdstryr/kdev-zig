@@ -23,11 +23,13 @@ namespace Zig
 
 ParseSessionData::ParseSessionData(const KDevelop::IndexedString &document,
                                    const QByteArray &contents,
+                                   const KDevelop::ParseJob *job,
                                    int priority)
     : m_document(document)
       ,m_contents(contents)
       ,m_ast(nullptr)
       ,m_jobPriority(priority)
+      ,m_job(job)
 {
 }
 
@@ -37,6 +39,7 @@ ParseSessionData::~ParseSessionData()
         destroy_ast(m_ast);
         m_ast = nullptr;
     }
+    m_job = nullptr;
 }
 
 void ParseSessionData::parse()
@@ -94,6 +97,11 @@ void ParseSession::setPriority(int priority)
 int ParseSession::jobPriority() const
 {
     return d->m_jobPriority;
+}
+
+const KDevelop::ParseJob* ParseSession::job() const
+{
+    return d->m_job;
 }
 
 void ParseSession::setContextOnNode(const ZigNode &node, KDevelop::DUContext *context)

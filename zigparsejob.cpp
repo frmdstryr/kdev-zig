@@ -73,7 +73,7 @@ ParseSessionData::Ptr ParseJob::findParseSessionData(const IndexedString &url)
 
 ParseSessionData::Ptr ParseJob::createSessionData() const
 {
-    return ParseSessionData::Ptr(new ParseSessionData(document(), contents().contents, parsePriority()));
+    return ParseSessionData::Ptr(new ParseSessionData(document(), contents().contents, this, parsePriority()));
 }
 
 

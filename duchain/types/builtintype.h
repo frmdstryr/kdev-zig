@@ -12,6 +12,7 @@ namespace Zig
 
 // If struct is a module / file
 const quint32 ModuleModifier = 1 << 15;
+const quint32 CIncludeModifier = 1 << 16;
 
 using namespace KDevelop;
 using ComptimeTypeBase = MergeComptimeType<AbstractType>;
