@@ -916,6 +916,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
     QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{QLatin1String("Incompatible types")} << "";
+    QTest::newRow("catch panic") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch @panic(\"doom\"); }" << QStringList{} << "";
 
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
@@ -945,7 +946,6 @@ void DUChainTest::testProblems_data()
     QTest::newRow("vector from array") << "const a: [4]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{} << "";
     QTest::newRow("vector from array 2") << "const a: [3]f32 = undefined; test{ var v: @Vector(4, f32) = undefined; v = a; }" << QStringList{QLatin1String("Assignment type mismatch")} << "";
     QTest::newRow("vector splat") << "test { var x: @Vector(4, f32) = undefined; x = @splat(1); }" << QStringList{} << "";
-
 }
 
 } // end namespace zig

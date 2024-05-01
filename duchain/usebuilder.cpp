@@ -780,6 +780,11 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
         if (Helper::isMixedType(v2.lastType())) {
             return Continue;
         }
+        if (auto builtin = v2.lastType().dynamicCast<BuiltinType>()) {
+            if (builtin->isTrap()) {
+                return Continue; // Ignore foo() catch @panic()
+            }
+        }
 
 
         auto targetType = errorType->baseType();
