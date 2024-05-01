@@ -482,8 +482,13 @@ bool Helper::canTypeBeAssigned(
 }
 
 
-bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a)
+bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a, bool checkPtr)
 {
+    if (checkPtr) {
+        if (auto ptr = a.dynamicCast<PointerType>()) {
+            return isMixedType(ptr->baseType(), false);
+        }
+    }
     if (auto it = a.dynamicCast<IntegralType>()) {
         return it->dataType() == IntegralType::TypeMixed;
     }

@@ -172,8 +172,9 @@ public:
     /**
      * Check if type is an IntegralType with dataType of mixed. This
      * is the unknown type returned by the expression visitor.
+     * @param checkPtr, if type is a pointer, check if base type is mixed
      */
-    static bool isMixedType(const KDevelop::AbstractType::Ptr &a);
+    static bool isMixedType(const KDevelop::AbstractType::Ptr &a, bool checkPtr = true);
 
     /**
      * Check if the type has a comptime known value
