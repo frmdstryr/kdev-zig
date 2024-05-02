@@ -603,9 +603,8 @@ VisitResult ExpressionVisitor::visitContainerDecl(const ZigNode &node, const Zig
         }
     }
 
-    auto childContexts = context()->childContexts();
-    if (!childContexts.isEmpty()) {
-        auto childContext = childContexts.first();
+
+    for (auto childContext: context()->childContexts()) {
         auto decls = childContext->findLocalDeclarations(ident);
         if (!decls.isEmpty()) {
             encounterLvalue(DeclarationPointer(decls.first()));
