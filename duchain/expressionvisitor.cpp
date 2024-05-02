@@ -193,6 +193,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitArrayInit(node, parent);
     case NodeTag_array_access:
         return visitArrayAccess(node, parent);
+    case NodeTag_array_cat:
+        return visitArrayCat(node, parent);
     case NodeTag_for_range:
         return visitForRange(node, parent);
     case NodeTag_slice:
@@ -411,15 +413,24 @@ VisitResult ExpressionVisitor::visitStringLiteral(const ZigNode &node, const Zig
 
 VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(node);
     Q_UNUSED(parent);
+
+    NodeData data = node.data();
+    QString value;
+    for (TokenIndex i=data.lhs; i <= data.rhs; i++) {
+        QString part = node.tokenSlice(i);
+        if (part.size() > 2) {
+            // Remove "\\"
+            value += part.sliced(2);
+        }
+    }
 
     SliceType::Ptr sliceType(new SliceType);
     sliceType->setSentinel(0);
-    // sliceType->setDimension();
+    sliceType->setDimension(value.size());
     sliceType->setElementType(BuiltinType::newFromName(QStringLiteral("u8")));
     sliceType->setModifiers(AbstractType::ConstModifier);
-    // sliceType->setValue(node.mainToken()); // Join all lines?
+    sliceType->setComptimeKnownValue(value);
 
     PointerType::Ptr ptrType(new PointerType);
     ptrType->setBaseType(sliceType);
@@ -1832,6 +1843,64 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
     }
     return Continue;
 }
+
+VisitResult ExpressionVisitor::visitArrayCat(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+
+    ExpressionVisitor v1(this);
+    v1.startVisiting(lhs, node);
+    auto A = v1.lastType();
+    ExpressionVisitor v2(this);
+    v2.startVisiting(rhs, node);
+    auto B = v2.lastType();
+
+    bool wrap_in_ptr = false;
+    if (auto aPtr = v1.lastType().dynamicCast<PointerType>()) {
+        if (auto bPtr = v2.lastType().dynamicCast<PointerType>()) {
+            wrap_in_ptr = true;
+            A = aPtr->baseType();
+            B = bPtr->baseType();
+        }
+    }
+
+    if (auto a = A.dynamicCast<SliceType>()) {
+        if (auto b = B.dynamicCast<SliceType>()) {
+            if (
+                Helper::typesEqualIgnoringModifiers(a->elementType(), b->elementType())
+                && a->dimension() > 0
+                && b->dimension() > 0
+            ) {
+                SliceType::Ptr sliceType(static_cast<SliceType*>(a->clone()));
+                sliceType->setDimension(a->dimension() + b->dimension());
+                if (a->isComptimeKnown() && b->isComptimeKnown()) {
+                    sliceType->setComptimeKnownValue(
+                        a->comptimeKnownValue().str() + b->comptimeKnownValue().str()
+                    );
+                } else {
+                    sliceType->clearComptimeValue();
+                }
+                if (wrap_in_ptr) {
+                    PointerType::Ptr ptrType(new PointerType);
+                    ptrType->setBaseType(sliceType);
+                    encounter(ptrType);
+                } else {
+                    encounter(sliceType);
+                }
+                return Continue;
+            }
+        }
+    }
+
+
+    encounterUnknown();
+    return Continue;
+}
+
+
 
 VisitResult ExpressionVisitor::visitForRange(const ZigNode &node, const ZigNode &parent)
 {

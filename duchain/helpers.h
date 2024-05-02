@@ -144,6 +144,11 @@ public:
         const KDevelop::AbstractType::Ptr &value);
 
     /**
+     * If type is a pointer, return the base type, otherwise return type.
+     */
+    static const KDevelop::AbstractType::Ptr unwrapPointer(const KDevelop::AbstractType::Ptr &type);
+
+    /**
      * Attempt to merge two types from an if condition.
      * If types are equal, return a
      * If one of the types is null return the other type (

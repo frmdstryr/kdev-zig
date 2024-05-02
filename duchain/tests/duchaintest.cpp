@@ -548,6 +548,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("const str index") << "const y = \"abc\"; const x = y[0];" << "x" << "const u8 = a" << "";
     QTest::newRow("volatile ptr") << "var io: *volatile u32 = @ptrFromInt(0x400000);" << "io" << "*volatile u32" << "";
     QTest::newRow("char lit") << "const x = 'a';" << "x" << "u8 = a" << "";
+    QTest::newRow("multiline str") << "const x = \n\\\\abc\n;" << "x" << "*const [4:0]u8 = \"abc\n\"" << "";
+
     // QTest::newRow("char lit esc") << "const x = '\n';" << "x" << "u8 = \n" << "";
     QTest::newRow("var *u8") << "var x: *u8 = 0;" << "x" << "*u8" << "";
     QTest::newRow("var ?u8") << "var x: ?u8 = 0;" << "x" << "?u8" << "";
@@ -646,6 +648,10 @@ void DUChainTest::testVarType_data()
     QTest::newRow("array init one") << "var x = [_]u8{1};" << "x" << "[1]u8" << "";
     QTest::newRow("array slice open") << "const a = [2]f32{1.0, 2.0}; var ptr = &a; const x = ptr[0..];" << "x" << "[]f32" << "";
     QTest::newRow("array init one comma") << "var x = [_]u8{1,};" << "x" << "[1]u8" << "";
+    QTest::newRow("array cat 1") << "const x = \"abc\" ++ \"1234\";" << "x" << "*const [7:0]u8 = \"abc1234\"" << "";
+    QTest::newRow("array cat 2") << "const a = [2]u32{1,2}; const b = [3]u32{3, 4, 5}; const x = a ++ b;" << "x" << "[5]u32" << "";
+    QTest::newRow("array cat 3") << "const x = \"a\" ++ \n\\\\bc\n; " << "x" << "*const [4:0]u8 = \"abc\n\"" << "";
+
     QTest::newRow("c ptr array access") << "const ptr: [*]const f32 = undefined; const x = ptr[0];" << "x" << "const f32" << "";
 
     QTest::newRow("array ptr struct fn") << "const A = struct { pub fn foo() bool{} }; var x: [2]*A = undefined; var y = x[0].foo();" << "y" << "bool" << "";

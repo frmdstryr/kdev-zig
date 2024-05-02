@@ -404,21 +404,20 @@ KDevelop::DUContext* Helper::thisContext(
 
 }
 
+const KDevelop::AbstractType::Ptr Helper::unwrapPointer(const KDevelop::AbstractType::Ptr &type)
+{
+    if (auto ptr = type.dynamicCast<Zig::PointerType>())
+        return ptr->baseType();
+    return type;
+}
+
 bool Helper::baseTypesEqual(
     const KDevelop::AbstractType::Ptr &a,
     const KDevelop::AbstractType::Ptr &b)
 {
     if (!a || !b)
         return false;
-    auto aBaseType = a;
-    auto bBaseType = b;
-    if (auto aPtr = a.dynamicCast<Zig::PointerType>()) {
-        aBaseType = aPtr->baseType();
-    }
-    if (auto bPtr = b.dynamicCast<Zig::PointerType>()) {
-        bBaseType = bPtr->baseType();
-    }
-    return typesEqualIgnoringModifiers(aBaseType, bBaseType);
+    return typesEqualIgnoringModifiers(Helper::unwrapPointer(a), Helper::unwrapPointer(b));
 }
 
 bool Helper::typesEqualIgnoringModifiers(

@@ -72,6 +72,8 @@ public:
 
     VisitResult visitArrayType(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitArrayCat(const ZigNode &node, const ZigNode &parent);
+
     VisitResult visitSlice(const ZigNode &node, const ZigNode &parent);
     VisitResult visitForRange(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayAccess(const ZigNode &node, const ZigNode &parent);
