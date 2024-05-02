@@ -330,8 +330,12 @@ Declaration* Helper::declarationForName(
     DUChainReadLocker lock;
     const DUContext* currentContext = context.data();
     bool findBeyondUse = canFindBeyondUse(currentContext);
+    //qCDebug(KDEV_ZIG) << "Find" << name << " beyond use" << findBeyondUse;
     CursorInRevision findUntil = findBeyondUse ? currentContext->topContext()->range().end : location;
     auto identifier = KDevelop::Identifier(name);
+    // for (Declaration* declaration: context->localDeclarations()) {
+    //     qCDebug(KDEV_ZIG) << "local decls " << declaration->toString();
+    // }
     auto localDeclarations = context->findLocalDeclarations(
         identifier,
         findUntil,
@@ -833,6 +837,13 @@ QUrl Helper::includePath(const QString &name, const QString& currentFile)
     }
     // Give up, just return missing file
     return QUrl(name);
+}
+
+void ScheduleDependency::updateReady(const IndexedString& url, const ReferencedTopDUContext& topContext)
+{
+    // Reparse the original document again
+    Helper::scheduleDependency(m_documentUrl, 0);
+    this->deleteLater();
 }
 
 } // namespace zig

@@ -207,10 +207,7 @@ public:
         Helper::scheduleDependency(dependencyUrl, betterThanPriority, this);
     }
 private Q_SLOTS:
-    void updateReady(const IndexedString& url, const ReferencedTopDUContext& topContext) {
-        Helper::scheduleDependency(m_documentUrl, 0);
-        this->deleteLater();
-    }
+    void updateReady(const IndexedString& url, const ReferencedTopDUContext& topContext);
 private:
     const IndexedString &m_documentUrl;
 };
