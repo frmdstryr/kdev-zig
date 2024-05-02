@@ -534,6 +534,7 @@ bool UseBuilder::checkAndAddArrayInitUse(
         const ZigNode &arrayInitNode,
         const KDevelop::RangeInRevision &useRange)
 {
+    Q_UNUSED(useRange);
     if (Helper::isMixedType(sliceType->elementType())) {
         return true; // No point in checking
     }
