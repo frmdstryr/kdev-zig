@@ -228,7 +228,7 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     // {
     //     lock.lock();
     //     qCDebug(KDEV_ZIG)  << "Create decl node:" << node.index << "name:" << identifier.toString() << "range:" << declRange << "kind:" << Kind << "type:" << type->toString()
-    //         << "context:" << (currentContext()->owner() ? currentContext()->owner()->toString() : "none");
+    //         << "context:" << (currentContext()->owner() ? currentContext()->owner()->toString() : QStringLiteral("none"));
     // }
     return decl;
 }
@@ -752,9 +752,10 @@ void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent
     if (parent.tag() != NodeTag_fn_decl) {
         auto range = node.spellingRange();
         QString name = node.fnName();
-        createDeclaration<FunctionDecl>(node, parent, name, false, range);
+        auto decl = createDeclaration<FunctionDecl>(node, parent, name, false, range);
         {
             openContext(&node, NodeTraits::contextType(FunctionDecl), &name);
+            currentContext()->setOwner(decl);
             updateFunctionArgs(node, parent);
             updateFunctionReturnType(node, parent);
             closeContext();
