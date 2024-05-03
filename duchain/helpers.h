@@ -136,6 +136,13 @@ public:
         const KDevelop::AbstractType::Ptr &b);
 
     /**
+     * Check if types are equal ignoring any comptime known values
+     */
+    static bool typesEqualIgnoringComptimeValue(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b);
+
+    /**
      * Check if the given value type can be assigned to the target
      * type without causing an error.
      */

@@ -240,10 +240,7 @@ QString ZigNode::comment() const
 
 QString ZigNode::containerName() const
 {
-    if (kind() == ContainerDecl) {
-        return QStringLiteral("anon %1 %2").arg(mainToken()).arg(index);
-    }
-    return QStringLiteral("");
+    return QStringLiteral("anon %1 %2").arg(mainToken()).arg(index);
 }
 
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>

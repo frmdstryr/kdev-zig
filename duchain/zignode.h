@@ -118,6 +118,12 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     KDevelop::RangeInRevision mainTokenRange() const;
 
     inline bool isRoot() const { return index == 0; }
+    inline bool isBuiltinCallTwo() const {
+        return (
+            tag() == NodeTag_builtin_call_two
+            || tag() == NodeTag_builtin_call_two_comma
+        );
+    }
 };
 
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZAst, destroy_ast>;

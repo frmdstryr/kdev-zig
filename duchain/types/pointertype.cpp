@@ -70,9 +70,23 @@ bool PointerType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
     if (const auto v = rhs.dynamicCast<PointerType>()) {
         // Types not equal, try without modifiers
         if (modifiers() & (AbstractType::ConstModifier | AbstractType::VolatileModifier)) {
-            return Helper::typesEqualIgnoringModifiers(baseType(), v->baseType());
+            if (Helper::typesEqualIgnoringModifiers(baseType(), v->baseType()))
+                return true;
+        }
+
+        // *const u8 and *const [:0]u8
+        if (auto slice = v->baseType().dynamicCast<SliceType>()) {
+            return (
+                modifiers() == v->modifiers()
+                && Helper::typesEqualIgnoringModifiers(baseType(), slice->elementType())
+            );
         }
         // Else they should be equal which was already checked
+    } else if (auto slice = rhs.dynamicCast<SliceType>()) {
+        // *const u8 and [:0]const u8
+        // TODO: Handle modifiers
+        if (Helper::typesEqualIgnoringComptimeValue(baseType(), slice->elementType()))
+            return true;
     }
     return false;
 }

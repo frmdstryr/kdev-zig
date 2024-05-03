@@ -485,25 +485,26 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
 {
     Q_UNUSED(parent);
     QString name = node.mainToken();
-    // qCDebug(KDEV_ZIG) << "visit ident" << name;
+    qCDebug(KDEV_ZIG) << "visit ident" << name;
     if (auto builtinType = BuiltinType::newFromName(name)) {
         encounter(builtinType);
-    } else {
-        Declaration* decl = Helper::declarationForName(
+    }
+    else if (
+        auto* decl = Helper::declarationForName(
             name,
             CursorInRevision::invalid(),
             DUChainPointer<const DUContext>(context()),
             m_excludedDeclaration
-        );
-        if (decl) {
-            // DUChainReadLocker lock; // For debug statement only
-            // qCDebug(KDEV_ZIG) << "result" << decl->toString();;
-            // qCDebug(KDEV_ZIG) << "ident" << name << "found";
-            encounterLvalue(DeclarationPointer(decl));
-        } else {
-            // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
-            encounterUnknown();
-        }
+        ))
+    {
+        // DUChainReadLocker lock; // For debug statement only
+        // qCDebug(KDEV_ZIG) << "result" << decl->toString();;
+        // qCDebug(KDEV_ZIG) << "ident" << name << "found";
+        encounterLvalue(DeclarationPointer(decl));
+    }
+    else {
+        // qCDebug(KDEV_ZIG) << "ident" << name << "unknown";
+        encounterUnknown();
     }
     return Continue;
 }
@@ -751,16 +752,10 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
     return Continue;
 }
 
-static bool isBuiltinCallTwo(const ZigNode &node)
-{
-    const NodeTag tag = node.tag();
-    return (tag == NodeTag_builtin_call_two || tag == NodeTag_builtin_call_two_comma);
-}
-
 VisitResult ExpressionVisitor::callBuiltinIntFromFloat(const ZigNode &node)
 {
     const auto result = inferredType().dynamicCast<BuiltinType>();
-    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+    if (result && result->isInteger() && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -778,7 +773,7 @@ VisitResult ExpressionVisitor::callBuiltinFloatFromInt(const ZigNode &node)
 {
     // qCDebug(KDEV_ZIG) << "callBuiltinFloatFromInt";
     const auto result = inferredType().dynamicCast<BuiltinType>();
-    if (result && result->isFloat() && isBuiltinCallTwo(node)) {
+    if (result && result->isFloat() && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -795,7 +790,7 @@ VisitResult ExpressionVisitor::callBuiltinFloatFromInt(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinIntFromBool(const ZigNode &node)
 {
     const auto result = inferredType().dynamicCast<BuiltinType>();
-    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+    if (result && result->isInteger() && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -816,7 +811,7 @@ VisitResult ExpressionVisitor::callBuiltinIntFromBool(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinBoolFromInt(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
+    if (node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -846,7 +841,7 @@ VisitResult ExpressionVisitor::callBuiltinBoolFromInt(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinIntCast(const ZigNode &node)
 {
     const auto result = inferredType().dynamicCast<BuiltinType>();
-    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+    if (result && result->isInteger() && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -863,7 +858,7 @@ VisitResult ExpressionVisitor::callBuiltinIntCast(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinEnumFromInt(const ZigNode &node)
 {
     const auto result = inferredType().dynamicCast<EnumType>();
-    if (result && isBuiltinCallTwo(node)) {
+    if (result && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
@@ -884,7 +879,7 @@ VisitResult ExpressionVisitor::callBuiltinEnumFromInt(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinIntFromEnum(const ZigNode &node)
 {
     const auto result = inferredType().dynamicCast<BuiltinType>();
-    if (result && result->isInteger() && isBuiltinCallTwo(node)) {
+    if (result && result->isInteger() && node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         if (const auto value = v.lastType().dynamicCast<EnumType>()) {
@@ -914,7 +909,7 @@ VisitResult ExpressionVisitor::callBuiltinThis(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinTypeOf(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
+    if (node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         encounter(v.lastType()); // TODO: Flag for instance/type ?
@@ -930,7 +925,7 @@ VisitResult ExpressionVisitor::callBuiltinTypeInfo(const ZigNode &node)
         QStringLiteral("std.builtin.Type"), session()->document().str());
     if (decl) {
         auto Type = decl->abstractType().dynamicCast<UnionType>();
-        if (isBuiltinCallTwo(node) && Type) {
+        if (node.isBuiltinCallTwo() && Type) {
             ExpressionVisitor v(this);
             v.startVisiting(node.lhsAsNode(), node);
             QString typeName;
@@ -1142,7 +1137,7 @@ VisitResult ExpressionVisitor::callBuiltinAs(const ZigNode&node)
 
 VisitResult ExpressionVisitor::callBuiltinVector(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
+    if (node.isBuiltinCallTwo()) {
         NodeData data = node.data();
         ZigNode lhs = {node.ast, data.lhs};
         ZigNode rhs = {node.ast, data.rhs};
@@ -1169,7 +1164,7 @@ VisitResult ExpressionVisitor::callBuiltinVector(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinReduce(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
+    if (node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.rhsAsNode(), node);
         if (auto vector = v.lastType().dynamicCast<VectorType>()) {
@@ -1183,7 +1178,7 @@ VisitResult ExpressionVisitor::callBuiltinReduce(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinSplat(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
+    if (node.isBuiltinCallTwo()) {
         ExpressionVisitor v(this);
         v.startVisiting(node.lhsAsNode(), node);
         VectorType::Ptr vectorType(new VectorType);
@@ -1211,17 +1206,23 @@ VisitResult ExpressionVisitor::callBuiltinSplat(const ZigNode &node)
 
 VisitResult ExpressionVisitor::callBuiltinCImport(const ZigNode &node)
 {
-    if (isBuiltinCallTwo(node)) {
-        qCDebug(KDEV_ZIG) << "cImport";
-
-        StructureType::Ptr cImportStruct(new StructureType);
-        cImportStruct->setModifiers(ModuleModifier | CIncludeModifier);
+    // This assumes the original ExpressionVisitor callee
+    // set the inferredType to the correct struct type declaration for the
+    // cInclude visitor to add context to or it will not work
+    if (node.isBuiltinCallTwo()
+        && inferredType().dynamicCast<StructureType>()
+        && inferredType()->modifiers() & ModuleModifier
+    ) {
+        // Cannot create a new type here because the context cannot be modified
+        // (or idk how)
+        // StructureType::Ptr cImportStruct(new StructureType);
+        // cImportStruct->setModifiers(ModuleModifier | CIncludeModifier);
         ExpressionVisitor v(this);
-        v.setInferredType(cImportStruct);
+        v.setInferredType(inferredType());
         // This should visit the @cInclude statements
         // that modify the context
         v.startVisiting(node.lhsAsNode(), node);
-        encounter(cImportStruct);
+        encounter(inferredType());
         return Continue;
     }
     encounterUnknown();
@@ -1231,20 +1232,23 @@ VisitResult ExpressionVisitor::callBuiltinCImport(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinCInclude(const ZigNode &node)
 {
     auto cImportStruct = inferredType().dynamicCast<StructureType>();
-    if (isBuiltinCallTwo(node) && cImportStruct) {
-        Q_ASSERT(cImportStruct->modifiers() & (ModuleModifier | CIncludeModifier));
+    if (node.isBuiltinCallTwo() && cImportStruct) {
+        Q_ASSERT(cImportStruct->modifiers() & ModuleModifier);
         ZigNode strNode = node.lhsAsNode();
         if (strNode.tag() != NodeTag_string_literal) {
             encounterUnknown();
             return Continue;
         }
-        QUrl includePath = Helper::includePath(strNode.spellingName(), session()->document().str());
+        QString header = strNode.spellingName();
+        // qCDebug(KDEV_ZIG) << "cInclude " << header;
+        QUrl includePath = Helper::includePath(header, session()->document().str());
         // TODO: find real include path?
         IndexedString dependency(includePath);
-        DUChainReadLocker lock;
+        DUChainWriteLocker lock;
         auto *includedModule = DUChain::self()->chainForDocument(dependency);
         if (includedModule) {
             if (auto ctx = cImportStruct->internalContext(topContext())) {
+                // qCDebug(KDEV_ZIG) << "cInclude(" << includePath.path() << ") added to cImport";
                 ctx->addImportedParentContext(includedModule);
             } else {
                 qCDebug(KDEV_ZIG) << "cInclude(" << includePath.path() << ") cImport context is null";
@@ -1817,6 +1821,7 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
         auto v = elementType.dynamicCast<BuiltinType>();
         if (slice->isComptimeKnown() && (slice->dimension() > 0) && v && v->isChar()) {
             ExpressionVisitor v2(this);
+            v2.setInferredType(BuiltinType::newFromName(QStringLiteral("usize")));
             v2.startVisiting(node.rhsAsNode(), node);
 
             auto index = v2.lastType().dynamicCast<BuiltinType>();

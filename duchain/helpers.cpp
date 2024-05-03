@@ -420,6 +420,17 @@ bool Helper::baseTypesEqual(
     return typesEqualIgnoringModifiers(Helper::unwrapPointer(a), Helper::unwrapPointer(b));
 }
 
+bool Helper::typesEqualIgnoringComptimeValue(
+        const KDevelop::AbstractType::Ptr &a,
+        const KDevelop::AbstractType::Ptr &b)
+{
+    if (!a || !b)
+        return false;
+    if (auto comptimeType = dynamic_cast<const ComptimeType*>(a.data()))
+        return comptimeType->equalsIgnoringValue(b.data());
+    return a->equals(b.data());
+}
+
 bool Helper::typesEqualIgnoringModifiers(
         const KDevelop::AbstractType::Ptr &a,
         const KDevelop::AbstractType::Ptr &b)

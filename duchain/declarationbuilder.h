@@ -136,6 +136,8 @@ protected:
 
     void visitFnProto(const ZigNode &node, const ZigNode &parent);
 
+    KDevelop::Declaration* createCImportDeclaration(const ZigNode &node, const ZigNode &parent);
+
 };
 
 }

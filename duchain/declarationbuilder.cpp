@@ -766,27 +766,11 @@ void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent
 
 void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(node);
-    Q_UNUSED(parent);
-
-    if (node.tag() == NodeTag_builtin_call_two || node.tag() == NodeTag_builtin_call_two_comma) {
-        QString fnName = node.mainToken();
-        if (fnName == QStringLiteral("@cImport")) {
-            QString name = parent.spellingName();
-            auto range = parent.spellingRange();
-            auto decl = createDeclaration<ContainerDecl>(node, parent, name, true, range);
-            session->setDeclOnNode(node, DeclarationPointer(decl));
-            {
-                openContext(&node, NodeTraits::contextType(ContainerDecl), &name);
-                decl->setInternalContext(currentContext());
-                ExpressionVisitor v(session, currentContext());
-                decl->abstractType()->setModifiers(ModuleModifier | CIncludeModifier);
-                v.setInferredType(decl->abstractType());
-                v.startVisiting(node.lhsAsNode(), node);
-                closeContext();
-            }
-            closeDeclaration();
-        }
+    if (node.isBuiltinCallTwo()
+        && parent.kind() == VarDecl
+        && node.mainToken() == QStringLiteral("@cImport"))
+    {
+        createCImportDeclaration(node, parent);
     }
     // ZigNode child = node.nextChild();
     // ExpressionVisitor v(session, currentContext());
@@ -845,19 +829,47 @@ void DeclarationBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 
 }
 
+Declaration* DeclarationBuilder::createCImportDeclaration(const ZigNode &node, const ZigNode &parent)
+{
+    Q_ASSERT(node.isBuiltinCallTwo());
+    Q_ASSERT(node.mainToken() == QStringLiteral("@cImport"));
+    QString name = parent.tag() == NodeTag_usingnamespace ? parent.containerName() : parent.spellingName();
+    auto range = parent.spellingRange();
+    auto decl = createDeclaration<ContainerDecl>(node, parent, name, true, range);
+    session->setDeclOnNode(node, DeclarationPointer(decl));
+    {
+        openContext(&node, NodeTraits::contextType(ContainerDecl), &name);
+        decl->setInternalContext(currentContext());
+        ExpressionVisitor v(session, currentContext());
+        decl->abstractType()->setModifiers(ModuleModifier | CIncludeModifier);
+        v.setInferredType(decl->abstractType());
+        v.startVisiting(node.lhsAsNode(), node);
+        closeContext();
+    }
+    closeDeclaration();
+    return decl;
+}
+
 void DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode &parent)
 {
-    Q_UNUSED(parent);
-    QString name = node.mainToken();
-    auto range = node.mainTokenRange();
+    ZigNode lhs = node.lhsAsNode();
+    AbstractType::Ptr T;
+
+    // HACK: The ExpressionVisitor for callBuiltinCImport has no
+    // owner declaration so the internal context is never imported
     ExpressionVisitor v(session, currentContext());
-    v.startVisiting(node.lhsAsNode(), node);
+    if (lhs.isBuiltinCallTwo() && lhs.mainToken() == QStringLiteral("@cImport")) {
+        Q_ASSERT(currentContext()->owner());
+        v.setInferredType(currentContext()->owner()->abstractType());
+    }
+    v.startVisiting(lhs, node);
+
     if (auto s = v.lastType().dynamicCast<StructureType>()) {
         DUChainWriteLocker lock;
         const auto isModule = s->modifiers() & ModuleModifier;
         const auto moduleContext = (isModule && s->declaration(nullptr)) ? s->declaration(nullptr)->topContext() : topContext();
         if (auto ctx = s->internalContext(moduleContext)) {
-            if (node.isRoot()) {
+            if (parent.isRoot()) {
                 topContext()->addImportedParentContext(ctx);
             } else {
                 currentContext()->addImportedParentContext(ctx);
@@ -869,6 +881,7 @@ void DeclarationBuilder::visitUsingnamespace(const ZigNode &node, const ZigNode 
     // Type is known but not an optional type, this is a problem
     if (!m_prebuilding) {
         ProblemPointer p = ProblemPointer(new Problem());
+        auto range = node.mainTokenRange();
         p->setFinalLocation(DocumentRange(session->document(), range.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);

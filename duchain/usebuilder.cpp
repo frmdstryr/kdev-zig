@@ -641,6 +641,10 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
         return Continue; // Ignore
     }
 
+    if (T.dynamicCast<DelayedType>()) {
+        return Continue; // Ignore unresolved comptime types.
+    }
+
     auto *decl = Helper::accessAttribute(T, attr, topContext());
     RangeInRevision useRange = editorFindSpellingRange(node, attr);
     if (!decl) {
@@ -678,6 +682,7 @@ VisitResult UseBuilder::visitArrayAccess(const ZigNode &node, const ZigNode &par
     if (T.dynamicCast<SliceType>() || T.dynamicCast<VectorType>() || is_c_ptr) {
         ZigNode rhs = {node.ast, data.rhs};
         ExpressionVisitor v2(session, currentContext());
+        v2.setInferredType(BuiltinType::newFromName(QStringLiteral("usize")));
         v2.startVisiting(rhs, node);
         if (auto index = v2.lastType().dynamicCast<BuiltinType>()) {
             // TODO: Check range if known ?

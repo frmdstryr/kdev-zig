@@ -690,7 +690,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << "x" << "f32" << "";
     QTest::newRow("vector reduce") << "const v: @Vector(4, f32) = undefined; const x = @reduce(.Max, v);" << "x" << "f32" << "";
     QTest::newRow("@cImport") << "const c = @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = c.setlocale;" << "f" << "function char* (int, const char*)" << "";
-
+    QTest::newRow("@cImport usingnamespace") << "usingnamespace @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = setlocale;" << "f" << "function char* (int, const char*)" << "";
 
 
     QTest::newRow("cast @boolFromInt()") << "const y: u8 = 7; const x = @boolFromInt(y);" << "x" << "bool = true" << "";
@@ -852,6 +852,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("enum") << "const Status = enum{Ok, Error}; const x: Status = .Ok;" << QStringList{} << "";
     QTest::newRow("invalid enum") << "const Status = enum{Ok, Error}; const x: Status = .Invalid;" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("invalid enum access") << "const x: u8 = .Missing;" << QStringList{QLatin1String("Attempted to access enum field on non-enum type")} << "";
+    QTest::newRow("array index inferred") << "const Index = enum{One=0, Two}; const x = [2]u8{1, 2}; const y = x[@intFromEnum(Index.One)];" << QStringList{} << "";
     QTest::newRow("enum assign") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Error; \n}" << QStringList{} << "1,0";
     QTest::newRow("enum assign invalid ") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; x = .Invalid; }" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
@@ -912,6 +913,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn arg []u8") << "pub fn foo(bar: []u8) void {} test {const y = foo(\"abcd\"); }" << QStringList{QLatin1String("type mismatch")} << "";
     QTest::newRow("fn arg slice to const") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(x[0..]); }" << QStringList{} << "";
     QTest::newRow("fn arg ptr to const slice") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(&x); }" << QStringList{} << "";
+    QTest::newRow("fn arg *const u8") << "pub fn write(msg: *const u8) void {} test{ write(\"abc\"); }" << QStringList{} << "";
+    QTest::newRow("fn arg *const u8 2") << "pub fn write(msg: *const u8) void {} test{ write(@errorName(error.OutOfMem)(); }" << QStringList{} << "";
+
     QTest::newRow("fn error ok") << "pub fn write(msg: []const u8) !void {} test{ try write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 2") << "pub fn write(msg: []const u8) !void {} test{ const r = write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
