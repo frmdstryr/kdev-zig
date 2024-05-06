@@ -426,8 +426,10 @@ bool Helper::typesEqualIgnoringComptimeValue(
 {
     if (!a || !b)
         return false;
-    if (auto comptimeType = dynamic_cast<const ComptimeType*>(a.data()))
-        return comptimeType->equalsIgnoringValue(b.data());
+    if (auto A = dynamic_cast<const ComptimeType*>(a.data()))
+        return A->equalsIgnoringValue(b.data());
+    if (auto B = dynamic_cast<const ComptimeType*>(b.data()))
+        return B->equalsIgnoringValue(a.data());
     return a->equals(b.data());
 }
 
@@ -462,12 +464,13 @@ bool Helper::isComptimeKnown(const KDevelop::AbstractType::Ptr &a)
 }
 
 bool Helper::canTypeBeAssigned(
-        const KDevelop::AbstractType::Ptr &target,
-        const KDevelop::AbstractType::Ptr &value)
+        const KDevelop::AbstractType::Ptr &targetType,
+        const KDevelop::AbstractType::Ptr &valueType)
 {
+    // Convert c-types
+    auto target = Helper::asZigType(targetType);
+    auto value = Helper::asZigType(valueType);
     // TODO: Handled delayed types
-    Q_ASSERT(target && value);
-
     // {
     //     DUChainReadLocker lock;
     //     qCDebug(KDEV_ZIG) << "Check if "<< value->toString()
@@ -499,15 +502,72 @@ bool Helper::canTypeBeAssigned(
 bool Helper::isMixedType(const KDevelop::AbstractType::Ptr &a, bool checkPtr)
 {
     if (checkPtr) {
-        if (auto ptr = a.dynamicCast<PointerType>()) {
+        if (auto ptr = a.dynamicCast<PointerType>())
             return isMixedType(ptr->baseType(), false);
-        }
     }
-    if (auto it = a.dynamicCast<IntegralType>()) {
+    if (auto it = a.dynamicCast<BuiltinType>())
+        return it->isAnytype();
+    if (auto it = a.dynamicCast<IntegralType>())
         return it->dataType() == IntegralType::TypeMixed;
-    }
     return false;
 }
+
+AbstractType::Ptr Helper::asZigType(const AbstractType::Ptr &a)
+{
+    if (auto it = a.dynamicCast<KDevelop::PointerType>()) {
+        Zig::PointerType::Ptr ptr(new Zig::PointerType);
+        ptr->setModifiers(it->modifiers());
+        ptr->setBaseType(Helper::asZigType(it->baseType()));
+        return ptr;
+    }
+    else if (auto it = a.dynamicCast<KDevelop::ArrayType>()) {
+        if (it->dimension() > 0) {
+            Zig::SliceType::Ptr slice(new Zig::SliceType);
+            slice->setModifiers(it->modifiers());
+            slice->setDimension(it->dimension());
+            slice->setElementType(Helper::asZigType(it->elementType()));
+            return slice;
+        } else {
+            Zig::PointerType::Ptr ptr(new Zig::PointerType);
+            ptr->setModifiers(it->modifiers());
+            ptr->setBaseType(Helper::asZigType(it->elementType()));
+            return ptr;
+        }
+
+    }
+    else if (auto it = a.dynamicCast<IntegralType>()) {
+        switch (it->dataType()) {
+            case IntegralType::TypeVoid:
+                return BuiltinType::newFromName(QStringLiteral("void"));
+            case IntegralType::TypeNull:
+                return BuiltinType::newFromName(QStringLiteral("null"));
+            case IntegralType::TypeChar:
+                return BuiltinType::newFromName(
+                   (it->modifiers() & AbstractType::UnsignedModifier) ?
+                   QStringLiteral("u8") : QStringLiteral("i8")
+                );
+            case IntegralType::TypeBoolean:
+                return BuiltinType::newFromName(QStringLiteral("bool"));
+            case IntegralType::TypeByte:
+                return BuiltinType::newFromName(QStringLiteral("u8"));
+            case IntegralType::TypeSbyte:
+                return BuiltinType::newFromName(QStringLiteral("i8"));
+            case IntegralType::TypeShort:
+                return BuiltinType::newFromName(QStringLiteral("i16"));
+            case IntegralType::TypeFloat:
+                return BuiltinType::newFromName(QStringLiteral("f32"));
+            case IntegralType::TypeDouble:
+                return BuiltinType::newFromName(QStringLiteral("f64"));
+            default:
+                break;
+
+        }
+    }
+
+
+    return a;
+}
+
 
 AbstractType::Ptr Helper::evaluateUnsignedOp(
     const BuiltinType::Ptr &a,

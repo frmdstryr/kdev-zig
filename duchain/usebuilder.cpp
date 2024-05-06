@@ -289,7 +289,7 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
     }
-    auto returnType = fn->returnType();
+    auto returnType = Helper::asZigType(fn->returnType());
     if (auto errorType = returnType.dynamicCast<ErrorType>()) {
         returnType = errorType->baseType();
         switch (parent.tag()) {
@@ -484,7 +484,7 @@ bool UseBuilder::checkAndAddStructFieldUse(
         UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
     }
 
-    auto target = decl->abstractType();
+    auto target = Helper::asZigType(decl->abstractType());
     if (Helper::isMixedType(target)) {
         return false;
     }
@@ -592,7 +592,7 @@ VisitResult UseBuilder::visitAssign(const ZigNode &node, const ZigNode &parent)
     ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(lhs, node);
-    auto target = v.lastType();
+    auto target =  Helper::asZigType(v.lastType());
     if (Helper::isMixedType(target)) {
         return Continue; // Probably not implemented or resolved yet
     }
