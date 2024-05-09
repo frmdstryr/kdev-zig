@@ -736,6 +736,8 @@ void DeclarationBuilder::buildErrorDecl(const ZigNode &node, const ZigNode &pare
     auto errorType = currentDeclaration()->abstractType();
     for (TokenIndex i=start_tok; i < end_tok; i++) {
         QString name = node.tokenSlice(i);
+        if (name.startsWith(QLatin1Char('/')))
+            continue; // Doc comment
         auto range = node.tokenRange(i);
         auto decl = createDeclaration<FieldDecl>(node, parent, name, true, range);
         auto errorValueType = decl->abstractType().staticCast<EnumType>();
