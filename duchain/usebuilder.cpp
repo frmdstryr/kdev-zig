@@ -82,6 +82,12 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_struct_init_one_comma:
             visitStructInit(node, parent);
             break;
+        case NodeTag_struct_init_dot:
+        case NodeTag_struct_init_dot_comma:
+        case NodeTag_struct_init_dot_two:
+        case NodeTag_struct_init_dot_two_comma:
+            visitStructInitDot(node, parent);
+            break;
         case NodeTag_array_init:
         case NodeTag_array_init_comma:
         case NodeTag_array_init_one:
@@ -128,11 +134,13 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_container_field_init:
             return visitContainerField(node, parent);
         // TODO: check var_init and field_init values match type
+
         default:
             break;
     }
     return ContextBuilder::visitNode(node, parent);
 }
+
 
 VisitResult UseBuilder::visitContainerField(const ZigNode &node, const ZigNode &parent)
 {
@@ -350,6 +358,22 @@ VisitResult UseBuilder::visitStructInit(const ZigNode &node, const ZigNode &pare
         checkAndAddStructInitUse(s, node, useRange);
     }
     // TODO: else error ??
+    return Continue;
+}
+
+VisitResult UseBuilder::visitStructInitDot(const ZigNode &node, const ZigNode &parent)
+{
+    ZigNode typeNode = parent.varType();
+    if (!typeNode.isRoot()) {
+        ExpressionVisitor v(session, currentContext());
+        v.startVisiting(typeNode, parent);
+
+        auto useRange = editorFindSpellingRange(typeNode, parent.spellingName());
+        if (auto s = v.lastType().dynamicCast<StructureType>()) {
+            checkAndAddStructInitUse(s, node, useRange);
+        }
+        // TODO: else error ??
+    }
     return Continue;
 }
 
@@ -627,7 +651,7 @@ VisitResult UseBuilder::visitFieldAccess(const ZigNode &node, const ZigNode &par
     ExpressionVisitor v(session, currentContext());
     v.setExcludedDeclaration(currentFieldDeclaration);
     v.startVisiting(owner, node);
-    auto T = v.lastType();
+    auto T = Helper::asZigType(v.lastType());
     if (auto ptr = T.dynamicCast<PointerType>()) {
         T = ptr->baseType();
     }

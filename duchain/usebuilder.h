@@ -53,6 +53,7 @@ public:
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBuiltinCall(const ZigNode &node, const ZigNode &parent);
     VisitResult visitStructInit(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitStructInitDot(const ZigNode &node, const ZigNode &parent);
     VisitResult visitArrayInit(const ZigNode &node, const ZigNode &parent);
     VisitResult visitAssign(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFieldAccess(const ZigNode &node, const ZigNode &parent);
