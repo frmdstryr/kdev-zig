@@ -859,15 +859,15 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
 
 VisitResult UseBuilder::visitDeref(const ZigNode &node, const ZigNode &parent)
 {
-    // TODO
     Q_UNUSED(parent);
-    ZigNode owner = node.nextChild(); // access lhs
+    ZigNode owner = node.lhsAsNode(); // access lhs
     ExpressionVisitor v(session, currentContext());
     v.startVisiting(owner, node);
     if (Helper::isMixedType(v.lastType()))
         return Continue; // May be an error, idk
     auto useRange = node.range();
-    if (auto ptr = v.lastType().dynamicCast<PointerType>()) {
+    auto T = Helper::asZigType(v.lastType());
+    if (auto ptr = T.dynamicCast<PointerType>()) {
         auto decl = Helper::declarationForIdentifiedType(ptr->baseType(), nullptr);
         if (decl && decl->range() != useRange) {
             UseBuilderBase::newUse(useRange, DeclarationPointer(decl));
