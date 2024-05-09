@@ -553,14 +553,29 @@ AbstractType::Ptr Helper::asZigType(const AbstractType::Ptr &a)
             case IntegralType::TypeSbyte:
                 return BuiltinType::newFromName(QStringLiteral("i8"));
             case IntegralType::TypeShort:
-                return BuiltinType::newFromName(QStringLiteral("i16"));
+                return BuiltinType::newFromName(
+                    (it->modifiers() & AbstractType::UnsignedModifier) ?
+                    QStringLiteral("c_ushort") : QStringLiteral("c_short"));
+            case IntegralType::TypeInt:
+                return BuiltinType::newFromName(
+                    (it->modifiers() & AbstractType::UnsignedModifier) ?
+                    QStringLiteral("c_uint") : QStringLiteral("c_int"));
+            case IntegralType::TypeLong:
+                if (it->modifiers() & AbstractType::LongLongModifier) {
+                    return BuiltinType::newFromName(
+                        (it->modifiers() & AbstractType::UnsignedModifier) ?
+                        QStringLiteral("c_ulonglong") : QStringLiteral("c_longlong"));
+                } else {
+                    return BuiltinType::newFromName(
+                        (it->modifiers() & AbstractType::UnsignedModifier) ?
+                        QStringLiteral("c_ulong") : QStringLiteral("c_long"));
+                }
             case IntegralType::TypeFloat:
                 return BuiltinType::newFromName(QStringLiteral("f32"));
             case IntegralType::TypeDouble:
                 return BuiltinType::newFromName(QStringLiteral("f64"));
             default:
                 break;
-
         }
     }
 
