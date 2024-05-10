@@ -21,6 +21,7 @@ namespace Zig
 
 using namespace KDevelop;
 using EnumTypeBase = MergeComptimeType<EnumerationType>;
+const quint32 ErrorSetModifier = 1 << 17;
 
 
 class KDEVPLATFORMLANGUAGE_EXPORT EnumTypeData
@@ -41,7 +42,7 @@ public:
 /**
  * \short A type representing an enum value.
  *
- * EnumType can be comptime known. The parent must be an EnumType or null
+ * EnumType can be comptime known. The parent must be an EnumType or null.
  */
 class KDEVPLATFORMLANGUAGE_EXPORT EnumType
     : public EnumTypeBase
@@ -70,6 +71,11 @@ public:
     /**
      * Retrieve the underlying enumeration data type.
      * WARNING: May be nullptr.
+     * If the enumType casts to another EnumType it is considered an enum value.
+     * For example with `const Dir = enum {Fwd, Rev};`
+     * The enumType() for "Dir" will be null. The enumType() for Fwd and Rev
+     * will be the parent "Dir" EnumType. If Dir was defiend with a type
+     * (ex enum(u8)), then the enumType for Dir will be the BuiltinType for u8.
      */
     AbstractType::Ptr enumType() const;
 

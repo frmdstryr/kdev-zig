@@ -318,6 +318,7 @@ AbstractType::Ptr DeclarationBuilder::createType(const ZigNode &node, const ZigN
     else if (Kind == FieldDecl && node.tag() == NodeTag_error_set_decl) {
         // Error field
         EnumType::Ptr t(new EnumType);
+        t->setModifiers(ErrorSetModifier);
         // Updated in buildErrorDecl
         return t;
     }

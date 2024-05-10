@@ -561,6 +561,8 @@ void DUChainTest::testVarType_data()
     QTest::newRow("switch inferred value") << "const Day = enum{Mon, Tue}; const x: Day = switch (1) {0 => .Mon, 1=> .Tue};" << "x" << "Day.Tue" << "";
     QTest::newRow("error set") << "const E = error{A, B};" << "E" << "E" << "";
     QTest::newRow("error set value") << "const E = error{A, B}; const x = E.A;" << "x" << "E.A" << "";
+    QTest::newRow("error set merge") << "const E1 = error{A, B}; const E2 = error{C, D}; const x = E1 || E2;" << "x" << "x" << "";
+
     QTest::newRow("union") << "const Payload = union {int: u32, float: f32};" << "Payload" << "Payload" << "";
     QTest::newRow("union field") << "const Payload = union {int: u32, float: f32}; const x = Payload{.int=1};" << "x" << "Payload.int" << "";
     QTest::newRow("union enum") << "const Payload = union(enum) {int: u32, float: f32};" << "Payload" << "Payload" << "";
@@ -785,6 +787,9 @@ void DUChainTest::testVarType_data()
 
     // TODO: Need to be able to specialize the "type"
     QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
+    QTest::newRow("typed struct field") <<
+        "pub fn List(comptime T: type) type { return struct {items: [10]T = undefined, }; } \n"
+        "test{\nconst A = List(u8); var a = A{}; var x = a.items[0];\n}" << "x" << "u8" << "3,0";
 }
 
 

@@ -33,9 +33,9 @@ public:
 };
 
 /**
- * \short A type representing optional types.
+ * \short A type representing error types.
  *
- * ErrorType is used to represent types which hold a can be null.
+ * ErrorType is used to represent types which can have an error or the value.
  */
 class KDEVPLATFORMLANGUAGE_EXPORT ErrorType
     : public ComptimeTypeBase

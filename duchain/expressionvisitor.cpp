@@ -509,6 +509,33 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
     return Continue;
 }
 
+VisitResult ExpressionVisitor::visitMergeErrorSets(const ZigNode &node, const ZigNode &parent)
+{
+    NodeData data = node.data();
+    ZigNode lhs = {node.ast, data.lhs};
+    ZigNode rhs = {node.ast, data.rhs};
+
+    ExpressionVisitor v1(this);
+    v1.startVisiting(lhs, node);
+    ExpressionVisitor v2(this);
+    v2.startVisiting(rhs, node);
+    if (auto a = v1.lastType().dynamicCast<EnumType>()) {
+        if (auto b = v2.lastType().dynamicCast<EnumType>()) {
+            // TODO: Create new error set decl?
+            if (a->enumType()) {
+                encounter(a->enumType());
+            } else if (b->enumType()) {
+                encounter(b->enumType());
+            } else {
+                encounter(a);
+            }
+        }
+    }
+    encounterUnknown();
+    return Continue;
+}
+
+
 VisitResult ExpressionVisitor::visitFieldAccess(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
