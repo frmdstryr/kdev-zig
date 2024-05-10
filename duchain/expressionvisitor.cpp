@@ -419,10 +419,10 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
     QString value;
     for (TokenIndex i=data.lhs; i <= data.rhs; i++) {
         QString part = node.tokenSlice(i);
-        if (part.size() > 2) {
-            // Remove "\\"
-            value += part.sliced(2);
-        }
+        if ( part.startsWith(QLatin1Char('/')) )
+            continue; // Skip doc comment if inline
+        if (part.size() > 2)
+            value += part.sliced(2); // Remove "\\"
     }
 
     SliceType::Ptr sliceType(new SliceType);
@@ -511,6 +511,7 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
 
 VisitResult ExpressionVisitor::visitMergeErrorSets(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     NodeData data = node.data();
     ZigNode lhs = {node.ast, data.lhs};
     ZigNode rhs = {node.ast, data.rhs};
@@ -1694,10 +1695,8 @@ VisitResult ExpressionVisitor::visitIf(const ZigNode &node, const ZigNode &paren
 VisitResult ExpressionVisitor::visitSwitch(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    NodeData data = node.data();
-    ZigNode lhs = {node.ast, data.lhs};
     ExpressionVisitor v(this);
-    v.startVisiting(lhs, node);
+    v.startVisiting(node.lhsAsNode(), node);
 
     const NodeSubRange subrange = node.subRange();
     if (!subrange.isValid()) {
@@ -1795,11 +1794,8 @@ VisitResult ExpressionVisitor::visitArrayType(const ZigNode &node, const ZigNode
 VisitResult ExpressionVisitor::visitArrayInit(const ZigNode &node, const ZigNode &parent)
 {
     Q_UNUSED(parent);
-    NodeData data = node.data();
-    ZigNode lhs = {node.ast, data.lhs};
-    //ZigNode rhs = {node.ast, data.rhs};
     ExpressionVisitor v(this);
-    v.startVisiting(lhs, node);
+    v.startVisiting(node.lhsAsNode(), node);
     if (auto slice = v.lastType().dynamicCast<SliceType>()) {
         uint32_t n = node.arrayInitCount();
         if (n && static_cast<uint32_t>(slice->dimension()) != n) {
