@@ -1823,7 +1823,7 @@ VisitResult ExpressionVisitor::visitArrayAccess(const ZigNode &node, const ZigNo
     v.startVisiting(node.lhsAsNode(), node);
 
     // Ptr is walked automatically
-    auto T = v.lastType();
+    auto T = Helper::asZigType(v.lastType());
     if (auto ptr = T.dynamicCast<PointerType>()) {
         T = ptr->baseType();
         // c ptr (eg [*]const u8)
