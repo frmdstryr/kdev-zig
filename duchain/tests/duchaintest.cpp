@@ -943,7 +943,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct field enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S}; test {const x = A{.s = .NotOk}; }" << QStringList{QLatin1String("Invalid enum field")} << "";
     QTest::newRow("struct field default enum ") << "const S = enum {Ok, Err}; const A = struct {s: S = .Ok};" << QStringList{} << "";
     QTest::newRow("struct field default enum invalid") << "const S = enum {Ok, Err}; const A = struct {s: S = .NotOk};" << QStringList{QLatin1String("Invalid enum field NotOk")} << "";
-    QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {s: ?S = null}; test { var a = A{.a = .Ok}; }" << QStringList{} << "";
+    QTest::newRow("struct field opt enum") << "const S = enum {Ok, Err}; const A = struct {a: ?S = null}; test { var a = A{.a = .Ok}; }" << QStringList{} << "";
+    QTest::newRow("struct field opt 2") << "const A = struct {a: ?u8}; test { var a: A = .{.a = 0}; }" << QStringList{} << "";
+
     QTest::newRow("struct field inferred 1") << "const A = struct {a: f32}; test {const x: u8 = 1; const y = A{.a = @floatFromInt(x)}; }" << QStringList{} << "";
     //QTest::newRow("struct field inferred 2") << "const A = struct {a: f32}; test {const x = A{.a = @floatFromInt(1.1)}; }" << QStringList{} << "";
     QTest::newRow("struct field shadowed") << "const a = struct{ b: bool}; const Foo = struct {\n a: ?a.b\n};" << QStringList{} << "";

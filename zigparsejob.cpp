@@ -188,6 +188,34 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
         }
     }
 
+    // If some imports are still unresolved, reschedule it.
+    // Pulled from kdev-python
+    // TODO: This needs to somehow make sure that all imports have been resolved
+    // in the dependents because each dependency can still have unresolved
+    // imports...
+    if (!session.unresolvedImports().isEmpty()) {
+        DUChainWriteLocker lock;
+
+        // If the dependencies were not scheduled for some reason
+        // then reparsing will not do anything
+        bool dependencyInQueue = false;
+        for ( const IndexedString& url : session.unresolvedImports() ) {
+            if (KDevelop::ICore::self()->languageController()->backgroundParser()->isQueued(url)
+                    || DUChain::self()->chainForDocument(url)) {
+                dependencyInQueue= true;
+                break;
+            }
+        }
+
+        if (!(minimumFeatures() & Rescheduled) && dependencyInQueue) {
+            constexpr TopDUContext::Features features{TopDUContext::ForceUpdate};
+            KDevelop::ICore::self()->languageController()->backgroundParser()->addDocument(
+                document(),
+                static_cast<TopDUContext::Features>(features | Rescheduled), parsePriority(),
+                nullptr, ParseJob::FullSequentialProcessing);
+        }
+    }
+
     {
         DUChainWriteLocker lock;
         context->setFeatures(minimumFeatures());

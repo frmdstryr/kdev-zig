@@ -1050,6 +1050,7 @@ VisitResult ExpressionVisitor::callBuiltinImport(const ZigNode &node)
     } else {
         IndexedString dependency(importPath);
         Helper::scheduleDependency(dependency, session()->jobPriority());
+        m_session->addUnresolvedImport(dependency);
         // TODO: This does not work...
         // auto dep = new ScheduleDependency(
         //     const_cast<KDevelop::ParseJob*>(session()->job()),
@@ -1260,14 +1261,17 @@ VisitResult ExpressionVisitor::callBuiltinCImport(const ZigNode &node)
 VisitResult ExpressionVisitor::callBuiltinCInclude(const ZigNode &node)
 {
     auto cImportStruct = inferredType().dynamicCast<StructureType>();
-    if (node.isBuiltinCallTwo() && cImportStruct) {
-        Q_ASSERT(cImportStruct->modifiers() & ModuleModifier);
+    if (node.isBuiltinCallTwo() && cImportStruct && cImportStruct->modifiers() & ModuleModifier) {
         ZigNode strNode = node.lhsAsNode();
         if (strNode.tag() != NodeTag_string_literal) {
             encounterUnknown();
             return Continue;
         }
         QString header = strNode.spellingName();
+        if (header.isEmpty()) {
+            encounterUnknown();
+            return Continue;
+        }
         // qCDebug(KDEV_ZIG) << "cInclude " << header;
         QUrl includePath = Helper::includePath(header, session()->document().str());
         // TODO: find real include path?
@@ -1284,6 +1288,7 @@ VisitResult ExpressionVisitor::callBuiltinCInclude(const ZigNode &node)
         } else {
             qCDebug(KDEV_ZIG) << "cInclude(" << includePath.path() << ") null, scheduling";
             Helper::scheduleDependency(dependency, session()->jobPriority());
+            m_session->addUnresolvedImport(dependency);
         }
     }
     encounterUnknown();

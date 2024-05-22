@@ -65,6 +65,7 @@ ParseSession::~ParseSession()
 
 void ParseSession::parse()
 {
+    clearUnresolvedImports();
     d->parse();
 }
 
@@ -138,6 +139,21 @@ KDevelop::DeclarationPointer ParseSession::declFromNode(const ZigNode &node)
 {
     Q_ASSERT(node.ast == d->m_ast);
     return d->m_nodeDeclMap.value(node.index);
+}
+
+void ParseSession::addUnresolvedImport(const KDevelop::IndexedString &module)
+{
+    d->m_unresolvedImports.insert(module);
+}
+
+void ParseSession::clearUnresolvedImports()
+{
+    d->m_unresolvedImports.clear();
+}
+
+QSet<KDevelop::IndexedString> ParseSession::unresolvedImports() const
+{
+    return d->m_unresolvedImports;
 }
 
 }

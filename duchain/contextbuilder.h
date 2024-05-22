@@ -43,6 +43,7 @@ public:
     virtual VisitResult visitNode(const ZigNode &node, const ZigNode &parent);
     virtual void visitChildren(const ZigNode &node, const ZigNode &parent);
 
+
 protected:
     KDevelop::RangeInRevision editorFindSpellingRange(const ZigNode &node, const QString &identifier);
 

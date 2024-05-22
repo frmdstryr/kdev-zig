@@ -18,6 +18,7 @@
 #ifndef PARSESESSION_H
 #define PARSESESSION_H
 
+#include <QSet>
 #include <QMap>
 
 #include <serialization/indexedstring.h>
@@ -60,6 +61,7 @@ private:
     QMap<uint32_t, KDevelop::DUContext *> m_nodeContextMap;
     QMap<uint32_t, KDevelop::AbstractType::Ptr> m_nodeTypeMap;
     QMap<uint32_t, KDevelop::DeclarationPointer> m_nodeDeclMap;
+    QSet<KDevelop::IndexedString> m_unresolvedImports;
     const KDevelop::ParseJob* m_job;
 };
 
@@ -89,6 +91,10 @@ public:
 
     void setDeclOnNode(const ZigNode &node, const KDevelop::DeclarationPointer &decl);
     KDevelop::DeclarationPointer declFromNode(const ZigNode &node);
+
+    void addUnresolvedImport(const KDevelop::IndexedString& module);
+    void clearUnresolvedImports();
+    QSet<KDevelop::IndexedString> unresolvedImports() const;
 
 private:
     Q_DISABLE_COPY(ParseSession)

@@ -928,6 +928,8 @@ QUrl Helper::includePath(const QString &name, const QString& currentFile)
 
 void ScheduleDependency::updateReady(const IndexedString& url, const ReferencedTopDUContext& topContext)
 {
+    Q_UNUSED(url);
+    Q_UNUSED(topContext);
     // Reparse the original document again
     Helper::scheduleDependency(m_documentUrl, 0);
     this->deleteLater();
