@@ -748,7 +748,7 @@ void Helper::loadPackages(KDevelop::IProject* project)
             QString pkgPath = parts[1].trimmed();
             if (!pkgName.isEmpty() && !pkgPath.isEmpty()) {
                 QString finalPath = QDir::isAbsolutePath(pkgPath) ? pkgPath :
-                    QDir(project->path().toLocalFile()).filePath(pkgPath);
+                    QDir(project->path().toLocalFile()).absoluteFilePath(pkgPath);
                 qCDebug(KDEV_ZIG) << "zig package set: " << pkgName << ": " << finalPath;
                 projectPackages.insert(pkgName, finalPath);
             }
@@ -906,15 +906,16 @@ QUrl Helper::includePath(const QString &name, const QString& currentFile)
             QUrl::fromLocalFile(currentFile));
     if (project) {
         auto buildManager = project->buildSystemManager();
-        auto items = project->itemsForPath(IndexedString(currentFile));
-        if (!items.isEmpty()) {
-            for (const auto& includeDir: buildManager->includeDirectories(items.first())) {
-                auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
-                if ( QFile::exists(relativePath) )
-                    return QUrl(relativePath);
+        if (buildManager) {
+            auto items = project->itemsForPath(IndexedString(currentFile));
+            if (!items.isEmpty()) {
+                for (const auto& includeDir: buildManager->includeDirectories(items.first())) {
+                    auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
+                    if ( QFile::exists(relativePath) )
+                        return QUrl(relativePath);
+                }
             }
         }
-
         for (const auto& includeDir: IDefinesAndIncludesManager::manager()->includes(name))
         {
             auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
