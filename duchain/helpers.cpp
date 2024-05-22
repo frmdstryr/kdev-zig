@@ -904,21 +904,23 @@ QUrl Helper::includePath(const QString &name, const QString& currentFile)
     // TODO: Get standard paths?
     auto project = ICore::self()->projectController()->findProjectForUrl(
             QUrl::fromLocalFile(currentFile));
-    auto buildManager = project->buildSystemManager();
-    auto items = project->itemsForPath(IndexedString(currentFile));
-    if (!items.isEmpty()) {
-        for (const auto& includeDir: buildManager->includeDirectories(items.first())) {
+    if (project) {
+        auto buildManager = project->buildSystemManager();
+        auto items = project->itemsForPath(IndexedString(currentFile));
+        if (!items.isEmpty()) {
+            for (const auto& includeDir: buildManager->includeDirectories(items.first())) {
+                auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
+                if ( QFile::exists(relativePath) )
+                    return QUrl(relativePath);
+            }
+        }
+
+        for (const auto& includeDir: IDefinesAndIncludesManager::manager()->includes(name))
+        {
             auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
             if ( QFile::exists(relativePath) )
                 return QUrl(relativePath);
         }
-    }
-
-    for (const auto& includeDir: IDefinesAndIncludesManager::manager()->includes(name))
-    {
-        auto relativePath = QDir(includeDir.toLocalFile()).filePath(name);
-        if ( QFile::exists(relativePath) )
-            return QUrl(relativePath);
     }
     // Give up, just return missing file
     return QUrl(name);
