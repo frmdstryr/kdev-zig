@@ -83,6 +83,12 @@ endif ( NOT WIN32 )
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kdevzig\")
 
+option(ENABLE_KDEV_ZIG_VALGRIND off)
+if (ENABLE_KDEV_ZIG_VALGRIND)
+    # use valgrind --tool=callgrind --dump-instr=yes --simulate-cache=yes --collect-jumps=yes --collect-atstart=no --instr-atstart=no
+    add_definitions(-DKDEV_ZIG_VALGRIND=1)
+endif()
+
 add_definitions(
     -DQT_DEPRECATED_WARNINGS
     -DQT_DISABLE_DEPRECATED_BEFORE=0x050500

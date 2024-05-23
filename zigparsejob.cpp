@@ -43,10 +43,31 @@
 #include "zigdebug.h"
 #include <helpers.h>
 
+#ifdef KDEV_ZIG_VALGRIND
+#include <valgrind/callgrind.h>
+#endif
+
 using namespace KDevelop;
 
 namespace Zig
 {
+
+#ifdef KDEV_ZIG_VALGRIND
+class ValgrindTracer
+{
+public:
+    ValgrindTracer() {
+        CALLGRIND_START_INSTRUMENTATION;
+        CALLGRIND_TOGGLE_COLLECT;
+        qCDebug(KDEV_ZIG) << "Valgrind collection started";
+    }
+    ~ValgrindTracer()  {
+        CALLGRIND_TOGGLE_COLLECT;
+        CALLGRIND_STOP_INSTRUMENTATION;
+        qCDebug(KDEV_ZIG) << "Valgrind collection stopped";
+    }
+};
+#endif
 
 ParseJob::ParseJob(const IndexedString &url, ILanguageSupport *languageSupport)
     : KDevelop::ParseJob(url, languageSupport)
@@ -79,6 +100,9 @@ ParseSessionData::Ptr ParseJob::createSessionData() const
 
 void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
 {
+#ifdef KDEV_ZIG_VALGRIND
+    ValgrindTracer valgrind;
+#endif
     Q_UNUSED(self);
     Q_UNUSED(thread);
     QReadLocker parseLock(languageSupport()->parseLock());
@@ -193,28 +217,28 @@ void ParseJob::run(ThreadWeaver::JobPointer self, ThreadWeaver::Thread *thread)
     // TODO: This needs to somehow make sure that all imports have been resolved
     // in the dependents because each dependency can still have unresolved
     // imports...
-    if (!session.unresolvedImports().isEmpty()) {
-        DUChainWriteLocker lock;
-
-        // If the dependencies were not scheduled for some reason
-        // then reparsing will not do anything
-        bool dependencyInQueue = false;
-        for ( const IndexedString& url : session.unresolvedImports() ) {
-            if (KDevelop::ICore::self()->languageController()->backgroundParser()->isQueued(url)
-                    || DUChain::self()->chainForDocument(url)) {
-                dependencyInQueue= true;
-                break;
-            }
-        }
-
-        if (!(minimumFeatures() & Rescheduled) && dependencyInQueue) {
-            constexpr TopDUContext::Features features{TopDUContext::ForceUpdate};
-            KDevelop::ICore::self()->languageController()->backgroundParser()->addDocument(
-                document(),
-                static_cast<TopDUContext::Features>(features | Rescheduled), parsePriority(),
-                nullptr, ParseJob::FullSequentialProcessing);
-        }
-    }
+    // if (!session.unresolvedImports().isEmpty()) {
+    //     DUChainWriteLocker lock;
+    //
+    //     // If the dependencies were not scheduled for some reason
+    //     // then reparsing will not do anything
+    //     bool dependencyInQueue = false;
+    //     for ( const IndexedString& url : session.unresolvedImports() ) {
+    //         if (KDevelop::ICore::self()->languageController()->backgroundParser()->isQueued(url)
+    //                 || DUChain::self()->chainForDocument(url)) {
+    //             dependencyInQueue= true;
+    //             break;
+    //         }
+    //     }
+    //
+    //     if (!(minimumFeatures() & Rescheduled) && dependencyInQueue) {
+    //         constexpr TopDUContext::Features features{TopDUContext::ForceUpdate};
+    //         KDevelop::ICore::self()->languageController()->backgroundParser()->addDocument(
+    //             document(),
+    //             static_cast<TopDUContext::Features>(features | Rescheduled), parsePriority(),
+    //             nullptr, ParseJob::FullSequentialProcessing);
+    //     }
+    // }
 
     {
         DUChainWriteLocker lock;
