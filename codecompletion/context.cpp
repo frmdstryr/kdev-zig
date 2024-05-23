@@ -46,6 +46,8 @@ CompletionContext::CompletionContext(DUContextPointer context,
 
 QList<CompletionTreeItemPointer> CompletionContext::completionItems(bool &abort, bool fullCompletion)
 {
+    Q_UNUSED(abort);
+    Q_UNUSED(fullCompletion);
     QList<CompletionTreeItemPointer> items;
 
     if (!m_duContext) {
@@ -154,6 +156,7 @@ QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForUnio
 QList<KDevelop::CompletionTreeItemPointer> CompletionContext::completionsForSlice(const SliceType::Ptr &t) const
 {
     // TODO: .len .ptr?
+    Q_UNUSED(t);
     return {};
 }
 
