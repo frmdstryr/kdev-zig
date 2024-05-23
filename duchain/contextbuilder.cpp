@@ -156,7 +156,7 @@ KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
     QString currentFile = session->document().str();
     QString qualifier = Helper::qualifierPath(currentFile);
-    qCDebug(KDEV_ZIG) << "identifierForNode" << *node << "qualifierPath" << currentFile << "is" << qualifier;
+    // qCDebug(KDEV_ZIG) << "identifierForNode" << *node << "qualifierPath" << currentFile << "is" << qualifier;
     if (currentFile == *node)
         return QualifiedIdentifier(qualifier.isEmpty() ? currentFile : qualifier);
     if (qualifier.isEmpty())

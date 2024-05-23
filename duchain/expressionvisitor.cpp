@@ -485,7 +485,7 @@ VisitResult ExpressionVisitor::visitIdentifier(const ZigNode &node, const ZigNod
 {
     Q_UNUSED(parent);
     QString name = node.mainToken();
-    qCDebug(KDEV_ZIG) << "visit ident" << name;
+    // qCDebug(KDEV_ZIG) << "visit ident" << name;
     if (auto builtinType = BuiltinType::newFromName(name)) {
         encounter(builtinType);
     }
