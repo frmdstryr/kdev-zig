@@ -40,10 +40,9 @@ QMap<IProject*, QVector<QUrl>> Helper::cachedSearchPaths;
 QVector<QUrl> Helper::projectSearchPaths;
 
 
-// FIXME: Is this actually per project?
 QMutex Helper::projectPathLock;
-bool Helper::projectPackagesLoaded;
-QMap<QString, QString> Helper::projectPackages;
+QMap<KDevelop::IProject*, bool> Helper::projectPackagesLoaded;
+QMap<KDevelop::IProject*, QMap<QString, QString>> Helper::projectPackages;
 
 
 void Helper::scheduleDependency(
@@ -728,14 +727,15 @@ void Helper::loadPackages(KDevelop::IProject* project)
     if (!project) {
         return;
     }
+    auto &projectSpecificPackages = projectPackages[project];
 
     QMutexLocker lock(&Helper::projectPathLock);
 
     // Keep old stdlib to avoid re-running zig
-    QString oldStdLib = projectPackages.contains(QStringLiteral("std")) ?
-        *projectPackages.constFind(QStringLiteral("std")): QStringLiteral("");
+    QString oldStdLib = projectSpecificPackages.contains(QStringLiteral("std")) ?
+        *projectSpecificPackages.constFind(QStringLiteral("std")): QStringLiteral("");
 
-    projectPackages.clear();
+    projectSpecificPackages.clear();
 
     // Load packages
 
@@ -750,7 +750,7 @@ void Helper::loadPackages(KDevelop::IProject* project)
                 QString finalPath = QDir::isAbsolutePath(pkgPath) ? pkgPath :
                     QDir(project->path().toLocalFile()).absoluteFilePath(pkgPath);
                 qCDebug(KDEV_ZIG) << "zig package set: " << pkgName << ": " << finalPath;
-                projectPackages.insert(pkgName, finalPath);
+                projectSpecificPackages.insert(pkgName, finalPath);
             }
         } else {
             qCDebug(KDEV_ZIG) << "zig package is invalid format: " << pkg;
@@ -758,25 +758,25 @@ void Helper::loadPackages(KDevelop::IProject* project)
     }
 
     // If none is defined use the last saved
-    if (!oldStdLib.isEmpty() && !projectPackages.contains(QStringLiteral("std"))) {
-        projectPackages.insert(QStringLiteral("std"), oldStdLib);
+    if (!oldStdLib.isEmpty() && !projectSpecificPackages.contains(QStringLiteral("std"))) {
+        projectSpecificPackages.insert(QStringLiteral("std"), oldStdLib);
     }
 
-    projectPackagesLoaded = true;
+    projectPackagesLoaded.insert(project, true);
 }
 
 QString Helper::stdLibPath(IProject* project)
 {
     static QRegularExpression stdDirPattern(QStringLiteral("\\s*\"std_dir\":\\s*\"(.+)\""));
     QMutexLocker lock(&Helper::projectPathLock);
-    if (!projectPackagesLoaded) {
+    if (!projectPackagesLoaded[project]) {
         lock.unlock();
         loadPackages(project);
         lock.relock();
     }
     // Use one from project config or previously loaded from zig
-    if (projectPackages.contains(QStringLiteral("std"))) {
-        QDir stdzig = *projectPackages.constFind(QStringLiteral("std"));
+    if (projectPackages[project].contains(QStringLiteral("std"))) {
+        QDir stdzig = *projectPackages[project].constFind(QStringLiteral("std"));
         stdzig.cdUp();
         return stdzig.path();
     }
@@ -797,8 +797,8 @@ QString Helper::stdLibPath(IProject* project)
                 QString path = QDir::isAbsolutePath(match) ? match :
                     QDir::home().filePath(match);
                 qCDebug(KDEV_ZIG) << "std_lib" << path;
-                projectPackages.insert(QStringLiteral("std"), QDir::cleanPath(QStringLiteral("%1/std.zig").arg(path)));
-                QDir stdzig = *projectPackages.constFind(QStringLiteral("std"));
+                projectPackages[project].insert(QStringLiteral("std"), QDir::cleanPath(QStringLiteral("%1/std.zig").arg(path)));
+                QDir stdzig = *projectPackages[project].constFind(QStringLiteral("std"));
                 stdzig.cdUp();
                 return stdzig.path();
             }
@@ -814,13 +814,13 @@ QString Helper::packagePath(const QString &name, const QString& currentFile)
             QUrl::fromLocalFile(currentFile));
 
     QMutexLocker lock(&Helper::projectPathLock);
-    if (!projectPackagesLoaded) {
+    if (!projectPackagesLoaded[project]) {
         lock.unlock();
         loadPackages(project);
         lock.relock();
     }
-    if (projectPackages.contains(name)) {
-        return *projectPackages.constFind(name);
+    if (projectPackages[project].contains(name)) {
+        return *projectPackages[project].constFind(name);
     }
     if (name == QLatin1String("std")) {
         lock.unlock();
@@ -852,42 +852,39 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
 QString Helper::qualifierPath(const QString& currentFile)
 {
     QString f = currentFile.endsWith(QStringLiteral(".zig")) ? currentFile.mid(0, currentFile.size()-3) : currentFile;
-    if (QDir::isRelativePath(f)) {
-        return QStringLiteral(""); // f.replace(QDir::separator(), '.');
-    }
-    auto project = ICore::self()->projectController()->findProjectForUrl(
-            QUrl::fromLocalFile(currentFile));
+    auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
 
+    // Even if there is no project it should still find the std import
     QMutexLocker lock(&Helper::projectPathLock);
-    if (!projectPackagesLoaded) {
+    if (!projectPackagesLoaded[project]) {
         lock.unlock();
         loadPackages(project);
         lock.relock();
     }
 
-    for (const auto& pkgName: projectPackages.keys()) {
-        const auto& pkgPath = projectPackages[pkgName];
-        if (currentFile == pkgPath) {
+    for (const auto& pkgName: projectPackages[project].keys()) {
+        const auto& pkgPath = projectPackages[project][pkgName];
+        if (pkgPath.isEmpty() || pkgName.isEmpty())
+            continue;
+        if (currentFile == pkgPath)
             return pkgName;
-        }
         QFileInfo pkg(pkgPath);
         QDir pkgRoot(pkg.absolutePath());
         QString relPath = pkgRoot.relativeFilePath(f);
-        if (relPath.isEmpty() || relPath == QLatin1Char('.')) {
+        if (relPath.isEmpty() || relPath == QLatin1Char('.'))
             return pkgName;
-        }
         if (!relPath.startsWith(QStringLiteral(".."))) {
             QString subPkg = relPath.replace(QDir::separator(), QLatin1Char('.'));
-            if (subPkg.endsWith(QLatin1Char('.'))) {
-                return pkgName + QLatin1Char('.') + subPkg.mid(0, subPkg.size()-1);
-            }
+            if (subPkg.endsWith(QLatin1Char('.')))
+                subPkg = subPkg.mid(0, subPkg.size()-1);
             return QStringLiteral("%1.%2").arg(pkgName, subPkg);
         }
     }
     if (project) {
         QDir projectRoot(project->path().toLocalFile());
         QString relPath = projectRoot.relativeFilePath(f);
-        return relPath.replace(QDir::separator(), QLatin1Char('.'));
+        if (!relPath.startsWith(QStringLiteral("..")))
+            return relPath.replace(QDir::separator(), QLatin1Char('.'));
     }
     return QStringLiteral(""); // f.mid(1).replace(QDir::separator(), '.');
 }

@@ -35,8 +35,8 @@ public:
     // The project... vars should only be accessed while holding the projectPathLock
     static QMutex projectPathLock;
     static QVector<QUrl> projectSearchPaths;
-    static bool projectPackagesLoaded;
-    static QMap<QString, QString> projectPackages;
+    static QMap<KDevelop::IProject*, bool> projectPackagesLoaded;
+    static QMap<KDevelop::IProject*, QMap<QString, QString>> projectPackages;
 
     static QString zigExecutablePath(KDevelop::IProject* project);
 

@@ -182,7 +182,7 @@ void DUChainTest::initTestCase()
 void DUChainTest::sanityCheckFn()
 {
     QString code(QStringLiteral("fn main() !void {}"));
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -197,7 +197,7 @@ void DUChainTest::sanityCheckFn()
 void DUChainTest::sanityCheckVar()
 {
     QString code(QStringLiteral("const X = 1;"));
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -216,7 +216,7 @@ void DUChainTest::sanityCheckStd()
     ReferencedTopDUContext timecontext = parseStdCode(QLatin1String("time.zig"));
     ReferencedTopDUContext stdcontext = parseStdCode(QLatin1String("std.zig"));
     QString code(QStringLiteral("const std = @import(\"std\");const time = std.time; const ns_per_us = time.ns_per_us;"));
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier(QLatin1String("std")));
@@ -240,7 +240,7 @@ void DUChainTest::sanityCheckTypeInfo()
     ReferencedTopDUContext builtinctx = parseStdCode(QLatin1String("builtin.zig"));
     ReferencedTopDUContext stdcontext = parseStdCode(QLatin1String("std.zig"));
     QString code(QStringLiteral("const x = u8; const T = @typeInfo(x);"));
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
     DUChainReadLocker lock;
     auto decls = context->findDeclarations(Identifier(QLatin1String("T")));
@@ -370,7 +370,7 @@ void DUChainTest::testVarBindings()
     QFETCH(QString, bindings);
     QFETCH(QString, contextName);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -421,7 +421,7 @@ void DUChainTest::testVarUsage()
     QFETCH(QString, container);
     QFETCH(QString, uses);
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -508,7 +508,7 @@ void DUChainTest::testVarType()
         DUChain::self()->waitForUpdate(IndexedString("/usr/include/locale.h"), KDevelop::TopDUContext::ForceUpdate);
     }
 
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
     QVERIFY(context.data());
 
     DUChainReadLocker lock;
@@ -800,7 +800,7 @@ void DUChainTest::testProblems()
     QFETCH(QString, contextName);
 
     qDebug() << "Code:" << code;
-    ReferencedTopDUContext context = parseCode(code, QLatin1String("test.zig"));
+    ReferencedTopDUContext context = parseCode(code, QLatin1String("/tmp/test.zig"));
 
 
     DUChainReadLocker lock;

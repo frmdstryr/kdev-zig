@@ -41,7 +41,8 @@ void Zig::ProjectConfigPage::apply()
     }
     {
         QMutexLocker lock(&Helper::projectPathLock);
-        Helper::projectPackagesLoaded = false;
+        Helper::projectPackagesLoaded.clear();
+        Helper::projectPackages.clear();
     }
 }
 

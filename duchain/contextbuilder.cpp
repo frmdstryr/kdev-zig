@@ -25,6 +25,7 @@
 #include "zigducontext.h"
 #include "helpers.h"
 #include "nodetraits.h"
+#include <zigdebug.h>
 
 namespace Zig
 {
@@ -153,13 +154,14 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(const ZigNode *fromNod
 
 KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
-    if (node && !node->isEmpty()) {
-        QString qualifier = Helper::qualifierPath(session->document().str());
-        QString ident = qualifier.isEmpty() ? *node : QStringLiteral("%1.%2").arg(qualifier, *node);
-        // qDebug() << "ident" << ident;
-        return QualifiedIdentifier(ident);
-    }
-    return QualifiedIdentifier(*node);
+    QString currentFile = session->document().str();
+    QString qualifier = Helper::qualifierPath(currentFile);
+    qCDebug(KDEV_ZIG) << "identifierForNode" << *node << "qualifierPath" << currentFile << "is" << qualifier;
+    if (currentFile == *node)
+        return QualifiedIdentifier(qualifier.isEmpty() ? currentFile : qualifier);
+    if (qualifier.isEmpty())
+        return QualifiedIdentifier(*node);
+    return QualifiedIdentifier(QStringLiteral("%1.%2").arg(qualifier, *node));
 }
 
 KDevelop::DUContext *ContextBuilder::newContext(const KDevelop::RangeInRevision &range)
