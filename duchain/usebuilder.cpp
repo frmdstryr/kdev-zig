@@ -191,7 +191,7 @@ VisitResult UseBuilder::visitBuiltinCall(const ZigNode &node, const ZigNode &par
             } else {
                 p->setSeverity(IProblem::Hint);
                 p->setDescription(i18n("Import %1 not yet resolved", importName));
-                p->setExplanation(i18n("File at %1", url.toString()));
+                p->setExplanation(i18n("Located at %1", url.toString()));
 
             }
             DUChainWriteLocker lock;
