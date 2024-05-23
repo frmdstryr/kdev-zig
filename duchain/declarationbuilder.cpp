@@ -177,7 +177,9 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     Identifier identifier(name);
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
-        identifier = Identifier(session->document().str());
+        QString currentFile = session->document().str();
+        auto pkgName = Helper::packageName(currentFile);
+        identifier = Identifier(pkgName.isEmpty() ? currentFile : pkgName);
     }
     else if (Kind == ContainerDecl) {
         if (name.isEmpty()) {

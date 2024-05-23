@@ -849,6 +849,26 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
     return QUrl(QStringLiteral(""));
 }
 
+QString Helper::packageName(const QString &currentFile)
+{
+    auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
+    // Even if there is no project it should still find the std import
+    QMutexLocker lock(&Helper::projectPathLock);
+    if (!projectPackagesLoaded[project]) {
+        lock.unlock();
+        loadPackages(project);
+        lock.relock();
+    }
+    for (const auto& pkgName: projectPackages[project].keys()) {
+        const auto& pkgPath = projectPackages[project][pkgName];
+        if (pkgPath.isEmpty() || pkgName.isEmpty())
+            continue;
+        if (currentFile == pkgPath)
+            return pkgName;
+    }
+    return QStringLiteral("");
+}
+
 QString Helper::qualifierPath(const QString& currentFile)
 {
     QString f = currentFile.endsWith(QStringLiteral(".zig")) ? currentFile.mid(0, currentFile.size()-3) : currentFile;

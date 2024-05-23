@@ -46,6 +46,9 @@ public:
     // Lookup package root file from package name.
     // If name is std, returns <stdLibPath>/std.zig
     static QString packagePath(const QString &name, const QString& currentFile);
+    // Lookup the package name from a file. If it is not an exact match for the
+    // package entrypoint it returns an empty string.
+    static QString packageName(const QString& currentFile);
     // Lookup the path for an @import based relative to the current file
     // If the name is a package name, the packagePath is returned.
     static QUrl importPath(const QString& importName, const QString& currentFile);
