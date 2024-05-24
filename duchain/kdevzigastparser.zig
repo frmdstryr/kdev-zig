@@ -480,22 +480,22 @@ export fn ast_node_capture_token(ptr: ?*ZAst, index: NodeIndex, capture: Capture
 
 fn testCaptureName(source: [:0]const u8, tag: Tag, capture: CaptureType, expected: ?[]const u8) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
+    var ast = try ZAst.parse(allocator, source);
     defer ast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (ast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
         try printAstError(&ast, "", source);
     }
-    try std.testing.expect(ast.errors.len == 0);
-    try dumpAstFlat(&ast, stdout);
+    try std.testing.expect(ast.ast.errors.len == 0);
+    try dumpAstFlat(ast.ast, stdout);
 
-    const index = indexOfNodeWithTag(ast, 0, tag).?;
+    const index = indexOfNodeWithTag(ast.ast, 0, tag).?;
     const tok = ast_node_capture_token(&ast, index, capture);
     if (expected) |str| {
-        try std.testing.expectEqualSlices(u8, str, ast.tokenSlice(tok));
+        try std.testing.expectEqualSlices(u8, str, ast.ast.tokenSlice(tok));
     } else {
         try std.testing.expect(tok == INVALID_TOKEN);
     }
@@ -625,6 +625,29 @@ export fn ast_node_kind(ptr: ?*ZAst, index: NodeIndex) NodeKind {
     };
 }
 
+fn testNodeKind(source: [:0]const u8, index: NodeIndex, expected: NodeKind) !void {
+    const allocator = std.testing.allocator;
+    var ast = try ZAst.parse(allocator, source);
+    defer ast.deinit(allocator);
+
+    var stdout = std.io.getStdOut().writer();
+    try stdout.print("-----------\n{s}\n--------\n", .{source});
+    if (ast.ast.errors.len > 0) {
+        try stdout.writeAll("Parse error:\n");
+        try printAstError(&ast, "", source);
+    }
+    try std.testing.expect(ast.ast.errors.len == 0);
+    const r = ast_node_kind(&ast, index);
+    try std.testing.expect(r == expected);
+}
+
+test "node-kind" {
+    try testNodeKind(
+        \\pub fn foo() void {}
+       , 0, .Module);
+}
+
+
 export fn ast_node_tag(ptr: ?*ZAst, index: NodeIndex) Ast.Node.Tag {
     if (ptr) |zast| {
         if (index < zast.ast.nodes.len) {
@@ -676,20 +699,20 @@ fn findNodeComment(zast: *const ZAst, node: NodeIndex) ?[]const u8 {
 
 fn testNodeComment(source: [:0]const u8, tag: Tag, expected: ?[]const u8) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
+    var ast = try ZAst.parse(allocator, source);
     defer ast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (ast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
         try printAstError(&ast, "", source);
     }
-    try std.testing.expect(ast.errors.len == 0);
+    try std.testing.expect(ast.ast.errors.len == 0);
 
-    const n = indexOfNodeWithTag(ast, 0, tag);
+    const n = indexOfNodeWithTag(ast.ast, 0, tag);
     if (n == null) {
-        try dumpAstFlat(&ast, stdout);
+        try dumpAstFlat(ast.ast, stdout);
         try std.testing.expect(n != null);
     }
     const r = findNodeComment(&ast, n.?);
@@ -1103,23 +1126,23 @@ fn isNodeConstVarDecl(ast: *Ast, index: NodeIndex) bool {
 
 fn testNodeIdent(source: [:0]const u8, tag: Tag, expected: ?[]const u8) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
-    defer ast.deinit(allocator);
+    var zast = try ZAst.parse(allocator, source);
+    defer zast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (zast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
-        try printAstError(&ast, "", source);
+        try printAstError(&zast, "", source);
     }
-    try std.testing.expect(ast.errors.len == 0);
-    try dumpAstFlat(&ast, stdout);
+    try std.testing.expect(zast.ast.errors.len == 0);
+    try dumpAstFlat(zast.ast, stdout);
 
-    const index = indexOfNodeWithTag(ast, 0, tag).?;
-    const tok = ast_node_name_token(&ast, index);
+    const index = indexOfNodeWithTag(zast.ast, 0, tag).?;
+    const tok = ast_node_name_token(&zast, index);
     if (expected) |str| {
-        try std.testing.expectEqualSlices(u8, ast.tokenSlice(tok), str);
-        try stdout.print("location={}\n", .{ast.fastTokenLocation(tok)});
+        try std.testing.expectEqualSlices(u8, zast.ast.tokenSlice(tok), str);
+        try stdout.print("location={}\n", .{zast.fastTokenLocation(tok)});
     } else {
         try std.testing.expect(tok == 0);
     }
@@ -1163,21 +1186,21 @@ test "find-node-ident" {
 
 fn testSpellingRange(source: [:0]const u8, tag: Tag, expected: SourceRange) !void {
     const allocator = std.testing.allocator;
-    var ast = try Ast.parse(allocator, source, .zig);
-    defer ast.deinit(allocator);
+    var zast = try ZAst.parse(allocator, source);
+    defer zast.deinit(allocator);
 
     var stdout = std.io.getStdOut().writer();
     try stdout.print("-----------\n{s}\n--------\n", .{source});
-    if (ast.errors.len > 0) {
+    if (zast.ast.errors.len > 0) {
         try stdout.writeAll("Parse error:\n");
-        try printAstError(&ast, "", source);
+        try printAstError(&zast, "", source);
     }
-    try std.testing.expect(ast.errors.len == 0);
-    try dumpAstFlat(&ast, stdout);
+    try std.testing.expect(zast.ast.errors.len == 0);
+    try dumpAstFlat(zast.ast, stdout);
 
-    const index = indexOfNodeWithTag(ast, 0, tag).?;
-    const tok = ast_node_name_token(&ast, index);
-    const range = ast_token_range(&ast, tok);
+    const index = indexOfNodeWithTag(zast.ast, 0, tag).?;
+    const tok = ast_node_name_token(&zast, index);
+    const range = ast_token_range(&zast, tok);
     std.log.warn("zig: {} range {}", .{ index, range });
     try std.testing.expectEqual(expected.start.line, range.start.line);
     try std.testing.expectEqual(expected.start.column, range.start.column);
@@ -1538,10 +1561,10 @@ fn testVisitChild(source: [:0]const u8, tag: Tag, expected: Tag) !void {
         try stdout.writeAll("Parse error:\n");
         try printAstError(&zast, "", source);
     }
-    try std.testing.expect(zast,zast.ast.errors.len == 0);
-    try dumpAstFlat(&zast.ast, stdout);
+    try std.testing.expect(zast.ast.errors.len == 0);
+    try dumpAstFlat(zast.ast, stdout);
 
-    const index = indexOfNodeWithTag(zast, 0, tag).?;
+    const index = indexOfNodeWithTag(zast.ast, 0, tag).?;
     const child = ast_visit_one_child(&zast, index);
     const result = zast.ast.nodes.items(.tag)[child];
     try std.testing.expectEqual(expected, result);
@@ -2377,32 +2400,32 @@ test "ast-visit" {
     try testVisit("const e = error.EndOfStream;", .error_value);
     try testVisit("const e = error{a} ! error{b};", .error_union);
 }
-
-test "all-visit" {
-    // Walk entire zig lib source tree
-    const allocator = std.testing.allocator;
-    const zig_lib = "/home/jrm/projects/zig/";
-    var dir = try std.fs.cwd().openIterableDir(zig_lib, .{});
-    defer dir.close();
-    var walker = try dir.walk(allocator);
-    defer walker.deinit();
-    const buffer_size = 20*1000*1024; // 20MB
-    while (try walker.next()) |entry| {
-        if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".zig")) {
-            std.log.warn("{s}", .{entry.path});
-            const file = try entry.dir.openFile(entry.basename, .{});
-            const source = try file.readToEndAllocOptions(
-                allocator, buffer_size, null, 4, 0
-            );
-            defer allocator.free(source);
-            defer file.close();
-            testVisit(source, .root) catch |err| switch (err) {
-                error.ParseError => {}, // Skip
-                else => return err,
-            };
-        }
-    }
-}
+//
+// test "all-visit" {
+//     // Walk entire zig lib source tree
+//     const allocator = std.testing.allocator;
+//     const zig_lib = "/home/jrm/projects/zig/";
+//     var dir = try std.fs.cwd().openDir(zig_lib, .{.iterate=true});
+//     defer dir.close();
+//     var walker = try dir.walk(allocator);
+//     defer walker.deinit();
+//     const buffer_size = 20*1000*1024; // 20MB
+//     while (try walker.next()) |entry| {
+//         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, ".zig")) {
+//             std.log.warn("{s}", .{entry.path});
+//             const file = try entry.dir.openFile(entry.basename, .{});
+//             const source = try file.readToEndAllocOptions(
+//                 allocator, buffer_size, null, 4, 0
+//             );
+//             defer allocator.free(source);
+//             defer file.close();
+//             testVisit(source, .root) catch |err| switch (err) {
+//                 error.ParseError => {}, // Skip
+//                 else => return err,
+//             };
+//         }
+//     }
+// }
 
 const BUILTIN_FN_NAMES = [_][:0]const u8{
     "@addrSpaceCast",
