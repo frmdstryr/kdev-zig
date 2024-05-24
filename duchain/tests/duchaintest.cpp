@@ -919,14 +919,14 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn arg slice to const") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(x[0..]); }" << QStringList{} << "";
     QTest::newRow("fn arg ptr to const slice") << "pub fn write(msg: []const u8) void {} test{ var x: [2]u8 = undefined; write(&x); }" << QStringList{} << "";
     QTest::newRow("fn arg *const u8") << "pub fn write(msg: *const u8) void {} test{ write(\"abc\"); }" << QStringList{} << "";
-    QTest::newRow("fn arg *const u8 2") << "pub fn write(msg: *const u8) void {} test{ write(@errorName(error.OutOfMem)(); }" << QStringList{} << "";
+    QTest::newRow("fn arg *const u8 2") << "pub fn write(msg: *const u8) void {} test{ write(@errorName(error.OutOfMem)); }" << QStringList{} << "";
 
     QTest::newRow("fn error ok") << "pub fn write(msg: []const u8) !void {} test{ try write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 2") << "pub fn write(msg: []const u8) !void {} test{ const r = write(\"abcd\"); }" << QStringList{} << "";
     QTest::newRow("fn error ok 3") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\") catch {}; }" << QStringList{} << "";
     QTest::newRow("fn error ignored") << "pub fn write(msg: []const u8) !void {} test{ write(\"abcd\"); }" << QStringList{QLatin1String("Error is ignored")} << "";
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{QLatin1String("Return value is ignored")} << "";
-    QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {}; } test{ exit(1); }" << QStringList{} << "";
+    QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {} } test{ exit(1); }" << QStringList{} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
     QTest::newRow("fn catch 2") << "pub fn bufPrintZ(buf: []u8) ![:0]u8 { buf[buf.len-1] = 0; return buf; } test{ var buf: [100]u8 = undefined; const result = bufPrintZ(&buf) catch \"123\"; }" << QStringList{} << "";
 
