@@ -154,14 +154,12 @@ KDevelop::RangeInRevision ContextBuilder::editorFindRange(const ZigNode *fromNod
 
 KDevelop::QualifiedIdentifier ContextBuilder::identifierForNode(QString *node)
 {
-    QString currentFile = session->document().str();
-    QString qualifier = Helper::qualifierPath(currentFile);
-    // qCDebug(KDEV_ZIG) << "identifierForNode" << *node << "qualifierPath" << currentFile << "is" << qualifier;
-    if (currentFile == *node)
-        return QualifiedIdentifier(qualifier.isEmpty() ? currentFile : qualifier);
-    if (qualifier.isEmpty())
-        return QualifiedIdentifier(*node);
-    return QualifiedIdentifier(QStringLiteral("%1.%2").arg(qualifier, *node));
+    if (!node->isEmpty()) {
+        QString qualifier = Helper::qualifierPath(session->document().str());
+        if (!qualifier.isEmpty())
+            return QualifiedIdentifier(QStringLiteral("%1.%2").arg(qualifier, *node));
+    }
+    return QualifiedIdentifier(*node);
 }
 
 KDevelop::DUContext *ContextBuilder::newContext(const KDevelop::RangeInRevision &range)
