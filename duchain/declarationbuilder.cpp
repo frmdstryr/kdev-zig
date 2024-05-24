@@ -178,8 +178,8 @@ Declaration *DeclarationBuilder::createDeclaration(const ZigNode &node, const Zi
     auto declRange = Kind == Module ? RangeInRevision::invalid(): range;
     if (Kind == Module) {
         QString currentFile = session->document().str();
-        auto pkgName = Helper::packageName(currentFile);
-        identifier = Identifier(pkgName.isEmpty() ? currentFile : pkgName);
+        QString qualifier = Helper::qualifierPath(currentFile);
+        identifier = Identifier(qualifier.isEmpty() ? currentFile : qualifier);
     }
     else if (Kind == ContainerDecl) {
         if (name.isEmpty()) {
