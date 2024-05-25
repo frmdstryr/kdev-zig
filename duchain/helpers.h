@@ -209,6 +209,12 @@ public:
      * Convert a c-type from the clang plugin to a zig type.
      */
     static AbstractType::Ptr asZigType(const AbstractType::Ptr &a);
+
+    /**
+     * Find the first open project with zig packages defined in it's configuration
+     * it may be null. Intended as a fallback when findProjectForUrl fails
+     */
+    static KDevelop::IProject* findProjectWithZigPackages();
 };
 
 /**

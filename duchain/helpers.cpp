@@ -68,6 +68,16 @@ void Helper::scheduleDependency(
     }
 }
 
+KDevelop::IProject* Helper::findProjectWithZigPackages()
+{
+    for (auto project: ICore::self()->projectController()->projects()) {
+        QString pkgs = project->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigPackages"));
+        if (!pkgs.isEmpty())
+            return project;
+    }
+    return nullptr;
+}
+
 Declaration* Helper::accessAttribute(
     const AbstractType::Ptr& accessed,
     const KDevelop::IndexedIdentifier& attribute,
@@ -810,8 +820,9 @@ QString Helper::stdLibPath(IProject* project)
 
 QString Helper::packagePath(const QString &name, const QString& currentFile)
 {
-    auto project = ICore::self()->projectController()->findProjectForUrl(
-            QUrl::fromLocalFile(currentFile));
+    auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
+    if (!project)
+        project = findProjectWithZigPackages();
 
     QMutexLocker lock(&Helper::projectPathLock);
     if (!projectPackagesLoaded[project]) {
@@ -852,6 +863,8 @@ QUrl Helper::importPath(const QString& importName, const QString& currentFile)
 QString Helper::packageName(const QString &currentFile)
 {
     auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
+    if (!project)
+        project = findProjectWithZigPackages();
     // Even if there is no project it should still find the std import
     QMutexLocker lock(&Helper::projectPathLock);
     if (!projectPackagesLoaded[project]) {
@@ -873,7 +886,8 @@ QString Helper::qualifierPath(const QString& currentFile)
 {
     QString f = currentFile.endsWith(QStringLiteral(".zig")) ? currentFile.mid(0, currentFile.size()-3) : currentFile;
     auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
-
+    if (!project)
+        project = findProjectWithZigPackages();
     // Even if there is no project it should still find the std import
     QMutexLocker lock(&Helper::projectPathLock);
     if (!projectPackagesLoaded[project]) {
@@ -919,8 +933,7 @@ QUrl Helper::includePath(const QString &name, const QString& currentFile)
         return QUrl(localPath);
 
     // TODO: Get standard paths?
-    auto project = ICore::self()->projectController()->findProjectForUrl(
-            QUrl::fromLocalFile(currentFile));
+    auto project = ICore::self()->projectController()->findProjectForUrl(QUrl::fromLocalFile(currentFile));
     if (project) {
         auto buildManager = project->buildSystemManager();
         if (buildManager) {
