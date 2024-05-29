@@ -755,6 +755,7 @@ void DeclarationBuilder::visitFnProto(const ZigNode &node, const ZigNode &parent
     if (parent.tag() != NodeTag_fn_decl) {
         auto range = node.spellingRange();
         QString name = node.fnName();
+        // A fn proto type (eg const x = fn() void;) or could be a fn arg or var type
         auto decl = createDeclaration<FunctionDecl>(node, parent, name, false, range);
         {
             openContext(&node, NodeTraits::contextType(FunctionDecl), &name);

@@ -231,7 +231,10 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
         p->setSeverity(IProblem::Hint);
-        p->setDescription(i18n("Undefined function"));
+        if (functionName.isEmpty())
+            p->setDescription(i18n("Undefined function"));
+        else
+            p->setDescription(i18n("Undefined function %1", functionName));
         DUChainWriteLocker lock;
         topContext()->addProblem(p);
         return Continue;
