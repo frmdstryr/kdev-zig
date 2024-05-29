@@ -58,7 +58,6 @@ protected:
             if (hasContext) {
                 bool overwrite = NodeTraits::shouldUseParentName(Kind, parent.kind());
                 QString name = overwrite ? parent.spellingName() : node.spellingName();
-                KDevelop::DUChainWriteLocker lock;
                 openContext(&node, NodeTraits::contextType(Kind), &name);
             }
             visitChildren(node, parent);
