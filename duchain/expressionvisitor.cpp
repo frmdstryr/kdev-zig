@@ -208,6 +208,8 @@ VisitResult ExpressionVisitor::visitNode(const ZigNode &node, const ZigNode &par
         return visitIf(node, parent);
     case NodeTag_return:
         return visitReturn(node, parent);
+    case NodeTag_break:
+        return visitBreak(node, parent);
     case NodeTag_switch:
     case NodeTag_switch_comma:
         return visitSwitch(node, parent);
@@ -243,8 +245,32 @@ VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &pa
 {
     // Visit children to set return type if any
     visitChildren(node, parent);
-    // TODO: Labeled block ?
-    encounter(BuiltinType::newFromName(QStringLiteral("void")));
+    // TODO: Labeled multiple labeled blocks
+    QString label = node.blockLabel();
+    if (!label.isEmpty()) {
+        if (breakType()) {
+            encounter(breakType());
+        } else {
+            encounterUnknown();
+        }
+    } else {
+        encounter(BuiltinType::newFromName(QStringLiteral("void")));
+    }
+    return Continue;
+}
+
+VisitResult ExpressionVisitor::visitBreak(const ZigNode &node, const ZigNode &parent)
+{
+    const NodeData data = node.data();
+    const ZigNode rhs = {node.ast, data.rhs};
+    // TODO: Check if label matches block ?
+    if (!rhs.isRoot()) {
+        QString identifier = node.tokenSlice(data.rhs);
+        ExpressionVisitor v(this);
+        v.setInferredType(v.inferredType());
+        v.startVisiting(rhs, node);
+        setBreakType(v.lastType());
+    }
     return Continue;
 }
 

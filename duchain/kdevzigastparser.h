@@ -735,6 +735,7 @@ NodeIndex ast_for_input_at(const ZAst *tree, NodeIndex node, uint32_t i);
 TokenIndex ast_node_name_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_main_token(const ZAst *tree, NodeIndex node);
 TokenIndex ast_node_capture_token(const ZAst *tree, NodeIndex node, CaptureType capture);
+TokenIndex ast_node_block_label_token(const ZAst *tree, NodeIndex node);
 
 // NOTE: Does not make a copy of data. Data is not null terminated
 SourceSlice ast_token_slice(const ZAst *tree, TokenIndex token);

@@ -678,6 +678,8 @@ void DUChainTest::testVarType_data()
            "pub fn write() WriteError!void {}\n"
            "test{write() catch |err| {\n}}" << "err" << "WriteError" << "3,0";
 
+    QTest::newRow("labeled block") << "const x = blk: { break :blk true; };" << "x" << "bool = true" << "";
+
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";
     QTest::newRow("@sizeOf()") << "const Foo = struct { a: u8, }; test {var x = @sizeOf(Foo);\n}" << "x" << "comptime_int" << "1,0";
@@ -873,6 +875,10 @@ void DUChainTest::testProblems_data()
     QTest::newRow("enum comp invalid") << "const Status = enum{Ok, Error}; test{ var x: Status = .Ok; if (x == .Bad) {}}" << QStringList{QLatin1String("Invalid enum field Bad")} << "";
     QTest::newRow("union enum switch") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}} }" << QStringList{} << "";
     QTest::newRow("union enum switch invalid") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}, .bool=>{}} }" << QStringList{QLatin1String("Invalid enum field bool")} << "";
+
+    QTest::newRow("labeled block") << "pub fn readByte() !u8 { return 1; } test {const x = readByte() catch blk: { var n: u8 = 0; break :blk n; }; }" << QStringList{} << "";;
+    QTest::newRow("labeled block err") << "pub fn readByte() !u8 { return 0; } test {const x = readByte() catch blk: { break :blk true; }; }" << QStringList{QLatin1String("Incompatible types")} << "";;
+
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";

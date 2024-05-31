@@ -67,6 +67,7 @@ public:
     VisitResult visitIf(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitBlock(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitBreak(const ZigNode &node, const ZigNode &parent);
     VisitResult visitReturn(const ZigNode &node, const ZigNode &parent);
     VisitResult visitFnProto(const ZigNode &node, const ZigNode &parent);
     VisitResult visitMergeErrorSets(const ZigNode &node, const ZigNode &parent);
@@ -153,6 +154,18 @@ public:
         return m_returnType;
     }
 
+    /**
+    * If the expression is a block and a break is was encountered
+    */
+    void setBreakType(const KDevelop::AbstractType::Ptr& t) {
+        m_breakType = t;
+    }
+
+    // May be null
+    const KDevelop::AbstractType::Ptr& breakType() const {
+        return m_breakType;
+    }
+
     void setExcludedDeclaration(const KDevelop::Declaration* d) {
         m_excludedDeclaration = d;
     }
@@ -165,6 +178,7 @@ protected:
     ParseSession* m_session;
     KDevelop::AbstractType::Ptr m_inferredType;
     KDevelop::AbstractType::Ptr m_returnType;
+    KDevelop::AbstractType::Ptr m_breakType;
     KDevelop::FunctionType::Ptr m_currentFunction;
     const KDevelop::RangeInRevision m_excludedRange = KDevelop::RangeInRevision::invalid();
     const KDevelop::Declaration* m_excludedDeclaration = nullptr;

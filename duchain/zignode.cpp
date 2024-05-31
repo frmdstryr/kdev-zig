@@ -243,6 +243,11 @@ QString ZigNode::containerName() const
     return QStringLiteral("anon %1 %2").arg(mainToken()).arg(index);
 }
 
+QString ZigNode::blockLabel() const
+{
+    return tokenSlice(ast_node_block_label_token(ast, index));
+}
+
 template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
 ZigAllocatedObject<ZigObjectType, ZigDestructor>::ZigAllocatedObject(ZigObjectType *object)
     : object(object)

@@ -112,6 +112,8 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
     NodeSubRange subRange() const;
     ZigNode extraDataAsNode(uint32_t i) const;
 
+    QString blockLabel() const;
+
     KDevelop::RangeInRevision paramRange(TokenIndex i) const;
     KDevelop::RangeInRevision tokenRange(TokenIndex i) const;
     KDevelop::RangeInRevision range() const;

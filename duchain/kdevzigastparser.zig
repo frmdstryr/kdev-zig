@@ -434,6 +434,30 @@ export fn destroy_completion(ptr: ?*ZCompletion) void {
     }
 }
 
+export fn ast_node_block_label_token(ptr: ?*ZAst, index: NodeIndex) TokenIndex {
+    if (ptr) |zast| {
+        if (index >= zast.ast.nodes.len) {
+            return INVALID_TOKEN;
+        }
+
+        const tag = zast.ast.nodes.items(.tag)[index];
+        switch (tag) {
+            .block_two,
+            .block_two_semicolon,
+            .block,
+            .block_semicolon => {
+                const lbrace = zast.ast.nodes.items(.main_token)[index];
+                const token_tags =  zast.ast.tokens.items(.tag);
+                if (token_tags[lbrace-1] == .colon and token_tags[lbrace-2] == .identifier) {
+                    return lbrace - 2;
+                }
+            },
+            else => {}
+        }
+    }
+    return INVALID_TOKEN;
+}
+
 export fn ast_node_capture_token(ptr: ?*ZAst, index: NodeIndex, capture: CaptureType) TokenIndex {
     if (ptr) |zast| {
         if (index >= zast.ast.nodes.len) {
