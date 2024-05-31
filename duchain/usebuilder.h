@@ -19,6 +19,7 @@
 
 #include <language/duchain/builders/abstractusebuilder.h>
 #include <language/duchain/types/structuretype.h>
+#include <language/duchain/functiondeclaration.h>
 #include <serialization/indexedstring.h>
 
 #include "contextbuilder.h"
@@ -66,7 +67,8 @@ public:
     VisitResult visitEnumLiteral(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitch(const ZigNode &node, const ZigNode &parent);
     VisitResult visitSwitchCase(const ZigNode &node, const ZigNode &parent);
-
+    VisitResult visitFunctionDecl(const ZigNode &node, const ZigNode &parent);
+    VisitResult visitReturn(const ZigNode &node, const ZigNode &parent);
 
     bool checkAndAddFnArgUse(
         const KDevelop::AbstractType::Ptr &argType,
@@ -113,6 +115,8 @@ public:
     KDevelop::QualifiedIdentifier fullPath;
     KDevelop::QualifiedIdentifier currentPath;
     KDevelop::Declaration* currentFieldDeclaration = nullptr;
+    KDevelop::FunctionDeclaration* currentFunctionDeclaration = nullptr;
+
 };
 
 } // end namespace zig

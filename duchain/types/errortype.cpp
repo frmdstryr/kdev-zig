@@ -13,6 +13,8 @@
 #include "language/duchain/types/typeregister.h"
 #include "language/duchain/types/typesystem.h"
 #include "language/duchain/types/abstracttype.h"
+#include "builtintype.h"
+#include "helpers.h"
 
 namespace Zig {
 
@@ -66,6 +68,19 @@ bool ErrorType::equalsIgnoringValue(const AbstractType* _rhs) const
         (d_func()->m_baseType == rhs->d_func()->m_baseType)
         && (d_func()->m_errorType == rhs->d_func()->m_errorType)
     );
+}
+
+bool ErrorType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+{
+    if (equalsIgnoringValue(rhs.data()))
+        return true;
+    if (const auto v = rhs.dynamicCast<BuiltinType>()) {
+        if (v->isAnyerror())
+            return true;
+    }
+    if (const auto v = rhs.dynamicCast<ErrorType>())
+        return Helper::canTypeBeAssigned(baseType(), v->baseType());
+    return Helper::canTypeBeAssigned(baseType(), rhs);
 }
 
 void ErrorType::accept0(TypeVisitor* v) const

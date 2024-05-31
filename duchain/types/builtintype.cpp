@@ -300,6 +300,18 @@ bool BuiltinType::isAnytype() const
     return d_func()->m_data == indexed_anytype;
 }
 
+bool BuiltinType::isAnyframe() const
+{
+    STATIC_INDEXED_STR(anyframe);
+    return d_func()->m_data == indexed_anyframe;
+}
+
+bool BuiltinType::isAnyerror() const
+{
+    STATIC_INDEXED_STR(anyerror);
+    return d_func()->m_data == indexed_anyerror;
+}
+
 bool BuiltinType::isUndefined() const
 {
     STATIC_INDEXED_STR(undefined);
@@ -310,12 +322,6 @@ bool BuiltinType::isVoid() const
 {
     STATIC_INDEXED_STR(void);
     return d_func()->m_data == indexed_void;
-}
-
-bool BuiltinType::isAnyframe() const
-{
-    STATIC_INDEXED_STR(anyframe);
-    return d_func()->m_data == indexed_anyframe;
 }
 
 bool BuiltinType::isFrame() const

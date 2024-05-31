@@ -75,6 +75,7 @@ public:
     bool isAnytype() const;
     bool isVoid() const;
     bool isAnyframe() const;
+    bool isAnyerror() const;
     bool isFrame() const;
     bool isOpaque() const;
     bool isNoreturn() const;

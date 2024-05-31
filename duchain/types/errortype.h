@@ -89,7 +89,7 @@ public:
     AbstractType* clone() const override;
 
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
-
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
     void exchangeTypes(TypeExchanger* exchanger) override;
 
     enum {

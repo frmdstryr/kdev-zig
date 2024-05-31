@@ -253,6 +253,13 @@ VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &pa
         } else {
             encounterUnknown();
         }
+    } else if (
+        returnType()
+        && returnType().dynamicCast<BuiltinType>()
+        && returnType().staticCast<BuiltinType>()->isNoreturn()
+    ) {
+        // If a noreturn function was called in this block
+        encounter(returnType());
     } else {
         encounter(BuiltinType::newFromName(QStringLiteral("void")));
     }
@@ -261,6 +268,7 @@ VisitResult ExpressionVisitor::visitBlock(const ZigNode &node, const ZigNode &pa
 
 VisitResult ExpressionVisitor::visitBreak(const ZigNode &node, const ZigNode &parent)
 {
+    Q_UNUSED(parent);
     const NodeData data = node.data();
     const ZigNode rhs = {node.ast, data.rhs};
     // TODO: Check if label matches block ?
@@ -810,6 +818,8 @@ VisitResult ExpressionVisitor::visitBuiltinCall(const ZigNode &node, const ZigNo
         || name == QLatin1String("@hasDecl")
     ) {
         encounter(BuiltinType::newFromName(QStringLiteral("bool")));
+    } else if (name == QLatin1String("@trap")) {
+        encounter(BuiltinType::newFromName(QStringLiteral("noreturn")));
     } else if (
         name == QLatin1String("@panic")
         || name == QLatin1String("@compileError")
@@ -1357,7 +1367,10 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
 
     auto returnType = func->returnType();
     // Shortcut, builtintypes cant have delayed types
-    if (returnType.dynamicCast<BuiltinType>()) {
+    if (auto builtin = returnType.dynamicCast<BuiltinType>()) {
+        if (builtin->isNoreturn()) {
+            setReturnType(builtin);
+        }
         encounter(returnType);
         return Continue;
     }

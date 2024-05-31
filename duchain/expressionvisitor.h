@@ -144,6 +144,7 @@ public:
 
     /**
      * If the expression is a block and a return is was encountered
+     * this can also happen if a noreturn function is called.
      */
     void setReturnType(const KDevelop::AbstractType::Ptr& t) {
         m_returnType = t;

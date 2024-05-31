@@ -129,11 +129,16 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
         case NodeTag_catch:
             visitCatch(node, parent);
             break;
+        case NodeTag_return:
+            visitReturn(node, parent);
+            break;
         case NodeTag_container_field:
         case NodeTag_container_field_align:
         case NodeTag_container_field_init:
             return visitContainerField(node, parent);
-        // TODO: check var_init and field_init values match type
+        case NodeTag_fn_decl:
+            return visitFunctionDecl(node, parent);
+       // TODO: check var_init and field_init values match type
 
         default:
             break;
@@ -141,6 +146,77 @@ VisitResult UseBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
     return ContextBuilder::visitNode(node, parent);
 }
 
+VisitResult UseBuilder::visitFunctionDecl(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    const auto previousFunction = currentFunctionDeclaration;
+    auto range = node.spellingRange();
+    if (auto fn = dynamic_cast<FunctionDeclaration*>(Helper::declarationForName(
+        node.fnName(),
+        range.start,
+        DUChainPointer<const DUContext>(currentContext()),
+        previousFunction
+    ))) {
+        currentFunctionDeclaration = fn;
+    } else {
+        currentFieldDeclaration = nullptr;
+    }
+    ContextBuilder::visitChildren(node, parent);
+    currentFunctionDeclaration = previousFunction;
+
+    return Continue;
+}
+
+
+VisitResult UseBuilder::visitReturn(const ZigNode &node, const ZigNode &parent)
+{
+    Q_UNUSED(parent);
+    if (!currentFunctionDeclaration)
+        return Continue;
+    auto fnType = currentFunctionDeclaration->abstractType().dynamicCast<FunctionType>();
+    if (!fnType || Helper::isMixedType(fnType->returnType()))
+        return Continue;
+    auto rtype = fnType->returnType();
+    const auto lhs = node.lhsAsNode();
+    if (auto builtin = rtype.dynamicCast<BuiltinType>()) {
+        if (builtin->isVoid() && !lhs.isRoot()) {
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document, node.range().castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Error);
+            p->setDescription(i18n("Return type is void"));
+            DUChainWriteLocker lock;
+            topContext()->addProblem(p);
+            return Continue;
+        }
+        if (builtin->isNoreturn()) {
+            ProblemPointer p = ProblemPointer(new Problem());
+            p->setFinalLocation(DocumentRange(document, node.range().castToSimpleRange()));
+            p->setSource(IProblem::SemanticAnalysis);
+            p->setSeverity(IProblem::Error);
+            p->setDescription(i18n("Return type is noreturn"));
+            DUChainWriteLocker lock;
+            topContext()->addProblem(p);
+            return Continue;
+        }
+    }
+
+    auto result = checkGenericAssignment(rtype, lhs, node);
+    if (result.mismatch) {
+        if (Helper::isMixedType(result.value)) {
+            return Continue;
+        }
+        ProblemPointer p = ProblemPointer(new Problem());
+        p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
+        p->setSource(IProblem::SemanticAnalysis);
+        p->setSeverity(IProblem::Error);
+        DUChainWriteLocker lock;
+        p->setDescription(i18n("Return type mismatch. Expected %1 got %2",
+                               rtype->toString(), result.value->toString()));
+        topContext()->addProblem(p);
+    }
+    return Continue;
+}
 
 VisitResult UseBuilder::visitContainerField(const ZigNode &node, const ZigNode &parent)
 {

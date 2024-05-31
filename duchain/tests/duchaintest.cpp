@@ -678,7 +678,7 @@ void DUChainTest::testVarType_data()
            "pub fn write() WriteError!void {}\n"
            "test{write() catch |err| {\n}}" << "err" << "WriteError" << "3,0";
 
-    QTest::newRow("labeled block") << "const x = blk: { break :blk true; };" << "x" << "bool = true" << "";
+    QTest::newRow("labelled block") << "const x = blk: { break :blk true; };" << "x" << "bool = true" << "";
 
     // Builtin calls
     QTest::newRow("@This()") << "const Foo = struct { const Self = @This();\n};" << "Self" << "Foo" << "1,0";
@@ -876,9 +876,9 @@ void DUChainTest::testProblems_data()
     QTest::newRow("union enum switch") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}} }" << QStringList{} << "";
     QTest::newRow("union enum switch invalid") << "const Payload = union(enum){int: i32, float: f32}; test{ var x = Payload{.int=1}; switch (x) {.int => {}, .float=>{}, .bool=>{}} }" << QStringList{QLatin1String("Invalid enum field bool")} << "";
 
-    QTest::newRow("labeled block") << "pub fn readByte() !u8 { return 1; } test {const x = readByte() catch blk: { var n: u8 = 0; break :blk n; }; }" << QStringList{} << "";;
-    QTest::newRow("labeled block err") << "pub fn readByte() !u8 { return 0; } test {const x = readByte() catch blk: { break :blk true; }; }" << QStringList{QLatin1String("Incompatible types")} << "";;
-
+    QTest::newRow("labelled block") << "pub fn readByte() !u8 { return 1; } test {const x = readByte() catch blk: { var n: u8 = 0; break :blk n; }; }" << QStringList{} << "";;
+    QTest::newRow("labelled block err") << "pub fn readByte() !u8 { return 0; } test {const x = readByte() catch blk: { break :blk true; }; }" << QStringList{QLatin1String("Incompatible types")} << "";;
+    QTest::newRow("catch block noreturn") << "pub fn readByte() !u8 { return 0; } test { const x = readByte() catch { @trap(); };" << QStringList{} << "";
 
     QTest::newRow("use out of order in mod") << "const x = y; const y = 1;" << QStringList{} << "";
     QTest::newRow("use out of order in struct") << "const Foo = struct {const x = y; const y = 1;};" << QStringList{} << "";
@@ -937,7 +937,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn return ignored") << "pub fn write(msg: []const u8) usize { return 0; } test{ write(\"abcd\"); }" << QStringList{QLatin1String("Return value is ignored")} << "";
     QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {} } test{ exit(1); }" << QStringList{} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
-    QTest::newRow("fn catch 2") << "pub fn bufPrintZ(buf: []u8) ![:0]u8 { buf[buf.len-1] = 0; return buf; } test{ var buf: [100]u8 = undefined; const result = bufPrintZ(&buf) catch \"123\"; }" << QStringList{} << "";
+    QTest::newRow("fn catch 2") << "extern fn bufPrintZ(buf: []u8) ![:0]u8; test{ var buf: [100]u8 = undefined; const result = bufPrintZ(&buf) catch \"123\"; }" << QStringList{} << "";
 
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     // QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
