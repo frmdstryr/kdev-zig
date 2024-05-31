@@ -251,6 +251,9 @@ StructureType::Ptr DeclarationBuilder::createType(const ZigNode &node, const Zig
         if (Kind == Module) {
             structType->setModifiers(ModuleModifier);
         }
+        else if (node.mainToken() == QStringLiteral("@cImport")) {
+            structType->setModifiers(ModuleModifier | CIncludeModifier);
+        }
         return structType;
     } else if (Kind == UnionDecl) {
         UnionType::Ptr unionType(new UnionType);
@@ -845,7 +848,6 @@ Declaration* DeclarationBuilder::createCImportDeclaration(const ZigNode &node, c
         openContext(&node, NodeTraits::contextType(ContainerDecl), &name);
         decl->setInternalContext(currentContext());
         ExpressionVisitor v(session, currentContext());
-        decl->abstractType()->setModifiers(ModuleModifier | CIncludeModifier);
         v.setInferredType(decl->abstractType());
         v.startVisiting(node.lhsAsNode(), node);
         closeContext();

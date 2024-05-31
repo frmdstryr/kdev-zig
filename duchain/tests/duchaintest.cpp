@@ -693,7 +693,7 @@ void DUChainTest::testVarType_data()
     QTest::newRow("vector") << "const x = @Vector(4, f32);" << "x" << "@Vector(4, f32)" << "";
     QTest::newRow("vector access") << "const Vec = @Vector(4, f32); const v: Vec = undefined; const x = v[0];" << "x" << "f32" << "";
     QTest::newRow("vector reduce") << "const v: @Vector(4, f32) = undefined; const x = @reduce(.Max, v);" << "x" << "f32" << "";
-    // FIXME: QTest::newRow("@cImport") << "const c = @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = c.setlocale;" << "f" << "function char* (int, const char*)" << "";
+    QTest::newRow("@cImport") << "const c = @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = c.setlocale;" << "f" << "function char* (int, const char*)" << "";
     QTest::newRow("@cImport usingnamespace") << "usingnamespace @cImport({@cInclude(\"/usr/include/locale.h\")}); const f = setlocale;" << "f" << "function char* (int, const char*)" << "";
 
 
