@@ -472,7 +472,7 @@ VisitResult ExpressionVisitor::visitMultilineStringLiteral(const ZigNode &node, 
         if ( part.startsWith(QLatin1Char('/')) )
             continue; // Skip doc comment if inline
         if (part.size() > 2)
-            value += part.sliced(2); // Remove "\\"
+            value += part.mid(2); // Remove "\\"
     }
 
     SliceType::Ptr sliceType(new SliceType);
