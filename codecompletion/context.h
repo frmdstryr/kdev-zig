@@ -22,6 +22,8 @@
 
 #include <kdevzigcompletion_export.h>
 
+#include "duchain/zignode.h"
+
 #include "types/comptimetype.h"
 #include "types/pointertype.h"
 #include "types/builtintype.h"
@@ -32,6 +34,10 @@
 
 namespace Zig
 {
+
+
+using ZigCompletion = ZigAllocatedObject<ZCompletion, destroy_completion>;
+template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZCompletion, destroy_completion>;
 
 class KDEVZIGCOMPLETION_EXPORT CompletionContext : public KDevelop::CodeCompletionContext
 {

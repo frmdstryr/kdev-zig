@@ -19,9 +19,6 @@
 #include <language/duchain/duchain.h>
 #include <language/duchain/duchainlock.h>
 
-
-
-#include "duchain/zignode.h"
 #include "duchain/helpers.h"
 
 #include "item.h"

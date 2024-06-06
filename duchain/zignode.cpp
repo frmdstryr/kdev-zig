@@ -248,29 +248,4 @@ QString ZigNode::blockLabel() const
     return tokenSlice(ast_node_block_label_token(ast, index));
 }
 
-template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
-ZigAllocatedObject<ZigObjectType, ZigDestructor>::ZigAllocatedObject(ZigObjectType *object)
-    : object(object)
-{
-}
-
-template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
-ZigAllocatedObject<ZigObjectType, ZigDestructor>::~ZigAllocatedObject()
-{
-    ZigDestructor(object);
-    object = nullptr;
-}
-
-template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
-ZigObjectType *ZigAllocatedObject<ZigObjectType, ZigDestructor>::data()
-{
-    return object;
-}
-
-template<typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
-ZigObjectType *ZigAllocatedObject<ZigObjectType, ZigDestructor>::operator *()
-{
-    return object;
-}
-
 }

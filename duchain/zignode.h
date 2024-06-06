@@ -30,21 +30,30 @@ template <typename ZigObjectType, void (*ZigDestructor)(ZigObjectType *)>
 class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject
 {
 public:
-    ZigAllocatedObject(ZigObjectType *object);
-    ~ZigAllocatedObject();
+    ZigAllocatedObject(ZigObjectType *object) : object(object) {}
+    ~ZigAllocatedObject() {
+        ZigDestructor(object);
+        object = nullptr;
+    }
 
-    ZigObjectType *data();
-    ZigObjectType *operator *();
+    ZigObjectType *data() {
+        return object;
+    }
+
+    ZigObjectType *operator *()
+    {
+        return object;
+    }
 
 private:
     ZigObjectType *object;
 };
 
+
 template <typename T> void noop_destructor(T *) {}
 
 using ZigAst = ZigAllocatedObject<ZAst, destroy_ast>;
 using ZigError = ZigAllocatedObject<ZError, destroy_error>;
-using ZigCompletion = ZigAllocatedObject<ZCompletion, destroy_completion>;
 
 struct KDEVZIGDUCHAIN_EXPORT ZigNode
 {
@@ -130,7 +139,6 @@ struct KDEVZIGDUCHAIN_EXPORT ZigNode
 
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZAst, destroy_ast>;
 template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZError, destroy_error>;
-template class KDEVZIGDUCHAIN_EXPORT ZigAllocatedObject<ZCompletion, destroy_completion>;
 
 }
 
