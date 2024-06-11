@@ -206,6 +206,9 @@ VisitResult UseBuilder::visitReturn(const ZigNode &node, const ZigNode &parent)
         if (Helper::isMixedType(result.value)) {
             return Continue;
         }
+        if (rtype->toString() == result.value->toString()) {
+            return Continue; // HACK: Why does this happen???
+        }
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));
         p->setSource(IProblem::SemanticAnalysis);
@@ -600,6 +603,9 @@ bool UseBuilder::checkAndAddStructFieldUse(
     if (result.mismatch) {
         if (Helper::isMixedType(result.value)) {
             return false;
+        }
+        if (decl->abstractType()->toString() == result.value->toString()) {
+            return Continue; // HACK: Why does this happen???
         }
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, useRange.castToSimpleRange()));
