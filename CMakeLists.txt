@@ -61,6 +61,7 @@ if(QT_MAJOR_VERSION STREQUAL 6)
     find_package(Qt6Core5Compat ${QT_MIN_VERSION} CONFIG REQUIRED)
     find_package(KF6TextWidgets ${KF_MIN_VERSION} CONFIG REQUIRED)
     find_package(KF6KCMUtils ${KF_MIN_VERSION} CONFIG REQUIRED)
+    find_package(Qt6WebEngineWidgets ${QT_MIN_VERSION} CONFIG REQUIRED)
     include_directories(
         "/usr/include/KF6/KCMUtils"
         "/usr/include/KF6/KCMUtilsCore")
