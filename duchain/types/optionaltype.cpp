@@ -65,7 +65,7 @@ bool OptionalType::equalsIgnoringValue(const AbstractType* _rhs) const
     return d_func()->m_baseType == rhs->d_func()->m_baseType;
 }
 
-bool OptionalType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+bool OptionalType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project) const
 {
     if (equalsIgnoringValue(rhs.data()))
         return true;
@@ -74,8 +74,8 @@ bool OptionalType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
             return true;
     }
     if (const auto v = rhs.dynamicCast<OptionalType>())
-        return Helper::canTypeBeAssigned(baseType(), v->baseType());
-    return Helper::canTypeBeAssigned(baseType(), rhs);
+        return Helper::canTypeBeAssigned(baseType(), v->baseType(), project);
+    return Helper::canTypeBeAssigned(baseType(), rhs, project);
 }
 
 void OptionalType::accept0(TypeVisitor* v) const

@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <interfaces/iproject.h>
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
 #include "comptimetype.h"
@@ -45,7 +46,7 @@ public:
 
     QString toString() const override;
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
-    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const override;
 
     uint hash() const override;
     WhichType whichType() const override;
@@ -83,7 +84,9 @@ public:
     bool isUnreachable() const;
 
     // Get bitsize of an int (-1 if not in or unkown type)
-    int bitsize() const;
+    // Since some times (eg isize/usize) depend on the build target the project
+    // can be passed to specify which.
+    int bitsize(const KDevelop::IProject* project = nullptr) const;
 
     using Data = BuiltinTypeData;
 

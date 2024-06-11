@@ -70,7 +70,7 @@ bool ErrorType::equalsIgnoringValue(const AbstractType* _rhs) const
     );
 }
 
-bool ErrorType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+bool ErrorType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project) const
 {
     if (equalsIgnoringValue(rhs.data()))
         return true;
@@ -79,8 +79,8 @@ bool ErrorType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
             return true;
     }
     if (const auto v = rhs.dynamicCast<ErrorType>())
-        return Helper::canTypeBeAssigned(baseType(), v->baseType());
-    return Helper::canTypeBeAssigned(baseType(), rhs);
+        return Helper::canTypeBeAssigned(baseType(), v->baseType(), project);
+    return Helper::canTypeBeAssigned(baseType(), rhs, project);
 }
 
 void ErrorType::accept0(TypeVisitor* v) const

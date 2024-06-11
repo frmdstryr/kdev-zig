@@ -48,7 +48,7 @@ public:
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
     bool equalsIgnoringValueAndDimension(const AbstractType* rhs) const;
 
-    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const override;
 
     /**
      * Retrieve the dimension of this vector type. eg "3" for "@Vector(3, f32)"

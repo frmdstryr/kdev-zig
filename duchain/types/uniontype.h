@@ -104,7 +104,7 @@ public:
 
     // bool equals(const AbstractType* rhs) const override;
     bool equalsIgnoringValue(const AbstractType* rhs) const override;
-    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const override;
 
     void exchangeTypes(TypeExchanger* exchanger) override;
 

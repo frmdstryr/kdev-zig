@@ -9,6 +9,7 @@
 */
 #pragma once
 
+#include <interfaces/iproject.h>
 #include "language/duchain/types/abstracttype.h"
 #include "language/duchain/types/typesystemdata.h"
 #include "kdevplatform/serialization/indexedstring.h"
@@ -92,7 +93,7 @@ public:
     virtual bool equalsIgnoringValue(const AbstractType* rhs) const = 0;
 
     // Check if the value can be assigned
-    virtual bool canValueBeAssigned(const AbstractType::Ptr &rhs) const = 0;
+    virtual bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const = 0;
 
     /// Allow ComptimeType to access its data.
     virtual ComptimeTypeData* comptimeData() = 0;
@@ -159,8 +160,9 @@ public:
         return ComptimeType::equals(static_cast<const ComptimeType*>(rhsId));
     }
 
-    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const override
     {
+        Q_UNUSED(project);
         return equalsIgnoringValue(rhs.data());
     }
 

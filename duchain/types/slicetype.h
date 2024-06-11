@@ -59,7 +59,7 @@ public:
     // Check for *const [x:0]u8 implicitly casting to []u8
     // or &[x]T to []T
     // fn foo(arg: []const u8) --> foo("abc")
-    bool canValueBeAssigned(const AbstractType::Ptr &rhs) const override;
+    bool canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project = nullptr) const override;
 
     /**
      * Retrieve the dimension of this array type. Multiple-dimensioned

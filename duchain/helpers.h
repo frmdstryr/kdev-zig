@@ -29,20 +29,21 @@ class KDEVZIGDUCHAIN_EXPORT Helper {
 public:
 
     static QMutex cacheMutex;
-    static QMap<KDevelop::IProject*, QVector<QUrl>> cachedCustomIncludes;
-    static QMap<KDevelop::IProject*, QVector<QUrl>> cachedSearchPaths;
+    static QMap<const KDevelop::IProject*, QVector<QUrl>> cachedCustomIncludes;
+    static QMap<const KDevelop::IProject*, QVector<QUrl>> cachedSearchPaths;
 
     // The project... vars should only be accessed while holding the projectPathLock
     static QMutex projectPathLock;
     static QVector<QUrl> projectSearchPaths;
-    static QMap<KDevelop::IProject*, bool> projectPackagesLoaded;
-    static QMap<KDevelop::IProject*, QMap<QString, QString>> projectPackages;
+    static QMap<const KDevelop::IProject*, bool> projectPackagesLoaded;
+    static QMap<const KDevelop::IProject*, QMap<QString, QString>> projectPackages;
+    static QMap<const KDevelop::IProject*, int> projectTargetPointerSizes;
 
-    static QString zigExecutablePath(KDevelop::IProject* project);
+    static QString zigExecutablePath(const KDevelop::IProject* project);
 
     // Caller must NOT be holding projectPathLock for these
-    static QString stdLibPath(KDevelop::IProject* project);
-    static void loadPackages(KDevelop::IProject* project);
+    static QString stdLibPath(const KDevelop::IProject* project);
+    static void loadPackages(const KDevelop::IProject* project);
     // Lookup package root file from package name.
     // If name is std, returns <stdLibPath>/std.zig
     static QString packagePath(const QString &name, const QString& currentFile);
@@ -147,11 +148,13 @@ public:
 
     /**
      * Check if the given value type can be assigned to the target
-     * type without causing an error.
+     * type without causing an error. The project pointer is used to determine the sizes
+     * of types like isize/usize.
      */
     static bool canTypeBeAssigned(
         const KDevelop::AbstractType::Ptr &target,
-        const KDevelop::AbstractType::Ptr &value);
+        const KDevelop::AbstractType::Ptr &value,
+        const KDevelop::IProject* project = nullptr);
 
     /**
      * If type is a pointer, return the base type, otherwise return type.
@@ -215,6 +218,12 @@ public:
      * it may be null. Intended as a fallback when findProjectForUrl fails
      */
     static KDevelop::IProject* findProjectWithZigPackages();
+
+    /**
+     * Get the target pointer size for the given project. If project is null
+     * it uses the first size from any opened projects otherwise it defaults to -1
+     */
+    static int targetPointerBitsize(const KDevelop::IProject* project = nullptr);
 };
 
 /**

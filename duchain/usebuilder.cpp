@@ -510,7 +510,7 @@ AssignmentCheckResult UseBuilder::checkGenericAssignment(
     ExpressionVisitor v(session, currentContext());
     v.setInferredType(target);
     v.startVisiting(node, parent);
-    bool ok = Helper::canTypeBeAssigned(lhs, v.lastType());
+    bool ok = Helper::canTypeBeAssigned(lhs, v.lastType(), session->project());
     return {ok, !ok, v.lastType()};
 }
 
@@ -909,7 +909,7 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
             targetType->setModifiers(targetType->modifiers() | AbstractType::ConstModifier);
         }
 
-        if (!Helper::canTypeBeAssigned(targetType, v2.lastType())) {
+        if (!Helper::canTypeBeAssigned(targetType, v2.lastType(), session->project())) {
             if (v2.returnType()) {
                 // Eg catch with return block
                 // TODO: Should check fn return is correct type?

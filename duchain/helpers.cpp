@@ -35,14 +35,15 @@ namespace Zig
 {
 
 QMutex Helper::cacheMutex;
-QMap<IProject*, QVector<QUrl>> Helper::cachedCustomIncludes;
-QMap<IProject*, QVector<QUrl>> Helper::cachedSearchPaths;
+QMap<const IProject*, QVector<QUrl>> Helper::cachedCustomIncludes;
+QMap<const IProject*, QVector<QUrl>> Helper::cachedSearchPaths;
 QVector<QUrl> Helper::projectSearchPaths;
 
 
 QMutex Helper::projectPathLock;
-QMap<KDevelop::IProject*, bool> Helper::projectPackagesLoaded;
-QMap<KDevelop::IProject*, QMap<QString, QString>> Helper::projectPackages;
+QMap<const KDevelop::IProject*, bool> Helper::projectPackagesLoaded;
+QMap<const KDevelop::IProject*, QMap<QString, QString>> Helper::projectPackages;
+QMap<const KDevelop::IProject*, int> Helper::projectTargetPointerSizes;
 
 
 void Helper::scheduleDependency(
@@ -474,7 +475,8 @@ bool Helper::isComptimeKnown(const KDevelop::AbstractType::Ptr &a)
 
 bool Helper::canTypeBeAssigned(
         const KDevelop::AbstractType::Ptr &targetType,
-        const KDevelop::AbstractType::Ptr &valueType)
+        const KDevelop::AbstractType::Ptr &valueType,
+        const KDevelop::IProject* project)
 {
     // Convert c-types
     auto target = Helper::asZigType(targetType);
@@ -497,7 +499,7 @@ bool Helper::canTypeBeAssigned(
 
     // Handles the rest
     if (const auto t = dynamic_cast<const ComptimeType*>(target.data()))
-        return t->canValueBeAssigned(value);
+        return t->canValueBeAssigned(value, project);
 
     // // Const param/capture can be assigned to non-const
     // if (auto enumeration = target.dynamicCast<EnumerationType>()) {
@@ -713,7 +715,7 @@ KDevelop::Declaration* Helper::declarationForImportedModuleName(
     return decl;
 }
 
-QString Helper::zigExecutablePath(IProject* project)
+QString Helper::zigExecutablePath(const IProject* project)
 {
     if ( project ) {
         auto zigExe = project->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigExecutable"));
@@ -732,7 +734,7 @@ QString Helper::zigExecutablePath(IProject* project)
     return QStringLiteral("/usr/bin/zig");
 }
 
-void Helper::loadPackages(KDevelop::IProject* project)
+void Helper::loadPackages(const KDevelop::IProject* project)
 {
     if (!project) {
         return;
@@ -775,7 +777,31 @@ void Helper::loadPackages(KDevelop::IProject* project)
     projectPackagesLoaded.insert(project, true);
 }
 
-QString Helper::stdLibPath(IProject* project)
+int Helper::targetPointerBitsize(const KDevelop::IProject* project)
+{
+    QMutexLocker lock(&Helper::projectPathLock);
+    if (!projectTargetPointerSizes.contains(project)) {
+        int targetSize = -1;
+        if (project) {
+            targetSize = project->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigTargetPtrSize"), 0);
+        } else {
+            // Find first defined zigTargetPointerSize
+            for (auto p: ICore::self()->projectController()->projects()) {
+                int s = p->projectConfiguration()->group(QStringLiteral("kdevzigsupport")).readEntry(QStringLiteral("zigTargetPtrSize"), 0);
+                if (s > 0) {
+                    targetSize = s;
+                    break;
+                }
+            }
+        }
+        if (targetSize < 1)
+            targetSize = -1;
+        projectTargetPointerSizes[project] = targetSize * 8;
+    }
+    return projectTargetPointerSizes[project];
+}
+
+QString Helper::stdLibPath(const IProject* project)
 {
     static QRegularExpression stdDirPattern(QStringLiteral("\\s*\"std_dir\":\\s*\"(.+)\""));
     QMutexLocker lock(&Helper::projectPathLock);

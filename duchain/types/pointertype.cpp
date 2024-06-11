@@ -63,8 +63,9 @@ bool PointerType::equalsIgnoringValue(const AbstractType* _rhs) const
     return d_func()->m_baseType == rhs->d_func()->m_baseType;
 }
 
-bool PointerType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+bool PointerType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project) const
 {
+    Q_UNUSED(project);
     if (equalsIgnoringValue(rhs.data()))
         return true;
     if (const auto v = rhs.dynamicCast<PointerType>()) {

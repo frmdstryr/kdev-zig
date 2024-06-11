@@ -134,8 +134,9 @@ uint VectorType::hash() const
            << dimension() << ComptimeType::hash();
 }
 
-bool VectorType::canValueBeAssigned(const AbstractType::Ptr &rhs)  const
+bool VectorType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project)  const
 {
+    Q_UNUSED(project);
     if (equalsIgnoringValue(rhs.data()))
         return true;
 

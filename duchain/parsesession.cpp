@@ -17,6 +17,7 @@
  */
 
 #include "parsesession.h"
+#include <interfaces/icore.h>
 
 namespace Zig
 {
@@ -31,6 +32,9 @@ ParseSessionData::ParseSessionData(const KDevelop::IndexedString &document,
       ,m_jobPriority(priority)
       ,m_job(job)
 {
+    m_project = KDevelop::ICore::self()->projectController()->findProjectForUrl(
+        QUrl::fromLocalFile(document.str())
+    );
 }
 
 ParseSessionData::~ParseSessionData()
@@ -94,7 +98,6 @@ void ParseSession::setPriority(int priority)
     d->m_jobPriority = priority;
 }
 
-
 int ParseSession::jobPriority() const
 {
     return d->m_jobPriority;
@@ -103,6 +106,11 @@ int ParseSession::jobPriority() const
 const KDevelop::ParseJob* ParseSession::job() const
 {
     return d->m_job;
+}
+
+KDevelop::IProject* ParseSession::project() const
+{
+    return d->m_project;
 }
 
 void ParseSession::setContextOnNode(const ZigNode &node, KDevelop::DUContext *context)

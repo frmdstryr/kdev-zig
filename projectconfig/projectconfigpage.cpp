@@ -11,6 +11,7 @@
 #include "duchain/helpers.h"
 #include <QLineEdit>
 #include <QTextEdit>
+#include <QSpinBox>
 
 namespace Zig {
 
@@ -24,6 +25,8 @@ ProjectConfigPage::ProjectConfigPage(KDevelop::IPlugin* self, const KDevelop::Pr
     // So apply button activates
     connect(m_ui->zigExecutable, &QLineEdit::textChanged, this, &ProjectConfigPage::changed);
     connect(m_ui->zigPackages, &QTextEdit::textChanged, this, &ProjectConfigPage::changed);
+    connect(m_ui->zigTargetPtrSize, &QSpinBox::valueChanged, this, &ProjectConfigPage::changed);
+
 }
 
 void Zig::ProjectConfigPage::apply()
@@ -34,6 +37,8 @@ void Zig::ProjectConfigPage::apply()
         pkgs.append(QLatin1Char('\n'));
     }
     m_configGroup.writeEntry("zigPackages",  pkgs);
+    m_configGroup.writeEntry("zigTargetPtrSize",  m_ui->zigTargetPtrSize->value());
+
     // remove cached paths, so they are updated on the next parse job run
     {
         QMutexLocker lock(&Helper::cacheMutex);
@@ -43,6 +48,7 @@ void Zig::ProjectConfigPage::apply()
         QMutexLocker lock(&Helper::projectPathLock);
         Helper::projectPackagesLoaded.clear();
         Helper::projectPackages.clear();
+        Helper::projectTargetPointerSizes.clear();
     }
 }
 
@@ -55,6 +61,7 @@ void Zig::ProjectConfigPage::reset()
 {
     m_ui->zigExecutable->setText(m_configGroup.readEntry("zigExecutable"));
     m_ui->zigPackages->setText(m_configGroup.readEntry("zigPackages"));
+    m_ui->zigTargetPtrSize->setValue(m_configGroup.readEntry("zigTargetPtrSize", 0));
 }
 
 QString Zig::ProjectConfigPage::name() const

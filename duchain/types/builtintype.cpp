@@ -14,6 +14,7 @@
 #include "zigdebug.h"
 #include "builtintype.h"
 #include "../kdevzigastparser.h"
+#include "helpers.h"
 
 namespace Zig {
 
@@ -104,7 +105,7 @@ bool BuiltinType::equalsIgnoringValue(const KDevelop::AbstractType* _rhs) const
     return d_func()->m_data == rhs->d_func()->m_data;
 }
 
-bool BuiltinType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+bool BuiltinType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project) const
 {
     if (equalsIgnoringValue(rhs.data()))
         return true;
@@ -120,8 +121,9 @@ bool BuiltinType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
             (isSigned() && v->isSigned())
             || (isUnsigned() && v->isUnsigned())
         ) {
-            const auto s1 = bitsize();
-            const auto s2 = v->bitsize();
+            // TODO: get project where the type is defined ?
+            const auto s1 = bitsize(project);
+            const auto s2 = v->bitsize(project);
             return (s1 > 0 && s2 > 0 && s2 <= s1);
         }
         // Else do other cases need to cast?
@@ -354,12 +356,15 @@ bool BuiltinType::isUnreachable() const
     return d_func()->m_data == indexed_unreachable;
 }
 
-int BuiltinType::bitsize() const
+int BuiltinType::bitsize(const KDevelop::IProject* project) const
 {
     if (isVoid())
         return 0;
     if (isNumeric() && !(isComptimeInt() || isComptimeFloat())) {
         QString v = d_func()->m_data.str().mid(1);
+        if (v == QStringLiteral("size")) {
+            return Helper::targetPointerBitsize(project);
+        }
         bool ok;
         int i = v.toInt(&ok);
         if (ok) {

@@ -21,10 +21,11 @@
 #include <QSet>
 #include <QMap>
 
-#include <serialization/indexedstring.h>
+#include <interfaces/iproject.h>
 #include <language/duchain/ducontext.h>
 #include <language/interfaces/iastcontainer.h>
 #include <language/backgroundparser/parsejob.h>
+#include <serialization/indexedstring.h>
 
 #include "zignode.h"
 
@@ -47,7 +48,6 @@ public:
 
     ZAst *ast() const { return m_ast; }
     const QByteArray& source() const { return m_contents; }
-    const KDevelop::ParseJob* job() const { return m_job; }
 
 private:
     friend class ParseSession;
@@ -63,6 +63,7 @@ private:
     QMap<uint32_t, KDevelop::DeclarationPointer> m_nodeDeclMap;
     QSet<KDevelop::IndexedString> m_unresolvedImports;
     const KDevelop::ParseJob* m_job;
+    KDevelop::IProject* m_project;
 };
 
 class KDEVZIGDUCHAIN_EXPORT ParseSession
@@ -83,6 +84,7 @@ public:
     void setPriority(int priority);
     int jobPriority() const;
     const KDevelop::ParseJob* job() const;
+    KDevelop::IProject* project() const;
 
     void setContextOnNode(const ZigNode &node, KDevelop::DUContext *context);
     KDevelop::DUContext *contextFromNode(const ZigNode &node);

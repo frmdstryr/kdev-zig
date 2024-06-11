@@ -40,15 +40,13 @@ public:
         return object;
     }
 
-    ZigObjectType *operator *()
-    {
+    ZigObjectType *operator *() {
         return object;
     }
 
 private:
     ZigObjectType *object;
 };
-
 
 template <typename T> void noop_destructor(T *) {}
 

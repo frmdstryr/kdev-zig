@@ -94,8 +94,9 @@ bool UnionType::equalsIgnoringValue(const AbstractType* _rhs) const
     // return false;
 }
 
-bool UnionType::canValueBeAssigned(const AbstractType::Ptr &rhs) const
+bool UnionType::canValueBeAssigned(const AbstractType::Ptr &rhs, const KDevelop::IProject* project) const
 {
+    Q_UNUSED(project);
     // This handles two values of same enum or two comptime known enums
     // with the same parent enum
     // eg @TypeOf(Status.Ok) == @TypeOf(Status.Error)
