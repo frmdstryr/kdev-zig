@@ -48,6 +48,8 @@ export QT_LOGGING_RULES="kdevelop.languages.zig.duchain.debug=true;"
 
 ## Running
 
+> Note: Make sure you have a file assoication setup for zig in "File associations" or it will not parse files. In KDE Plasma add a new entry`text/x-zig` for all `*.zig` files.
+
 Then run KDevelop.
 
 ## Dependencies
