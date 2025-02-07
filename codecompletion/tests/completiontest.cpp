@@ -82,11 +82,12 @@ void CompletionTest::initShell()
     KDevelop::CodeRepresentation::setDiskChangesForbidden(true);
 
     // This seems to be required for the waitForUpdate to work in tests... ?
+    KPluginMetaData meta;
     auto* langController = new TestLanguageController(core);
     core->setLanguageController(langController);
     langController->backgroundParser()->setThreadCount(4);
     langController->backgroundParser()->abortAllJobs();
-    m_langSupport = new LanguageSupport(core);
+    m_langSupport = new LanguageSupport(core, meta);
     langController->addTestLanguage(m_langSupport, QStringList() << QStringLiteral("text/plain"));
     const auto languages = langController->languagesForUrl(QUrl::fromLocalFile(QStringLiteral("/foo.zig")));
     QCOMPARE(languages.size(), 1);

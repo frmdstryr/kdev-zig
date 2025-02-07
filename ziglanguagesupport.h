@@ -40,7 +40,7 @@ class KDEVPLATFORMLANGUAGE_EXPORT LanguageSupport
     Q_INTERFACES( KDevelop::ILanguageSupport )
 
 public:
-    LanguageSupport(QObject *parent, const QVariantList &args = QVariantList());
+    LanguageSupport(QObject *parent, const KPluginMetaData& metaData, const QVariantList &args = QVariantList());
     ~LanguageSupport() override;
     static LanguageSupport* self() { return m_self; }
     QString name() const override;

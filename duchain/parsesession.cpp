@@ -18,6 +18,7 @@
 
 #include "parsesession.h"
 #include <interfaces/icore.h>
+#include <interfaces/iprojectcontroller.h>
 
 namespace Zig
 {

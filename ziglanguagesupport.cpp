@@ -48,8 +48,8 @@ namespace Zig
 
 LanguageSupport* LanguageSupport::m_self = nullptr;
 
-LanguageSupport::LanguageSupport(QObject *parent, const QVariantList &args)
-    : KDevelop::IPlugin(QStringLiteral("kdevzigsupport"), parent),
+LanguageSupport::LanguageSupport(QObject *parent, const KPluginMetaData& metaData, const QVariantList &args)
+    : KDevelop::IPlugin(QStringLiteral("kdevzigsupport"), parent, metaData),
       KDevelop::ILanguageSupport(),
       m_highlighting(new Highlighting(this))
 {
