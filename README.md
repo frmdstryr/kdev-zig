@@ -54,8 +54,7 @@ Then run KDevelop.
 
 ## Dependencies
 
-You must have zig 0.12 dev installed somewhere where FindZig.cmake
-will find it (eg ".local/bin").
+You must have zig 0.12 or 0.13 installed somewhere where FindZig.cmake will find it (eg ".local/bin").
 
 # License
 
