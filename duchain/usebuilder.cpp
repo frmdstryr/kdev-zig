@@ -206,8 +206,11 @@ VisitResult UseBuilder::visitReturn(const ZigNode &node, const ZigNode &parent)
         if (Helper::isMixedType(result.value)) {
             return Continue;
         }
-        if (rtype->toString() == result.value->toString()) {
-            return Continue; // HACK: Why does this happen???
+        const auto rhsStr = rtype->toString();
+        const auto lhsStr = result.value->toString();
+        if (rhsStr == lhsStr || (rhsStr.startsWith(QLatin1Char('?')) && rhsStr.sliced(1) == lhsStr)) {
+            // FIXME: Somehow the declarations get duplicated
+            return Continue;
         }
         ProblemPointer p = ProblemPointer(new Problem());
         p->setFinalLocation(DocumentRange(document, lhs.range().castToSimpleRange()));

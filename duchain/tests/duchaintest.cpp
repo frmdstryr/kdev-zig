@@ -938,6 +938,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("fn noreturn ignored") << "pub fn exit(status: u8) noreturn { while (true) {} } test{ exit(1); }" << QStringList{} << "";
     QTest::newRow("fn catch incompatible") << "pub fn write(msg: []const u8) !usize { return 0; } test{ write(\"abcd\") catch {}; }" << QStringList{QLatin1String("Incompatible types")} << "";
     QTest::newRow("fn catch 2") << "extern fn bufPrintZ(buf: []u8) ![:0]u8; test{ var buf: [100]u8 = undefined; const result = bufPrintZ(&buf) catch \"123\"; }" << QStringList{} << "";
+    QTest::newRow("fn return optional") << "const Obj = struct{}; pub fn newObj() ?*Obj { return staticObj(); } var global: Obj = undefined; pub fn staticObj() *Obj{ return &global; } test{ const x = newObj(); }" << QStringList{} << "";
 
     QTest::newRow("catch return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { return; }; }" << QStringList{} << "";
     // QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
