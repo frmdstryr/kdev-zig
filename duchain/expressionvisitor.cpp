@@ -1677,7 +1677,22 @@ VisitResult ExpressionVisitor::visitCatch(const ZigNode &node, const ZigNode &pa
     v.startVisiting(lhs, node);
     // TODO: Check that lhs and rhs are compatable
     if (auto errorType = v.lastType().dynamicCast<ErrorType>()) {
-        encounter(errorType->baseType());
+        ZigNode rhs = {node.ast, data.rhs};
+        ExpressionVisitor v2(this);
+        v2.startVisiting(rhs, node);
+
+        auto baseType = errorType->baseType();
+
+        // Make type optional if it has catch null but not catch return null
+        if (auto builtin = v2.exprType().dynamicCast<BuiltinType>()) {
+            if (!v2.returnType() && builtin->isNull() && !baseType.dynamicCast<OptionalType>()) {
+                OptionalType::Ptr result(new OptionalType());
+                result->setBaseType(baseType);
+                encounter(result);
+                return Continue;
+            }
+        }
+        encounter(baseType);
     } else {
         encounterUnknown(); // TODO: Show error?
     }

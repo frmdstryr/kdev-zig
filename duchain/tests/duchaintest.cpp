@@ -677,6 +677,8 @@ void DUChainTest::testVarType_data()
         << "const WriteError = error{EndOfStream};\n"
            "pub fn write() WriteError!void {}\n"
            "test{write() catch |err| {\n}}" << "err" << "WriteError" << "3,0";
+    QTest::newRow("catch null") << "pub fn foo() !u8 { return 0; }; var x = foo() catch null;" << "x" << "?u8" << "";
+    QTest::newRow("catch return null") << "pub fn foo() !u8 { return 0; }; var x = foo() catch return null;" << "x" << "u8" << "";
 
     QTest::newRow("labelled block") << "const x = blk: { break :blk true; };" << "x" << "bool = true" << "";
 
@@ -947,7 +949,7 @@ void DUChainTest::testProblems_data()
     // QTest::newRow("catch return 2") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch |err| { if (true) { return; } return err; }; }" << QStringList{} << "";
     QTest::newRow("catch no return") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch { }; }" << QStringList{QLatin1String("Incompatible types")} << "";
     QTest::newRow("catch panic") << "pub fn write(msg: []const u8) !usize { return 0; } pub fn main() void { const x = write(\"abcd\") catch @panic(\"doom\"); }" << QStringList{} << "";
-
+    QTest::newRow("catch return null") << "const Obj = struct{}; pub fn new() !*Obj { return error.OutOfMem; } pub fn init() ?*Obj { return new() catch null; } test { const x = init();}" << QStringList{} << "";
 
     QTest::newRow("struct field") << "const A = struct {a: u8}; test {const x = A{.a = 0}; }" << QStringList{} << "";
     QTest::newRow("struct field type invalid") << "const A = struct {a: u8}; test {const x = A{.a = false}; }" << QStringList{QLatin1String("type mismatch")} << "";

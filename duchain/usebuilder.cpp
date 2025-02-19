@@ -918,14 +918,14 @@ VisitResult UseBuilder::visitCatch(const ZigNode &node, const ZigNode &parent)
         if (Helper::isMixedType(v2.lastType())) {
             return Continue;
         }
+        auto targetType = errorType->baseType();
+
         if (auto builtin = v2.lastType().dynamicCast<BuiltinType>()) {
-            if (builtin->isTrap()) {
-                return Continue; // Ignore foo() catch @panic()
+            if (builtin->isTrap() || builtin->isNull()) {
+                return Continue; // Ignore foo() catch @panic() or catch null
             }
         }
 
-
-        auto targetType = errorType->baseType();
         // TODO: Determining whether the target is const should be done better,
         // this only works for a single case of const foo = a catch b;
         if (parent.kind() == VarDecl && parent.mainToken() == QStringLiteral("const")) {

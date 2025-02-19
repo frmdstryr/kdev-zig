@@ -15,6 +15,7 @@
 #include "zignode.h"
 #include "zigdebug.h"
 #include "parsesession.h"
+#include "types/builtintype.h"
 
 namespace Zig
 {
@@ -166,6 +167,18 @@ public:
     const KDevelop::AbstractType::Ptr& breakType() const {
         return m_breakType;
     }
+
+    /**
+     * If a break or return was encountered this returns the BuiltinType "void"
+     * otherwise, return the result of the last expression encountered.
+     */
+    const KDevelop::AbstractType::Ptr exprType() const {
+        if (m_returnType || m_breakType) {
+            return BuiltinType::newFromName(QLatin1String("void"));
+        }
+        return lastType();
+    }
+
 
     void setExcludedDeclaration(const KDevelop::Declaration* d) {
         m_excludedDeclaration = d;
