@@ -1381,28 +1381,42 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
     // how to properly do that, so until then this is a workaround
     const auto &args = func->arguments();
     int startArg = 0;
-    if (args.size() > 0) {
-        AbstractType::Ptr selfType  = v.functionCallSelfType(next, node);
-        if (Helper::baseTypesEqual(args.at(0), selfType)) {
-            startArg = 1;
-        }
+    AbstractType::Ptr selfType  = v.functionCallSelfType(next, node);
+    const auto n = node.callParamCount();
+    if (args.size() == n + 1) {
+        startArg = 1; // Extra arg should mean an implied "self"
     }
 
     // eg fn (comptime T: type, ...) []T
     DelayedTypeFinder finder;
     returnType->accept(&finder);
     if (finder.delayedTypes.size() > 0) {
-        qCDebug(KDEV_ZIG) << "visit delayed return type";
+        qCDebug(KDEV_ZIG) << "visit delayed return type" << startArg;
         uint32_t i = 0;
         // Resolve types
         QMap<IndexedString, AbstractType::Ptr> resolvedTypes;
+
+        // If we have a method with a DelayedType or *DelayedType
+        // we know it is the same as "self"
+        if (startArg == 1 && selfType.data()) {
+            if (auto t = args.at(0).dynamicCast<Zig::PointerType>()) {
+                if (auto param = t->baseType().dynamicCast<Zig::DelayedType>()) {
+                    resolvedTypes.insert(param->identifier(), selfType);
+                }
+            } else if (auto param = args.at(0).dynamicCast<Zig::DelayedType>()) {
+                resolvedTypes.insert(param->identifier(), selfType);
+            }
+        }
+
         for (const auto &arg: args.mid(startArg)) {
             if (auto param = arg.dynamicCast<Zig::DelayedType>()) {
                 ZigNode argValueNode = node.callParamAt(i);
                 if (!argValueNode.isRoot()) {
                     ExpressionVisitor valueVisitor(this);
                     valueVisitor.startVisiting(argValueNode, node);
-                    resolvedTypes.insert(param->identifier(), valueVisitor.lastType());
+                    if (!resolvedTypes.contains(param->identifier())) {
+                        resolvedTypes.insert(param->identifier(), valueVisitor.lastType());
+                    }
                 }
             }
             i += 1;
@@ -1412,6 +1426,7 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
         for (const auto &t: finder.delayedTypes) {
             auto value = resolvedTypes.constFind(t->identifier());
             if (value != resolvedTypes.constEnd()) {
+                qCWarning(KDEV_ZIG) << "Found entry for" << t->identifier().c_str();
                 SimpleTypeExchanger exchanger(t, *value);
                 returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
             }
@@ -2101,12 +2116,7 @@ AbstractType::Ptr ExpressionVisitor::functionCallSelfType(
     if (owner.tag() == NodeTag_field_access) {
         ExpressionVisitor ownerVisitor(this);
         ownerVisitor.startVisiting(owner.lhsAsNode(), callNode);
-        auto maybeSelfType = ownerVisitor.lastType();
-
-        // *Self
-        if (auto ptr = maybeSelfType.dynamicCast<PointerType>()) {
-            maybeSelfType = ptr->baseType();
-        }
+        auto maybeSelfType = Helper::unwrapPointer(ownerVisitor.lastType());
 
         // Self
         if (maybeSelfType.dynamicCast<StructureType>()

@@ -334,9 +334,29 @@ VisitResult UseBuilder::visitCall(const ZigNode &node, const ZigNode &parent)
 
     // Handle implict "self" arg in struct fns
     int startArg = 0;
-    if (args.size() > 0) {
+    if (args.size() > 0 && args.size() > n) {
+        const auto firstArg = Helper::unwrapPointer(args.at(0));
         AbstractType::Ptr selfType  = v.functionCallSelfType(child, node);
-        if (Helper::baseTypesEqual(args.at(0), selfType)) {
+        if (Helper::baseTypesEqual(firstArg, selfType)) {
+            startArg = 1;
+        } else if (selfType.data() && firstArg.dynamicCast<DelayedType>()) {
+            // Maybe delayed type is the given type.
+            // This covers the common case like this
+            // pub fn AddInterface(comptime T: type) type {
+            //    return struct {
+            //       pub fn add(self: *T, i: usize) void { self.data += i; }
+            //    };
+            // }
+            // const Foo = struct {
+            //     data: u8
+            //     pub usingnamespace AddInterface(@This());
+            // };
+            // var x: Foo = undefined;
+            // x.add(1);
+            // FIXME: However this can be wrong if there are for example multiple delayed types
+            // the proper way to do this is to somehow save the context when the type is returned
+            // and then resolve delayed type from that
+            qCDebug(KDEV_ZIG) << "assuming deferred type for self is correct";
             startArg = 1;
         }
     }

@@ -789,6 +789,7 @@ void DUChainTest::testVarType_data()
 
     // TODO: Need to be able to specialize the "type"
     QTest::newRow("comptime type arg") << "pub fn Foo(comptime T: type) type { return T; } test{\nconst x = Foo(u32);\n}" << "x" << "u32" << "2,0";
+    //QTest::newRow("comptime type arg self") << "pub fn Foo(comptime T: type) type { return struct { pub fn bar(self: *T) *T { return self; } }; } test{\nvar y: Foo(u32) = undefined; const x = y.bar();\n}" << "x" << "*u32" << "2,0";
 
     // FIXME
     // QTest::newRow("typed struct field") <<
@@ -910,6 +911,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("struct fn call self this") << "const Foo = struct {const Self = @This(); pub fn foo(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call self *this") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
     QTest::newRow("struct fn call self *this 2") << "const Foo = struct {const Self = @This(); pub fn foo(self: *Self) void { self.bar(); } pub fn bar(self: Self) void {}}; test {var f = Foo{}; var y = f.foo(); }" << QStringList{} << "";
+    QTest::newRow("struct fn call inferred self") << "pub fn Interface(comptime T: type) type { return struct { pub fn get(self: *T) u8 { return self.data; } }; } const Foo = struct { data: u8 = 0, pub usingnamespace Interface(@This()); }; test {var x = Foo{}; var y = x.get(); }" << QStringList{} << "";
 
     QTest::newRow("fn opt null") << "pub fn foo(bar: ?u8) void {} test {const y = foo(null); }" << QStringList{} << "";
     QTest::newRow("fn non-opt null") << "pub fn foo(bar: u8) void {} test {const y = foo(null); }" << QStringList{QLatin1String("type mismatch")} << "";
