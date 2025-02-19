@@ -1131,7 +1131,7 @@ VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
     v.startVisiting(lhs, node);
 
     if (auto builtin = v.lastType().dynamicCast<BuiltinType>()) {
-        if (builtin->isInteger() || builtin->isBool()) {
+        if (builtin->isInteger() || builtin->isBool() || builtin->isType()) {
             return Continue; // No problem
         }
     }
@@ -1141,6 +1141,9 @@ VisitResult UseBuilder::visitSwitch(const ZigNode &node, const ZigNode &parent)
     else if (auto unionType = v.lastType().dynamicCast<UnionType>()) {
         if (unionType->isEnum())
             return Continue; // No problem
+    }
+    else if (auto t = v.lastType().dynamicCast<Zig::DelayedType>()) {
+        return Continue; // No problem
     }
     // TODO: What else can switch?
     // TODO: Check if all cases handled ?

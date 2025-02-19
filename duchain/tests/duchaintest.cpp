@@ -868,6 +868,7 @@ void DUChainTest::testProblems_data()
     QTest::newRow("enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("enum switch case 2") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error => {}}}" << QStringList{} << "";
     QTest::newRow("enum switch case 3") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok, .Error, .Bad => {}}}" << QStringList{QLatin1String("Invalid enum field Bad")} << "";
+    QTest::newRow("switch on type") << "pub fn foo(comptime T: type) u8 { return switch(T) { u8 => 1, else => 2}; } test { const x = foo(u8); }" << QStringList{} << "";
     QTest::newRow("invalid enum switch case") << "const Status = enum{Ok, Error}; test { var x = Status.Ok; switch (x) { .Ok => {}, .Error => {}, .Invalid => {}}}" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
     QTest::newRow("enum array init") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error};" << QStringList{} << "";
     QTest::newRow("enum array init invalid") << "const Status = enum{Ok, Error}; var all = [_]Status{.Ok, .Error, .Invalid};" << QStringList{QLatin1String("Invalid enum field Invalid")} << "";
