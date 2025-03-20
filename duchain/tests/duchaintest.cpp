@@ -700,6 +700,9 @@ void DUChainTest::testVarType_data()
 
 
     QTest::newRow("cast @boolFromInt()") << "const y: u8 = 7; const x = @boolFromInt(y);" << "x" << "bool = true" << "";
+    // TODO: Comptime known
+    QTest::newRow("cast @intCast()") << "const y: i8 = 7; const x: u8 = @intCast(y);" << "x" << "u8" << "";
+    QTest::newRow("cast @ptrCast()") << "const y: *i8 = undefined; const x: *u8 = @ptrCast(y);" << "x" << "*u8" << "";
     QTest::newRow("cast @boolFromInt() 2") << "const y: i8 = 1; const x = @boolFromInt(-y);" << "x" << "bool = true" << "";
     QTest::newRow("cast @intFromBool()") << "const x: u8 = @intFromBool(true);" << "x" << "u8 = 1" << "";
     QTest::newRow("cast @intFromBool() 2") << "const x: i8 = @intFromBool(false);" << "x" << "i8 = 0" << "";

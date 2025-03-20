@@ -926,8 +926,13 @@ VisitResult ExpressionVisitor::callBuiltinIntCast(const ZigNode &node)
         v.startVisiting(node.lhsAsNode(), node);
         const auto value = v.lastType().dynamicCast<BuiltinType>();
         if (value && value->isInteger()) {
-            // TODO: handle comptime known
-            encounter(result);
+            if (value->isComptimeKnown()) {
+                // TODO: implement cast
+                encounter(result);
+            } else {
+
+                encounter(result);
+            }
             return Continue;
         }
     }
