@@ -189,24 +189,28 @@ enum NodeTag: uint32_t {
     /// `[*]align(lhs) rhs`. lhs can be omitted.
     /// `*align(lhs) rhs`. lhs can be omitted.
     /// `[]rhs`.
-    /// main_token is the asterisk if a pointer or the lbracket if a slice
+    /// main_token is the asterisk if a single item pointer or the lbracket
+    // if a slice, many-item pointer, or C-pointer
     /// main_token might be a ** token, which is shared with a parent/child
     /// pointer type and may require special handling.
     NodeTag_ptr_type_aligned,
     /// `[*:lhs]rhs`. lhs can be omitted.
     /// `*rhs`.
     /// `[:lhs]rhs`.
-    /// main_token is the asterisk if a pointer or the lbracket if a slice
+    /// main_token is the asterisk if a single item pointer or the lbracke
+    /// if a slice, many-item pointer, or C-pointer
     /// main_token might be a ** token, which is shared with a parent/child
     /// pointer type and may require special handling.
     NodeTag_ptr_type_sentinel,
     /// lhs is index into ptr_type. rhs is the element type expression.
-    /// main_token is the asterisk if a pointer or the lbracket if a slice
+    /// main_token is the asterisk if a single item pointer or the lbracket
+    /// if a slice, many-item pointer, or C-pointer
     /// main_token might be a ** token, which is shared with a parent/child
     /// pointer type and may require special handling.
     NodeTag_ptr_type,
     /// lhs is index into ptr_type_bit_range. rhs is the element type expression.
-    /// main_token is the asterisk if a pointer or the lbracket if a slice
+    /// main_token is the asterisk if a single item pointer or the lbracket
+    /// if a slice, many-item pointer, or C-pointer
     /// main_token might be a ** token, which is shared with a parent/child
     /// pointer type and may require special handling.
     NodeTag_ptr_type_bit_range,
@@ -291,6 +295,7 @@ enum NodeTag: uint32_t {
     /// main_token is the `(`.
     NodeTag_async_call_comma,
     /// `switch(lhs) {}`. `SubRange[rhs]`.
+    /// `main_token` is the identifier of a preceding label, if any; otherwise `switch`.
     NodeTag_switch,
     /// Same as switch except there is known to be a trailing comma
     /// before the final rbrace
@@ -335,7 +340,8 @@ enum NodeTag: uint32_t {
     NodeTag_suspend,
     /// `resume lhs`. rhs is unused.
     NodeTag_resume,
-    /// `continue`. lhs is token index of label if any. rhs is unused.
+    /// `continue :lhs rhs`
+    /// both lhs and rhs may be omitted.
     NodeTag_continue,
     /// `break :lhs rhs`
     /// both lhs and rhs may be omitted.
@@ -683,7 +689,7 @@ struct NodeSubRange
     }
 };
 
-ZAst *parse_ast(const char *name, const char *source, bool print_ast = false);
+ZAst *parse_ast(const char *name, const char *source, bool print_ast = true);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
 

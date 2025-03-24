@@ -1727,7 +1727,6 @@ pub fn visit(
         .bit_xor,
         .bit_or,
         .@"orelse",
-        .@"continue",
         .bool_and,
         .bool_or,
         .array_type,
@@ -1793,6 +1792,7 @@ pub fn visit(
         .@"defer",
         .@"errdefer",
         .@"break",
+        .@"continue",
         .anyframe_type,
         .test_decl => if (d.rhs != 0) {
             const child = d.rhs;
