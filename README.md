@@ -28,17 +28,23 @@ First, build and install kdevelop from source so the test libraries are availble
 
 ### Build kdev-zig
 
+You must have zig installed somewhere where FindZig.cmake will find it (eg ".local/bin").
+
+To build use:
+
 ```
 mkdir build
 cd build
-cmake -G ninja ..
+cmake -G ninja -DBUILD_TESTING=OFF ..
 ninja install
 ```
 
-Use `zig test duchain/kdevzigastparser.zig` to run zig tests.
-Run the `duchaintest` for kdev-zig tests.
 
-In case you run into problems with it use `ninja uninstall`.
+Use `zig test duchain/kdevzigastparser.zig` to run zig tests.
+Comple with `BUILD_TESTING=ON` and run the `duchaintest` for kdev-zig tests. 
+This may require require a locally built KDevelop for it to find the test dependencies.
+
+In case you run into problems/crashing with it use `ninja uninstall` to remove it.
 
 To enable debug logging set the following env var.
 
@@ -50,11 +56,17 @@ export QT_LOGGING_RULES="kdevelop.languages.zig.duchain.debug=true;"
 
 > Note: Make sure you have a file assoication setup for zig in "File associations" or it will not parse files. In KDE Plasma add a new entry`text/x-zig` for all `*.zig` files.
 
-Then run KDevelop.
+Build and install, set the zig file association, and then run KDevelop.
 
-## Dependencies
 
-You must have zig 0.12 or 0.13 installed somewhere where FindZig.cmake will find it (eg ".local/bin").
+## Versions
+
+kdev-zig currently supports zig 0.12.0, 0.13.0, and 0.14.0 however due to ast changes in zig
+it cannot support all versions at once.
+
+- For zig `0.14.0` use the master branch
+- For zig `0.12.0` and `0.13.0` use the kdev-zig `v0.13.0` tag. 
+
 
 # License
 
