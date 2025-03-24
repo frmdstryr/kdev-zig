@@ -329,7 +329,31 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
     }
 
     QString mainToken = node.mainToken();
-    if (mainToken == QLatin1String("[")) {
+    QString nextToken = node.tokenSlice(ast_node_main_token(node.ast, node.index) + 1);
+    if (mainToken == QLatin1String("[") && nextToken == QLatin1String("*")) {
+        // Pointer to unknown size or cptr
+        // eg [*]u8 or [*c]u8
+        PointerType::Ptr ptrType(new PointerType);
+
+        if (align > 0) {
+            ptrType->setAlignOf(align);
+        }
+
+        if (ptr_info.info.is_volatile) {
+            ptrType->setModifiers(AbstractType::VolatileModifier);
+        }
+
+        ptrType->setModifiers(ptrType->modifiers() | ArrayModifier);
+        if (is_const) {
+            auto clone = baseType->clone();
+            clone->setModifiers(clone->modifiers() | AbstractType::ConstModifier);
+            baseType = AbstractType::Ptr(clone);
+        }
+        ptrType->setBaseType(baseType);
+        encounter(ptrType);
+    } else if (mainToken == QLatin1String("[")) {
+        // Slice
+        // eg []u8
         // TODO: slice alignment
         if (is_const) {
             auto clone = baseType->clone();
@@ -347,6 +371,7 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
         }
         encounter(sliceType);
     } else if (mainToken == QLatin1String("*")) {
+        // Single item pointer
         PointerType::Ptr ptrType(new PointerType);
 
         if (align > 0) {
@@ -356,16 +381,7 @@ VisitResult ExpressionVisitor::visitPointerType(const ZigNode &node, const ZigNo
         if (ptr_info.info.is_volatile) {
             ptrType->setModifiers(AbstractType::VolatileModifier);
         }
-        // auto next_token = ast_node_main_token(node.ast, node.index) + 1;
-        // if (node.tokenSlice(next_token) == QLatin1String("]")) {
-        //     ptrType->setModifiers(ptrType->modifiers() | ArrayModifier);
-        //     if (is_const) {
-        //         auto clone = baseType->clone();
-        //         clone->setModifiers(clone->modifiers() | AbstractType::ConstModifier);
-        //         baseType = AbstractType::Ptr(clone);
-        //     }
-        // }
-        // else
+
         if (is_const) {
             // eg *const fn() void
             ptrType->setModifiers(ptrType->modifiers() | AbstractType::ConstModifier);
