@@ -88,21 +88,21 @@ const SourceSlice = extern struct {
     len: u32 = 0,
 };
 
-const Severity = enum(c_int) { NoSeverity = 0, Error = 1, Warning = 2, Hint = 4 };
+const Severity = enum(u32) { NoSeverity = 0, Error = 1, Warning = 2, Hint = 4 };
 
-const VisitResult = enum(u8) {
+const VisitResult = enum(u32) {
     Break = 0,
     Continue,
     Recurse,
 };
 
-const CaptureType = enum (u8) {
+const CaptureType = enum(u32) {
     Payload = 0,
     Error
 };
 
 // TODO: Just use import C ?
-const NodeKind = enum(u8) {
+const NodeKind = enum(u32) {
     Unknown = 0,
     Module, // Root
     ContainerDecl, // struct, union
@@ -204,7 +204,7 @@ pub fn dumpAstNodes(ast: Ast, nodes: []NodeIndex, stream: anytype) !void {
     try stream.writeAll("\n");
 }
 
-const CompletionResultType = enum(u8) {
+const CompletionResultType = enum(u32) {
     Unknown = 0,
     Field,
     BuiltinCall,
@@ -322,7 +322,19 @@ export fn complete_expr(text_ptr: [*c]const u8, text_following_ptr: [*c]const u8
     return result;
 }
 
-export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*ZAst {
+export fn ast_tag_by_name(tag_name: [*c]const u8) u32 {
+    if (tag_name) |n| {
+        const name = std.mem.span(n);
+        inline for(std.meta.fields(std.zig.Ast.Node.Tag)) |f| {
+            if (std.mem.eql(u8, name, f.name)) {
+                return f.value;
+            }
+        }
+    }
+    return std.math.maxInt(u32);
+}
+
+export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8, print_ast: bool) ?*ZAst {
     const name_len = strlen(name_ptr);
     const source_len = strlen(source_ptr);
 
@@ -352,14 +364,13 @@ export fn parse_ast(name_ptr: [*c]const u8, source_ptr: [*c]const u8) ?*ZAst {
             std.log.warn("zig: failed to print trace {}", .{err});
         };
     }
-//     else if (true) {//@import("builtin").is_test) {
-//         var stdout = std.io.getStdOut().writer();
-//         stdout.print("Source ----------------\n{s}\n------------------------\n", .{source}) catch {};
-//         //var stdout = std.io.getStdOut().writer();
-//         dumpAstFlat(ast, stdout) catch |err| {
-//             std.log.debug("zig: failed to dump ast {}", .{err});
-//         };
-//     }
+    else if (print_ast) {
+        var stdout = std.io.getStdOut().writer();
+        stdout.print("Source ----------------\n{s}\n------------------------\n", .{source}) catch {};
+        dumpAstFlat(zast.ast, stdout) catch |err| {
+            std.log.debug("zig: failed to dump ast {}", .{err});
+        };
+    }
     return zast;
 }
 
@@ -570,17 +581,17 @@ fn isTokenSliceEql(ast: Ast, token: TokenIndex, value: []const u8) bool {
 }
 
 // Node kind is only needed for contexts
-export fn ast_node_kind(ptr: ?*ZAst, index: NodeIndex) NodeKind {
+export fn ast_node_kind(ptr: ?*ZAst, index: NodeIndex) u32 {
     if (ptr == null) {
-        return .Unknown;
+        return @intFromEnum(NodeKind.Unknown);
     }
     const zast = ptr.?;
     if (index >= zast.ast.nodes.len) {
-        return .Unknown;
+        return @intFromEnum(NodeKind.Unknown);
     }
     const main_token = zast.ast.nodes.items(.main_token)[index];
     const tag: Tag = zast.ast.nodes.items(.tag)[index];
-    return switch (tag) {
+    const kind: NodeKind = switch (tag) {
         .fn_decl => .FunctionDecl,
         .fn_proto,
         .fn_proto_multi,
@@ -647,6 +658,7 @@ export fn ast_node_kind(ptr: ?*ZAst, index: NodeIndex) NodeKind {
         .root => .Module,
         else => .Unknown,
     };
+    return @intFromEnum(kind);
 }
 
 fn testNodeKind(source: [:0]const u8, index: NodeIndex, expected: NodeKind) !void {
@@ -672,15 +684,15 @@ test "node-kind" {
 }
 
 
-export fn ast_node_tag(ptr: ?*ZAst, index: NodeIndex) Ast.Node.Tag {
+export fn ast_node_tag(ptr: ?*ZAst, index: NodeIndex) u32 {
     if (ptr) |zast| {
         if (index < zast.ast.nodes.len) {
             const tag = zast.ast.nodes.items(.tag)[index];
             // std.log.debug("zig: ast_node_tag {} is {s}", .{ index, @tagName(tag) });
-            return tag;
+            return @intFromEnum(tag);
         }
     }
-    return .root; // Invalid unless index == 0
+    return @intFromEnum(Ast.Node.Tag.root); // Invalid unless index == 0
 }
 
 export fn ast_token_slice(ptr: ?*ZAst, token: TokenIndex) SourceSlice {
@@ -1656,7 +1668,6 @@ pub fn visit(
     const d: Ast.Node.Data = zast.ast.nodes.items(.data)[parent];
     switch (tag) {
         // Leaf nodes have no children
-        .@"continue",
         .string_literal,
         .multiline_string_literal,
         .char_literal,
@@ -1716,6 +1727,7 @@ pub fn visit(
         .bit_xor,
         .bit_or,
         .@"orelse",
+        .@"continue",
         .bool_and,
         .bool_or,
         .array_type,
@@ -2395,8 +2407,8 @@ test "ast-visit" {
     try testVisit("const V = union(enum) {int: i32, boolean: bool, none,};", .tagged_union_trailing);
     try testVisit("const V = union(enum) {int: i32, boolean: bool};", .tagged_union_two);
     try testVisit("const V = union(enum) {int: i32, boolean: bool,};", .tagged_union_two_trailing);
-    try testVisit("const V = union(enum(u8)) {int: i32, boolean: bool};", .tagged_union_enum_tag);
-    try testVisit("const V = union(enum(u8)) {int: i32, boolean: bool,};", .tagged_union_enum_tag_trailing);
+    try testVisit("const V = union(enum(u32)) {int: i32, boolean: bool};", .tagged_union_enum_tag);
+    try testVisit("const V = union(enum(u32)) {int: i32, boolean: bool,};", .tagged_union_enum_tag_trailing);
 
     try testVisit("const A = struct {a: u8 = 0};", .container_field_init);
     try testVisit("const A = struct {a: u8 align(4)};", .container_field_align);
@@ -2463,6 +2475,7 @@ const BUILTIN_FN_NAMES = [_][:0]const u8{
     "@bitCast",
     "@bitOffsetOf",
     "@bitSizeOf",
+    "@branchHint",
     "@breakpoint",
     "@mulAdd",
     "@byteSwap",

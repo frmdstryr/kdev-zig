@@ -20,7 +20,7 @@
 
 extern "C" {
 
-enum NodeTag {
+enum NodeTag: uint32_t {
     NodeTag_root = 0,
     /// `usingnamespace lhs;`. rhs unused. main_token is `usingnamespace`.
     NodeTag_usingnamespace,
@@ -490,7 +490,7 @@ enum NodeTag {
 };
 
 // Must be kept in sync with NodeKind enum in kdevzigastparser.zig
-enum NodeKind
+enum NodeKind: uint32_t
 {
     Unknown = 0,
     Module, // Root
@@ -516,20 +516,20 @@ enum NodeKind
     FnProto
 };
 
-enum VisitResult
+enum VisitResult: uint32_t
 {
     Break = 0,
     Continue = 1,
     Recurse = 2
 };
 
-enum CaptureType
+enum CaptureType: uint32_t
 {
     Payload = 0,
     Error
 };
 
-enum CompletionResultType
+enum CompletionResultType: uint32_t
 {
     CompletionUnknown = 0,
     CompletionField
@@ -683,7 +683,7 @@ struct NodeSubRange
     }
 };
 
-ZAst *parse_ast(const char *name, const char *source);
+ZAst *parse_ast(const char *name, const char *source, bool print_ast = false);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
 
@@ -692,6 +692,8 @@ void destroy_error(ZError *err);
 
 ZCompletion* complete_expr(const char *text, const char *following);
 void destroy_completion(ZCompletion *completion);
+
+uint32_t ast_tag_by_name(const char *name);
 
 NodeKind ast_node_kind(const ZAst *tree, NodeIndex node);
 NodeTag ast_node_tag(const ZAst* tree, NodeIndex node);

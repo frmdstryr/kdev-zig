@@ -92,6 +92,7 @@ ReferencedTopDUContext parseCode(const QString &code, const QString &name)
     ParseSession session(ParseSessionData::Ptr(nullptr));
     session.setData(ParseSessionData::Ptr(sessionData));
     session.parse();
+    Q_ASSERT(session.ast());
 
     qDebug() << "Building decls";
     ZigNode root = {session.ast(), 0};
@@ -177,6 +178,13 @@ void DUChainTest::initTestCase()
     // const auto languages = langController->languagesForUrl(QUrl::fromLocalFile(QStringLiteral("/foo.zig")));
     // QCOMPARE(languages.size(), 1);
     // QCOMPARE(languages.first(), m_langSupport);
+}
+
+void DUChainTest::sanityTagName()
+{
+    // Make sure Ast tags are in sync
+    QVERIFY(ast_tag_by_name("call") == NodeTag_call);
+    QVERIFY(ast_tag_by_name("error_union") == NodeTag_error_union);
 }
 
 void DUChainTest::sanityCheckFn()

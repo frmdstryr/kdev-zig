@@ -71,7 +71,7 @@ ReferencedTopDUContext DeclarationBuilder::build(
 VisitResult DeclarationBuilder::visitNode(const ZigNode &node, const ZigNode &parent)
 {
     NodeKind kind = node.kind();
-    // qCDebug(KDEV_ZIG) << "DeclarationBuilder::visitNode" << node.index << "kind" << kind << "tag" << node.tag();
+    qCDebug(KDEV_ZIG) << "DeclarationBuilder::visitNode" << node.index << "kind" << kind << "tag" << node.tag();
     switch (kind) {
     case VarDecl:
         return buildDeclaration<VarDecl>(node, parent);
