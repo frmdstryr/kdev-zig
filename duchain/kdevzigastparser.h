@@ -689,7 +689,7 @@ struct NodeSubRange
     }
 };
 
-ZAst *parse_ast(const char *name, const char *source, bool print_ast = true);
+ZAst *parse_ast(const char *name, const char *source, bool print_ast = false);
 uint32_t ast_error_count(const ZAst *tree);
 void destroy_ast(ZAst *tree);
 
