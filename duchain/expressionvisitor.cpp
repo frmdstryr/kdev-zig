@@ -1448,7 +1448,6 @@ VisitResult ExpressionVisitor::visitCall(const ZigNode &node, const ZigNode &par
         for (const auto &t: finder.delayedTypes) {
             auto value = resolvedTypes.constFind(t->identifier());
             if (value != resolvedTypes.constEnd()) {
-                qCWarning(KDEV_ZIG) << "Found entry for" << t->identifier().c_str();
                 SimpleTypeExchanger exchanger(t, *value);
                 returnType = exchanger.exchange(AbstractType::Ptr(returnType->clone()));
             }
