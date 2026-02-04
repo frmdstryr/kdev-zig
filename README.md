@@ -3,6 +3,8 @@
 This a plugin for [KDevelop](https://kdevelop.org/) that adds language support for Zig. It uses zig's
 builtin parser via a library. 
 
+> # Moved to codeberg https://codeberg.org/frmdstryr/kdev-zig
+
 ### Features
 - Syntax error messages
 - Syntax highlighting of structs, fns, enums. Rainbow colored local vars
